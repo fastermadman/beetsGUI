@@ -37,12 +37,13 @@
   html,body { height:100%; overflow-x:hidden; background:var(--bg); color:var(--text); font-family:'Jost', system-ui, sans-serif; font-size:13px; line-height:1.6; }
   .app { display:flex; flex-direction:column; height:100vh; max-width:860px; margin:0 auto; }
   .app-header { display:flex; align-items:flex-start; gap:0.75rem; padding:1.2rem 1.25rem 0.9rem; border-bottom:1px solid var(--border); flex-shrink:0; }
-  .app-title-wrap { position:relative; display:inline-block; line-height:1; }
-  .app-title-bg { font-family:'Gnomon Simple','Jost',sans-serif; font-size:30px; font-weight:400; letter-spacing:0.04em; color:var(--accent2); font-variation-settings:'TOTD' var(--gnomon-totd,500),'DIST' 400; display:block; }
-  .app-title-fg { font-family:'Gnomon Foreground','Jost',sans-serif; font-size:30px; font-weight:400; letter-spacing:0.04em; color:var(--accent); display:block; position:absolute; top:0; left:0; white-space:nowrap; }
+  .app-title-wrap { display:grid; line-height:1; }
+  .app-title-bg { grid-area:1/1; font-family:'Gnomon Simple','Jost',sans-serif; font-size:30px; font-weight:700; letter-spacing:0.04em; color:var(--accent2); font-variation-settings:'TOTD' var(--gnomon-totd,500),'DIST' 400; }
+  .app-title-fg { grid-area:1/1; font-family:'Gnomon Foreground','Jost',sans-serif; font-size:30px; font-weight:700; letter-spacing:0.04em; color:var(--accent); white-space:nowrap; }
   .app-sub { font-size:12px; color:var(--text3); font-family:'Jost',sans-serif; font-weight:300; letter-spacing:0.03em; display:block; margin-top:0.2rem; }
-  .lang-toggle { margin-left:auto; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text2); cursor:pointer; font-family:inherit; font-size:11px; letter-spacing:0.06em; padding:0.25rem 0.6rem; transition:background 0.1s; }
-  .lang-toggle:hover { background:var(--bg4); color:var(--text); }
+  .lang-toggle { margin-left:auto; background:none; border:none; cursor:pointer; font-family:'Jost',sans-serif; font-size:11px; letter-spacing:0.08em; padding:0.25rem 0; display:flex; gap:0.25rem; align-items:center; color:var(--text3); }
+  .lang-active { color:var(--accent); font-weight:600; }
+  .lang-sep { color:var(--border2); }
   .tabs { display:flex; padding:0 1.25rem; border-bottom:1px solid var(--border); flex-shrink:0; overflow-x:auto; scrollbar-width:none; }
   .tabs::-webkit-scrollbar { display:none; }
   .tab-btn { background:none; border:none; border-bottom:2px solid transparent; color:var(--text3); cursor:pointer; font-family:inherit; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; padding:0.6rem 0.9rem; white-space:nowrap; transition:color 0.1s,border-color 0.1s; margin-bottom:-1px; }
@@ -118,17 +119,17 @@
   @keyframes gnomon-spin { from { --splash-totd:0 } to { --splash-totd:1000 } }
   #splash { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999; transition:opacity 0.6s; gap:1.5rem; }
   #splash.fade { opacity:0; pointer-events:none; }
-  .splash-wrap { position:relative; display:inline-block; line-height:1; }
-  .splash-bg { font-family:'Gnomon Simple','Jost',sans-serif; font-size:52px; font-weight:400; letter-spacing:0.04em; color:var(--accent2); display:block; font-variation-settings:'TOTD' var(--splash-totd),'DIST' 450; animation:gnomon-spin 2.5s linear infinite; }
-  .splash-fg { font-family:'Gnomon Foreground','Jost',sans-serif; font-size:52px; font-weight:400; letter-spacing:0.04em; color:var(--accent); display:block; position:absolute; top:0; left:0; white-space:nowrap; }
+  .splash-wrap { display:grid; line-height:1; }
+  .splash-bg { grid-area:1/1; font-family:'Gnomon Simple','Jost',sans-serif; font-size:52px; font-weight:700; letter-spacing:0.04em; color:var(--accent2); font-variation-settings:'TOTD' var(--splash-totd),'DIST' 450; animation:gnomon-spin 2.5s linear infinite; }
+  .splash-fg { grid-area:1/1; font-family:'Gnomon Foreground','Jost',sans-serif; font-size:52px; font-weight:700; letter-spacing:0.04em; color:var(--accent); white-space:nowrap; }
   .splash-sub { font-family:'Jost',sans-serif; font-size:12px; font-weight:300; color:var(--text3); letter-spacing:0.1em; text-transform:uppercase; }
 </style>
 </head>
 <body>
 <div id="splash">
   <div class="splash-wrap">
-    <span class="splash-bg">BeetsGUI</span>
-    <span class="splash-fg">BeetsGUI</span>
+    <span class="splash-bg">beetsGUI</span>
+    <span class="splash-fg">beetsGUI</span>
   </div>
   <span class="splash-sub">beets music library</span>
 </div>
@@ -138,12 +139,16 @@
   <div class="app-header">
     <div style="flex:1">
       <div class="app-title-wrap">
-        <span class="app-title-bg">BeetsGUI</span>
-        <span class="app-title-fg">BeetsGUI</span>
+        <span class="app-title-bg">beetsGUI</span>
+        <span class="app-title-fg">beetsGUI</span>
       </div>
       <span class="app-sub" data-i18n="subtitle">beets musikbibliotek-assistent</span>
     </div>
-    <button class="lang-toggle" id="lang-btn" onclick="toggleLang()">EN</button>
+    <button class="lang-toggle" id="lang-btn" onclick="toggleLang()">
+        <span id="lang-en-lbl" class="lang-active">EN</span>
+        <span class="lang-sep">/</span>
+        <span id="lang-da-lbl">DA</span>
+      </button>
   </div>
 
   <!-- Tabs -->
@@ -1280,7 +1285,7 @@ const LANG = {
   }
 }
 
-let currentLang = 'da'
+let currentLang = 'en'
 
 function t(key) {
   return LANG[currentLang][key] || LANG['da'][key] || key
@@ -1293,21 +1298,18 @@ function applyLang() {
     const val = t(key)
     if (el.tagName === 'INPUT' && el.type !== 'checkbox' && el.type !== 'radio') {
       el.placeholder = val
-    } else {
-      el.innerHTML = val
-    }
+    } else { el.innerHTML = val }
   })
-  // Config placeholder special case
   const cfgOut = document.getElementById('config-out')
-  if (cfgOut && cfgOut.textContent.trim().startsWith('#')) {
-    cfgOut.textContent = t('config_placeholder')
-  }
-  // copy button
+  if (cfgOut && cfgOut.textContent.trim().startsWith('#')) cfgOut.textContent = t('config_placeholder')
   const copyBtn = document.getElementById('copy-btn')
-  if (copyBtn && !copyBtn.classList.contains('copied')) {
-    copyBtn.textContent = t('btn_copy')
+  if (copyBtn && !copyBtn.classList.contains('copied')) copyBtn.textContent = t('btn_copy')
+  const enLbl = document.getElementById('lang-en-lbl')
+  const daLbl = document.getElementById('lang-da-lbl')
+  if (enLbl && daLbl) {
+    enLbl.className = currentLang === 'en' ? 'lang-active' : ''
+    daLbl.className = currentLang === 'da' ? 'lang-active' : ''
   }
-  document.getElementById('lang-btn').textContent = currentLang === 'da' ? 'EN' : 'DA'
 }
 
 function toggleLang() {
