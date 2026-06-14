@@ -33,6 +33,10 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
   ```bash
   brew install ffmpeg
   ```
+- [fd](https://github.com/sharkdp/fd) (required for the **Find** and **Unimported** tabs):
+  ```bash
+  brew install fd
+  ```
 
 ## Setup
 
