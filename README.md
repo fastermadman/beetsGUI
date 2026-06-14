@@ -1,12 +1,12 @@
-# BeetsGUI
+# beetsGUI
 
-![BeetsGUI logo](assets/icon.png)
+![beetsGUI logo](assets/icon.png)
 
 A local web GUI for [beets](https://beets.io) — runs as a standalone macOS app via Safari Web App.
 
 No Electron. No Docker. Just a small Flask server and a single HTML file.
 
-![BeetsGUI screenshot](screenshot.png)
+![beetsGUI screenshot](screenshot.png)
 
 ## Features
 
@@ -58,7 +58,7 @@ Open http://localhost:1312 in Safari.
 ### 3. Create a Safari Web App (macOS standalone)
 
 With http://localhost:1312 open in Safari:
-**File → Add to Dock → name it "BeetsGUI"**
+**File → Add to Dock → name it "beetsGUI"**
 
 The server will now open the standalone app automatically on next launch.
 
@@ -72,7 +72,7 @@ Open **Automator → New → Application → Run Shell Script**:
 # ~/.local/pipx/venvs/beets/bin/python /path/to/beetsgui/server.py
 ```
 
-Save as `BeetsGUI Launcher.app`, drag to Dock. One click starts everything.
+Save as `beetsGUI Launcher.app`, drag to Dock. One click starts everything.
 
 ## DJ workflow notes
 
@@ -98,4 +98,4 @@ Built by DR. WARTEMAL — if you'd like to hear what this tool is for, find my m
 
 ## License
 
-GPLv3 — see [LICENSE](LICENSE).
+AGPLv3 — see [LICENSE](LICENSE).
