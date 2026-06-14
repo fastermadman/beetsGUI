@@ -6,7 +6,7 @@ A local web GUI for [beets](https://beets.io) — runs as a standalone macOS app
 
 No Electron. No Docker. Just a small Flask server and a single HTML file.
 
-![beetsGUI screenshot](screenshot.png)
+![beetsGUI screenshot](assets/screenshot.png)
 
 ## Features
 
