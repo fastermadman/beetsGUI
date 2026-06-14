@@ -127,11 +127,12 @@
 </head>
 <body>
 <div id="splash">
+  <img src="assets/icon.png" alt="" style="width:140px;height:140px;animation:gnomon-spin 2.5s linear infinite;">
   <div class="splash-wrap">
     <span class="splash-bg">beetsGUI</span>
     <span class="splash-fg">beetsGUI</span>
   </div>
-  <span class="splash-sub">beets music library</span>
+  <span class="splash-sub">beets music library &middot; v1.0</span>
 </div>
 <div class="app">
 
@@ -1849,7 +1850,7 @@ function closeOutput() {
       else setTimeout(tryFade, 400)
     }).catch(() => setTimeout(tryFade, 400))
   }
-  setTimeout(tryFade, 800) // giv fonte tid til at loade
+  setTimeout(tryFade, 2500) // minimum visningstid + tid til fonte
 })()
 ;(function updateGnomonTime() {
   const now  = new Date()

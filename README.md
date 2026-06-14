@@ -1,5 +1,7 @@
 # BeetsGUI
 
+![BeetsGUI logo](assets/icon.png)
+
 A local web GUI for [beets](https://beets.io) — runs as a standalone macOS app via Safari Web App.
 
 No Electron. No Docker. Just a small Flask server and a single HTML file.
@@ -51,11 +53,11 @@ cd beetsgui
 python3 server.py
 ```
 
-Open http://localhost:8080 in Safari.
+Open http://localhost:1312 in Safari.
 
 ### 3. Create a Safari Web App (macOS standalone)
 
-With http://localhost:8080 open in Safari:
+With http://localhost:1312 open in Safari:
 **File → Add to Dock → name it "BeetsGUI"**
 
 The server will now open the standalone app automatically on next launch.
@@ -90,6 +92,10 @@ Maintenance: `duplicates` `missing` `mbsync` `importfeeds` `dirfields` `scrub` `
 
 Pull requests welcome. This started as a personal tool for a DJ/electronic music collection — if you have a different workflow, open an issue.
 
+## About
+
+Built by DR. WARTEMAL — if you'd like to hear what this tool is for, find my music at [soundcloud.com/drwartemal](https://soundcloud.com/drwartemal).
+
 ## License
 
-MIT
+GPLv3 — see [LICENSE](LICENSE).

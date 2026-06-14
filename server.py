@@ -4,7 +4,7 @@ BeetsGUI Server — lokal Flask API
 Kør: python3 server.py
 Stop: Ctrl+C
 
-Serverer beetsgui.html på http://localhost:8080
+Serverer beetsgui.html på http://localhost:1312
 og tilbyder /run?cmd=... til at eksekvere beet-kommandoer med live output.
 """
 import os
@@ -23,7 +23,7 @@ except ImportError:
     sys.exit(1)
 
 # ── Konfiguration ──────────────────────────────────────────────────────────────
-PORT       = 8080
+PORT       = 1312
 SCRIPT_DIR = Path(__file__).parent.resolve()
 HTML_FILE  = 'beetsgui.html'
 
