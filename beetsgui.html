@@ -32,8 +32,6 @@
   .app-header { display:flex; align-items:baseline; gap:0.75rem; padding:1rem 1.25rem 0; border-bottom:1px solid var(--border); flex-shrink:0; }
   .app-title { font-size:15px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent); }
   .app-sub { font-size:11px; color:var(--text3); letter-spacing:0.04em; }
-  .lang-toggle { margin-left:auto; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text2); cursor:pointer; font-family:inherit; font-size:11px; letter-spacing:0.06em; padding:0.25rem 0.6rem; transition:background 0.1s; }
-  .lang-toggle:hover { background:var(--bg4); color:var(--text); }
   .tabs { display:flex; padding:0 1.25rem; border-bottom:1px solid var(--border); flex-shrink:0; overflow-x:auto; scrollbar-width:none; }
   .tabs::-webkit-scrollbar { display:none; }
   .tab-btn { background:none; border:none; border-bottom:2px solid transparent; color:var(--text3); cursor:pointer; font-family:inherit; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; padding:0.6rem 0.9rem; white-space:nowrap; transition:color 0.1s,border-color 0.1s; margin-bottom:-1px; }
@@ -84,6 +82,15 @@
   .tip-icon:hover + .tip-box,.tip-icon:focus + .tip-box { display:block; }
   .tip-box { display:none; position:absolute; bottom:calc(100% + 6px); left:0; z-index:100; background:var(--bg4); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text2); font-size:11px; line-height:1.5; max-width:280px; padding:0.5rem 0.65rem; white-space:normal; pointer-events:none; }
   .pre-out { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--accent); font-family:var(--font-mono); font-size:11px; line-height:1.7; max-height:380px; overflow:auto; padding:1rem; white-space:pre; margin-bottom:0.6rem; }
+  .lib-results { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); max-height:420px; overflow:auto; margin-bottom:0.6rem; }
+  .lib-row { display:flex; align-items:baseline; justify-content:space-between; gap:0.75rem; padding:0.55rem 0.85rem; border-bottom:1px solid var(--border); font-size:12px; }
+  .lib-row:last-child { border-bottom:none; }
+  .lib-row-title { color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lib-row-artist { color:var(--text2); }
+  .lib-row-year { color:var(--text3); }
+  .lib-row-meta { color:var(--text3); font-size:10px; letter-spacing:0.04em; white-space:nowrap; }
+  .lib-empty { color:var(--text3); font-size:12px; padding:1.5rem; text-align:center; }
+  .lib-count { color:var(--text3); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.5rem; }
   .auth-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:0.75rem; overflow:hidden; }
   .auth-card-hd { display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; cursor:pointer; user-select:none; border-bottom:1px solid transparent; transition:background 0.1s; }
   .auth-card-hd:hover { background:var(--bg3); }
@@ -115,18 +122,17 @@
 
   <div class="app-header">
     <span class="app-title">BeetsGUI</span>
-    <span class="app-sub" data-i18n="subtitle">beets musikbibliotek-assistent</span>
-    <button class="lang-toggle" id="lang-btn" onclick="toggleLang()">EN</button>
+    <span class="app-sub">beets music library assistant</span>
   </div>
 
   <div class="tabs" role="tablist">
-    <button class="tab-btn active" onclick="switchTab('import',this)" data-i18n="tab_import">Import</button>
-    <button class="tab-btn" onclick="switchTab('library',this)" data-i18n="tab_library">Bibliotek</button>
-    <button class="tab-btn" onclick="switchTab('cleanup',this)" data-i18n="tab_cleanup">Ryd op</button>
-    <button class="tab-btn" onclick="switchTab('convert',this)" data-i18n="tab_convert">Konverter</button>
-    <button class="tab-btn" onclick="switchTab('find',this)" data-i18n="tab_find">Find</button>
-    <button class="tab-btn" onclick="switchTab('settings',this)" data-i18n="tab_settings">Settings</button>
-    <button class="tab-btn" onclick="switchTab('auth',this)" data-i18n="tab_auth">Tjenester</button>
+    <button class="tab-btn active" onclick="switchTab('import',this)">Import</button>
+    <button class="tab-btn" onclick="switchTab('library',this)">Library</button>
+    <button class="tab-btn" onclick="switchTab('cleanup',this)">Clean up</button>
+    <button class="tab-btn" onclick="switchTab('convert',this)">Convert</button>
+    <button class="tab-btn" onclick="switchTab('find',this)">Find</button>
+    <button class="tab-btn" onclick="switchTab('settings',this)">Settings</button>
+    <button class="tab-btn" onclick="switchTab('auth',this)">Services</button>
   </div>
 
   <div class="content">
@@ -135,19 +141,19 @@
     <div id="tab-import" class="tab-panel active">
       <div class="section">
         <div class="section-title">
-          <span data-i18n="import_path_title">Sti til musik</span>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box" data-i18n="import_path_tip">Beets kan importere .zip og .tar archives direkte — du behøver ikke pakke ud manuelt.</span></span>
+          <span>Music path</span>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Beets can import .zip and .tar archives directly — no need to unpack manually.</span></span>
         </div>
         <div class="drop-zone" id="import-drop">
           <span class="drop-icon">📂</span>
-          <span data-i18n="import_drop">Træk mappe eller zip/tar hertil</span>
-          <div class="drop-hint" data-i18n="drop_hint">Eller skriv stien nedenfor</div>
+          <span>Drag folder or zip/tar here</span>
+          <div class="drop-hint">Or type the path below</div>
         </div>
         <div class="field">
-          <label data-i18n="lbl_path">Sti</label>
+          <label>Path</label>
           <div class="field-row">
             <div class="field" style="margin-bottom:0">
-              <input type="text" id="import-path" placeholder="/Volumes/Harddisk/Musik" oninput="buildImportCmd(); checkiCloud(this.value)">
+              <input type="text" id="import-path" placeholder="/Volumes/Harddisk/Music" oninput="buildImportCmd(); checkiCloud(this.value)">
             </div>
             <button class="btn btn-sm" onclick="setPath('import-path','~/Music')">~/Music</button>
             <button class="btn btn-sm" onclick="promptVolume()">Volumes/…</button>
@@ -156,47 +162,47 @@
         <div id="import-warnings"></div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="import_mode_title">Tilstand</div>
+        <div class="section-title">Mode</div>
         <div class="check-group">
-          <label class="radio-item"><input type="radio" name="import-mode" value="" checked onchange="buildImportCmd()"><span data-i18n="mode_interactive">Autotag interaktiv (standard)</span></label>
-          <label class="radio-item"><input type="radio" name="import-mode" value="-A" onchange="buildImportCmd()"><span data-i18n="mode_auto">Hurtig</span> <span class="mono">-A</span> <span data-i18n="mode_auto_sub">(ingen spørgsmål)</span></label>
-          <label class="radio-item"><input type="radio" name="import-mode" value="-q" onchange="buildImportCmd()"><span data-i18n="mode_quiet">Stille</span> <span class="mono">-q</span></label>
+          <label class="radio-item"><input type="radio" name="import-mode" value="" checked onchange="buildImportCmd()"><span>Autotag interactive (default)</span></label>
+          <label class="radio-item"><input type="radio" name="import-mode" value="-A" onchange="buildImportCmd()"><span>Fast</span> <span class="mono">-A</span> <span>(no prompts)</span></label>
+          <label class="radio-item"><input type="radio" name="import-mode" value="-q" onchange="buildImportCmd()"><span>Quiet</span> <span class="mono">-q</span></label>
           <label class="radio-item">
             <input type="radio" name="import-mode" value="--timid" onchange="buildImportCmd()">
-            <span data-i18n="mode_timid">Forsigtig</span> <span class="mono">--timid</span>
-            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box" data-i18n="mode_timid_tip">Spørger kun når beets er usikker på matchet. Anbefalet til elektronisk musik — auto-accepterer åbenlyse matches, men beder om bekræftelse ved lav score. Justér strong_rec_thresh i Settings.</span></span>
+            <span>Timid</span> <span class="mono">--timid</span>
+            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Only prompts when beets is uncertain about a match. Recommended for electronic music — auto-accepts obvious matches, asks for confirmation on low scores. Adjust strong_rec_thresh in Settings.</span></span>
           </label>
         </div>
       </div>
       <div class="section">
         <div class="section-title">
-          <span data-i18n="import_filehandling">Filhåndtering</span>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box" data-i18n="import_filehandling_tip">Flyt er sikkert — beets genkender allerede importerede filer og laver aldrig dubletter.</span></span>
+          <span>File handling</span>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Move is safe — beets recognises already-imported files and never creates duplicates.</span></span>
         </div>
         <div class="check-group">
-          <label class="radio-item"><input type="radio" name="import-move" value="" checked onchange="buildImportCmd()"><span data-i18n="move_copy">Kopier (standard)</span></label>
-          <label class="radio-item"><input type="radio" name="import-move" value="-m" onchange="buildImportCmd()"><span data-i18n="move_move">Flyt</span> <span class="mono">-m</span></label>
-          <label class="radio-item"><input type="radio" name="import-move" value="-C -W" onchange="buildImportCmd()"><span data-i18n="move_inplace">Behold på plads</span> <span class="mono">-C -W</span></label>
+          <label class="radio-item"><input type="radio" name="import-move" value="" checked onchange="buildImportCmd()"><span>Copy (default)</span></label>
+          <label class="radio-item"><input type="radio" name="import-move" value="-m" onchange="buildImportCmd()"><span>Move</span> <span class="mono">-m</span></label>
+          <label class="radio-item"><input type="radio" name="import-move" value="-C -W" onchange="buildImportCmd()"><span>Keep in place</span> <span class="mono">-C -W</span></label>
         </div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="import_extra">Ekstra</div>
+        <div class="section-title">Extra</div>
         <div class="check-group">
-          <label class="check-item"><input type="checkbox" id="import-resume" onchange="buildImportCmd()"><span data-i18n="extra_resume">Genoptag afbrudt import</span> <span class="mono">-p</span></label>
-          <label class="check-item"><input type="checkbox" id="import-singleton" onchange="buildImportCmd()"><span data-i18n="extra_singleton">Singleton-mode (enkeltspor, ikke albums)</span> <span class="mono">-s</span></label>
-          <label class="check-item"><input type="checkbox" id="import-incremental" onchange="buildImportCmd()"><span data-i18n="extra_incremental">Incremental (spring allerede importerede over)</span> <span class="mono">-i</span></label>
-          <label class="check-item"><input type="checkbox" id="import-log" onchange="toggleLog()"><span data-i18n="extra_log">Log til fil</span> <span class="mono">-l</span></label>
+          <label class="check-item"><input type="checkbox" id="import-resume" onchange="buildImportCmd()"><span>Resume interrupted import</span> <span class="mono">-p</span></label>
+          <label class="check-item"><input type="checkbox" id="import-singleton" onchange="buildImportCmd()"><span>Singleton mode (single tracks, not albums)</span> <span class="mono">-s</span></label>
+          <label class="check-item"><input type="checkbox" id="import-incremental" onchange="buildImportCmd()"><span>Incremental (skip already imported)</span> <span class="mono">-i</span></label>
+          <label class="check-item"><input type="checkbox" id="import-log" onchange="toggleLog()"><span>Log to file</span> <span class="mono">-l</span></label>
         </div>
         <div id="log-path-wrap" style="display:none; margin-top:0.5rem;">
-          <div class="field"><label data-i18n="lbl_logpath">Log-fil sti</label><input type="text" id="import-log-path" value="~/beets-import.log" oninput="buildImportCmd()"></div>
+          <div class="field"><label>Log file path</label><input type="text" id="import-log-path" value="~/beets-import.log" oninput="buildImportCmd()"></div>
         </div>
       </div>
       <div class="section">
         <div class="section-title">
-          <span data-i18n="import_excl_title">Ekskluder mapper</span>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box" data-i18n="import_excl_tip">Ekskluderinger sættes i config.yaml under import: ignore: — ikke i selve kommandoen. Aktiver dem i Settings.</span></span>
+          <span>Exclude folders</span>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Exclusions are set in config.yaml under import: ignore: — not in the command itself. Enable them in Settings.</span></span>
         </div>
-        <div class="alert alert-yellow" style="margin-bottom:0.5rem; font-size:10px;" data-i18n="import_excl_note">Ekskluderinger sættes i config.yaml (Settings-fanen), ikke direkte i kommandoen.</div>
+        <div class="alert alert-yellow" style="margin-bottom:0.5rem; font-size:10px;">Exclusions are set in config.yaml (Settings tab), not directly in the command.</div>
         <div class="check-row">
           <label class="check-item"><input type="checkbox" disabled checked> Samples</label>
           <label class="check-item"><input type="checkbox" disabled checked> Stems</label>
@@ -211,55 +217,60 @@
     <!-- LIBRARY -->
     <div id="tab-library" class="tab-panel">
       <div class="section">
-        <div class="section-title" data-i18n="lib_search_title">Søg</div>
-        <div class="field"><label data-i18n="lbl_freetext">Fritekst</label><input type="text" id="lib-query" placeholder="Burial" oninput="buildLibCmd()"></div>
+        <div class="section-title">Search</div>
+        <div class="field"><label>Free text</label><input type="text" id="lib-query" placeholder="Burial" oninput="buildLibCmd();loadLibrary();"></div>
         <div class="field-row">
           <div class="field">
-            <label data-i18n="lbl_field">Felt</label>
+            <label>Field</label>
             <select id="lib-field" onchange="buildLibCmd()">
-              <option value="" data-i18n="opt_nofield">— ingen felt —</option>
+              <option value="">— no field —</option>
               <option value="artist">artist</option><option value="album">album</option>
               <option value="year">year</option><option value="format">format</option>
               <option value="bitrate">bitrate</option><option value="genre">genre</option>
               <option value="bpm">bpm</option><option value="key">key</option>
             </select>
           </div>
-          <div class="field"><label data-i18n="lbl_fieldval">Felt-værdi</label><input type="text" id="lib-field-val" placeholder="2005..2010" oninput="buildLibCmd()"></div>
+          <div class="field"><label>Field value</label><input type="text" id="lib-field-val" placeholder="2005..2010" oninput="buildLibCmd()"></div>
         </div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="lib_view_title">Visning</div>
+        <div class="section-title">Your library</div>
+        <div class="lib-count" id="lib-count"></div>
+        <div class="lib-results" id="lib-results"><div class="lib-empty">Loading…</div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">View</div>
         <div class="check-group" style="margin-bottom:0.5rem;">
-          <label class="radio-item"><input type="radio" name="lib-type" value="" checked onchange="buildLibCmd()"><span data-i18n="view_tracks">Tracks (standard)</span></label>
-          <label class="radio-item"><input type="radio" name="lib-type" value="-a" onchange="buildLibCmd()"><span data-i18n="view_albums">Albums</span> <span class="mono">-a</span></label>
+          <label class="radio-item"><input type="radio" name="lib-type" value="" checked onchange="buildLibCmd()"><span>Tracks (default)</span></label>
+          <label class="radio-item"><input type="radio" name="lib-type" value="-a" onchange="buildLibCmd()"><span>Albums</span> <span class="mono">-a</span></label>
         </div>
         <div class="field">
-          <label><span data-i18n="lbl_format">Output-format</span> <span class="mono">-f</span>
-            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box" data-i18n="format_tip">Brug $artist, $album, $year, $title, $format, $bitrate, $path o.l. til at forme output.</span></span>
+          <label><span>Output format</span> <span class="mono">-f</span>
+            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Use $artist, $album, $year, $title, $format, $bitrate, $path etc. to shape output.</span></span>
           </label>
           <input type="text" id="lib-format" placeholder="" oninput="buildLibCmd()">
         </div>
         <div class="btn-row">
-          <button class="btn btn-sm" onclick="setFormat('$artist - $album ($year)')"><span data-i18n="fmt_artist_album">artist · album · år</span></button>
+          <button class="btn btn-sm" onclick="setFormat('$artist - $album ($year)')"><span>artist · album · year</span></button>
           <button class="btn btn-sm" onclick="setFormat('[$format] $bitrate $artist - $title')">format · bitrate</button>
-          <button class="btn btn-sm" onclick="setFormat('$path')"><span data-i18n="fmt_path">sti</span></button>
+          <button class="btn btn-sm" onclick="setFormat('$path')"><span>path</span></button>
           <button class="btn btn-sm" onclick="setFormat('$artist - $title | BPM: $bpm | Key: $key')">BPM + Key</button>
         </div>
         <div class="field">
-          <label class="check-item"><input type="checkbox" id="lib-export" onchange="buildLibCmd()"><span data-i18n="lib_export_txt">Eksporter til fil</span> <span class="mono">&gt; ~/Desktop/bibliotek.txt</span></label>
+          <label class="check-item"><input type="checkbox" id="lib-export" onchange="buildLibCmd()"><span>Export to file</span> <span class="mono">&gt; ~/Desktop/library.txt</span></label>
         </div>
         <div class="btn-row">
-          <button class="btn" onclick="setCmd('beet list -f \'$path\' > ~/Desktop/beets_export.m3u')"><span data-i18n="lib_export_m3u">Eksporter .m3u til Lexicon</span></button>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box" data-i18n="lib_export_m3u_tip">Gemmer alle tracks som .m3u på skrivebordet. I Lexicon: File → Import → M3U playlist. Tilføj en query i søgefeltet for at eksportere et subset.</span></span>
+          <button class="btn" onclick="setCmd('beet list -f \'$path\' > ~/Desktop/beets_export.m3u')"><span>Export .m3u for Lexicon</span></button>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Saves all tracks as .m3u on the desktop. In Lexicon: File → Import → M3U playlist. Add a query in the search field to export a subset.</span></span>
         </div>
       </div>
       <hr class="divider">
-      <div class="section-title" style="margin-bottom:0.5rem;" data-i18n="lib_quickcmds">Hurtigkommandoer</div>
+      <div class="section-title" style="margin-bottom:0.5rem;">Quick commands</div>
       <div class="btn-row">
         <button class="btn" onclick="setCmd('beet stats')">beet stats</button>
         <button class="btn" onclick="setCmd('beet fields')">beet fields</button>
         <button class="btn" onclick="setCmd('beet version')">beet version</button>
-        <button class="btn" onclick="setCmd('while true; do beet list -a | wc -l; sleep 2; done')" title="Overvåg biblioteket (erstatter watch på macOS)">monitor (loop)</button>
+        <button class="btn" onclick="setCmd('while true; do beet list -a | wc -l; sleep 2; done')" title="Monitor the library (replaces watch on macOS)">monitor (loop)</button>
       </div>
     </div>
 
@@ -267,34 +278,34 @@
     <div id="tab-cleanup" class="tab-panel">
       <div class="section">
         <div class="section-title">
-          <span data-i18n="cleanup_dupes_title">Dubletter</span>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box" data-i18n="cleanup_dupes_tip">Under import: beets spørger automatisk ved dubletter. Med -q springes der automatisk over. Efter import: duplicates-pluginet sammenligner på MusicBrainz-ID, ikke filnavne.</span></span>
+          <span>Duplicates</span>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">During import: beets prompts automatically for duplicates. With -q it skips automatically. After import: the duplicates plugin compares on MusicBrainz ID, not filenames.</span></span>
         </div>
-        <div class="alert alert-yellow" data-i18n="cleanup_preview_first">Altid preview først — slet-knapper er røde og sekundære.</div>
+        <div class="alert alert-yellow">Always preview first — delete buttons are red and secondary.</div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="setCmd(&quot;beet duplicates -f '$path $format $bitrate'&quot;)"><span data-i18n="btn_preview_dupes">Preview dubletter (detaljer)</span></button>
+          <button class="btn btn-primary" onclick="setCmd(&quot;beet duplicates -f '$path $format $bitrate'&quot;)"><span>Preview duplicates (details)</span></button>
         </div>
         <div class="btn-row">
-          <button class="btn btn-danger" onclick="confirmDangerousCmd('beet duplicates -k bitrate -d', 'Dette sletter permanent alle dubletter med laveste bitrate. Kør preview FØRST. Fortsæt?')">⚠ <span data-i18n="btn_del_bitrate">Slet laveste bitrate</span></button>
-          <button class="btn btn-danger" onclick="confirmDangerousCmd('beet duplicates -k format -d', 'Dette sletter permanent alle dubletter med laveste format. Kør preview FØRST. Fortsæt?')">⚠ <span data-i18n="btn_del_format">Slet laveste format</span></button>
+          <button class="btn btn-danger" onclick="confirmDangerousCmd('beet duplicates -k bitrate -d', 'This permanently deletes all duplicates with the lowest bitrate. Run preview FIRST. Continue?')">⚠ <span>Delete lowest bitrate</span></button>
+          <button class="btn btn-danger" onclick="confirmDangerousCmd('beet duplicates -k format -d', 'This permanently deletes all duplicates with the lowest format. Run preview FIRST. Continue?')">⚠ <span>Delete lowest format</span></button>
         </div>
-        <div class="alert alert-red" style="font-size:10px;" data-i18n="cleanup_del_warn">Slet-kommandoer fjerner filer permanent. Kør altid preview først.</div>
+        <div class="alert alert-red" style="font-size:10px;">Delete commands remove files permanently. Always run preview first.</div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="cleanup_art_title">Cover art</div>
+        <div class="section-title">Cover art</div>
         <div class="btn-row">
-          <button class="btn" onclick="setCmd('beet fetchart')">fetchart <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box" data-i18n="fetchart_tip">Kigger i mappen først (cover.jpg, folder.jpg, front.jpg), derefter nettet.</span></span></button>
+          <button class="btn" onclick="setCmd('beet fetchart')">fetchart <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Checks the folder first (cover.jpg, folder.jpg, front.jpg), then the internet.</span></span></button>
           <button class="btn" onclick="setCmd('beet embedart')">embedart</button>
         </div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="cleanup_meta_title">Metadata</div>
+        <div class="section-title">Metadata</div>
         <div class="field-row">
-          <div class="field"><label data-i18n="lbl_field">Felt</label><input type="text" id="mod-field" placeholder="artist" oninput="buildModifyCmd()"></div>
-          <div class="field"><label data-i18n="lbl_newval">Ny værdi</label><input type="text" id="mod-value" placeholder="Burial" oninput="buildModifyCmd()"></div>
+          <div class="field"><label>Field</label><input type="text" id="mod-field" placeholder="artist" oninput="buildModifyCmd()"></div>
+          <div class="field"><label>New value</label><input type="text" id="mod-value" placeholder="Burial" oninput="buildModifyCmd()"></div>
           <div class="field"><label>Query</label><input type="text" id="mod-query" placeholder="album:Untrue" oninput="buildModifyCmd()"></div>
         </div>
-        <div class="btn-row"><button class="btn btn-primary" onclick="buildModifyCmd()"><span data-i18n="btn_build_modify">Byg modify-kommando</span></button></div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="buildModifyCmd()"><span>Build modify command</span></button></div>
         <hr class="divider">
         <div class="btn-row">
           <button class="btn" onclick="setCmd('beet update')">update</button>
@@ -305,35 +316,35 @@
         </div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="cleanup_playlist_title">Playlister → Lexicon / Traktor</div>
-        <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;" data-i18n="cleanup_playlist_note">Kør dette <b>inden</b> du importerer med move — eksporterer dine mapper som .m3u-filer så Lexicon og Traktor kan genfinde dem.</div>
-        <div class="field"><label data-i18n="lbl_pl_path">Sti til playliste-mapper</label><input type="text" id="pl-path" placeholder="/Volumes/Harddisk/OldPlaylister"></div>
+        <div class="section-title">Playlists → Lexicon / Traktor</div>
+        <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Run this <b>before</b> importing with move — exports your folders as .m3u files so Lexicon and Traktor can relocate them.</div>
+        <div class="field"><label>Path to playlist folders</label><input type="text" id="pl-path" placeholder="/Volumes/Harddisk/OldPlaylists"></div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="buildPlaylistExportCmd()"><span data-i18n="btn_export_m3u">Eksporter mapper → .m3u</span></button>
-          <button class="btn" onclick="setCmd('beet list -f \'$path\' > ~/Desktop/beets_alle_tracks.txt')"><span data-i18n="btn_save_tracklist">Gem trackliste (til Traktor relocation)</span></button>
+          <button class="btn btn-primary" onclick="buildPlaylistExportCmd()"><span>Export folders → .m3u</span></button>
+          <button class="btn" onclick="setCmd('beet list -f \'$path\' > ~/Desktop/beets_alle_tracks.txt')"><span>Save tracklist (for Traktor relocation)</span></button>
         </div>
         <hr class="divider">
-        <div class="section-title" style="margin-bottom:0.4rem;" data-i18n="traktor_title">Traktor: Genfind filer efter move</div>
-        <div class="alert alert-yellow" style="font-size:10px;" data-i18n="traktor_guide">1. I Traktor: Højreklik på <b>Track Collection</b> → <b>Check Consistency</b><br>2. Vælg ALLE missing tracks (<b>Cmd+A</b>)<br>3. Klik <b>Relocate</b> → naviger til din Beets-biblioteksmappe<br>4. ⚠ Vælg flere filer ad gangen — undgår Traktor 4.2 freeze<br>5. Cues og grids følger automatisk med</div>
+        <div class="section-title" style="margin-bottom:0.4rem;">Traktor: Relocate files after move</div>
+        <div class="alert alert-yellow" style="font-size:10px;">1. In Traktor: Right-click <b>Track Collection</b> → <b>Check Consistency</b><br>2. Select ALL missing tracks (<b>Cmd+A</b>)<br>3. Click <b>Relocate</b> → navigate to your Beets library folder<br>4. ⚠ Select multiple files at a time — avoids Traktor 4.2 freeze<br>5. Cues and grids follow automatically</div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="cleanup_remove_title">Fjern fra bibliotek</div>
+        <div class="section-title">Remove from library</div>
         <div class="field"><label>Query</label><input type="text" id="rm-query" placeholder="artist:Burial album:Untrue"></div>
         <div class="btn-row">
-          <button class="btn btn-warn" onclick="buildRemoveCmd(false)">⚠ <span data-i18n="btn_remove_db">Fjern fra database</span></button>
-          <button class="btn btn-danger" onclick="confirmDangerousCmd(buildRemoveCmdStr(true), 'Dette sletter filen permanent fra disk. Kør preview FØRST. Fortsæt?')">⚠ <span data-i18n="btn_remove_disk">Slet også fil fra disk</span></button>
+          <button class="btn btn-warn" onclick="buildRemoveCmd(false)">⚠ <span>Remove from database</span></button>
+          <button class="btn btn-danger" onclick="confirmDangerousCmd(buildRemoveCmdStr(true), 'This permanently deletes the file from disk. Run preview FIRST. Continue?')">⚠ <span>Also delete file from disk</span></button>
         </div>
-        <div class="alert alert-yellow" style="font-size:10px;" data-i18n="remove_note"><b>beet remove</b> fjerner kun fra database, ikke disk. <b>beet remove -d</b> sletter filen permanent.</div>
+        <div class="alert alert-yellow" style="font-size:10px;"><b>beet remove</b> only removes from database, not disk. <b>beet remove -d</b> deletes the file permanently.</div>
         <hr class="divider">
-        <div class="section-title" style="margin-bottom:0.4rem;">Ryd korte filer (one shots) fra database</div>
-        <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Fjerner tracks under X sekunder fra databasen (filer forbliver på disk). Beets har ingen import-filter på varighed — brug dette efter import.</div>
+        <div class="section-title" style="margin-bottom:0.4rem;">Remove short files (one shots) from database</div>
+        <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Removes tracks under X seconds from the database (files stay on disk). Beets has no duration import filter — use this after importing.</div>
         <div class="field-row">
-          <div class="field" style="max-width:120px;"><label>Maks sekunder</label><input type="number" id="short-secs" value="10" min="1" max="60" oninput="buildShortRemoveCmd()"></div>
+          <div class="field" style="max-width:120px;"><label>Max seconds</label><input type="number" id="short-secs" value="10" min="1" max="60" oninput="buildShortRemoveCmd()"></div>
           <div class="field" style="align-self:flex-end;">
-            <button class="btn btn-sm" onclick="buildShortRemovePreview()">Preview korte filer</button>
+            <button class="btn btn-sm" onclick="buildShortRemovePreview()">Preview short files</button>
           </div>
           <div class="field" style="align-self:flex-end;">
-            <button class="btn btn-warn btn-sm" onclick="buildShortRemoveCmd()">⚠ Fjern fra DB</button>
+            <button class="btn btn-warn btn-sm" onclick="buildShortRemoveCmd()">⚠ Remove from DB</button>
           </div>
         </div>
       </div>
@@ -342,14 +353,14 @@
     <!-- CONVERT -->
     <div id="tab-convert" class="tab-panel">
       <div class="section">
-        <div class="section-title" data-i18n="conv_find_title">Find lydfiler (fd)</div>
-        <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;" data-i18n="fd_note_conv">Bruger <span class="mono">fd</span> — ignorerer .Spotlight-V100, .Trashes og andre skjulte systemmapper automatisk.</div>
-        <div class="drop-zone" id="find-drop2"><span class="drop-icon">📁</span><span data-i18n="drop_folder">Træk mappe hertil</span><div class="drop-hint" data-i18n="drop_hint_short">Eller skriv stien</div></div>
-        <div class="field"><label data-i18n="lbl_path">Sti</label><input type="text" id="conv-src" placeholder="/Volumes/Harddisk" oninput="buildConvFindCmd()"></div>
+        <div class="section-title">Find audio files (fd)</div>
+        <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">Uses <span class="mono">fd</span> — ignores .Spotlight-V100, .Trashes and other hidden system folders automatically.</div>
+        <div class="drop-zone" id="find-drop2"><span class="drop-icon">📁</span><span>Drag folder here</span><div class="drop-hint">Or type the path</div></div>
+        <div class="field"><label>Path</label><input type="text" id="conv-src" placeholder="/Volumes/Harddisk" oninput="buildConvFindCmd()"></div>
         <div class="btn-row">
-          <button class="btn" onclick="buildConvFindCmd('wav')"><span data-i18n="btn_find_wav">Find WAV</span></button>
-          <button class="btn" onclick="buildConvFindCmd('aiff')"><span data-i18n="btn_find_aiff">Find AIFF</span></button>
-          <button class="btn" onclick="buildConvFindCmd('count')"><span data-i18n="btn_count_wav">Tæl WAV+AIFF</span></button>
+          <button class="btn" onclick="buildConvFindCmd('wav')"><span>Find WAV</span></button>
+          <button class="btn" onclick="buildConvFindCmd('aiff')"><span>Find AIFF</span></button>
+          <button class="btn" onclick="buildConvFindCmd('count')"><span>Count WAV+AIFF</span></button>
         </div>
       </div>
 
@@ -357,13 +368,13 @@
       <div class="section">
         <div class="section-title">
           Beets convert → ALAC (ffmpeg)
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Bruger beets' eget convert-plugin med ffmpeg. Laver kopier — originaler slettes IKKE automatisk. Kræver: <span class="mono">pipx inject beets beets-convert</span> + <span class="mono">brew install ffmpeg</span></span></span>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Uses beets' own convert plugin with ffmpeg. Makes copies — originals are NOT deleted automatically. Requires: <span class="mono">pipx inject beets beets-convert</span> + <span class="mono">brew install ffmpeg</span></span></span>
         </div>
         <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">
-          <b>Vigtigt:</b> <span class="mono">beet convert</span> laver kopier af filerne — originaler røres ikke. Verificer output inden du sletter originaler manuelt.
+          <b>Important:</b> <span class="mono">beet convert</span> makes copies of the files — originals are untouched. Verify the output before deleting originals manually.
         </div>
         <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;">
-          Tilføj til config.yaml (Settings-fanen aktiverer ikke convert automatisk — indsæt manuelt):<br>
+          Add to config.yaml (the Settings tab does not enable convert automatically — paste manually):<br>
           <pre style="margin-top:0.3rem; white-space:pre; font-size:10px; color:var(--accent);">convert:
   format: alac
   never_convert_lossy_files: yes
@@ -374,7 +385,7 @@
         </div>
         <div class="field-row">
           <div class="field">
-            <label>Kildeformat</label>
+            <label>Source format</label>
             <select id="beet-conv-fmt" onchange="buildBeetsConvCmd()">
               <option value="AIFF">AIFF</option>
               <option value="WAV">WAV</option>
@@ -386,45 +397,45 @@
           </div>
         </div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="buildBeetsConvCmd()">Byg beet convert-kommando</button>
+          <button class="btn btn-primary" onclick="buildBeetsConvCmd()">Build beet convert command</button>
         </div>
         <hr class="divider">
-        <div style="font-size:10px; color:var(--text3); margin-bottom:0.5rem;">Slet originaler fra database EFTER verificering (filer forbliver på disk):</div>
+        <div style="font-size:10px; color:var(--text3); margin-bottom:0.5rem;">Delete originals from the database AFTER verifying (files stay on disk):</div>
         <div class="btn-row">
-          <button class="btn btn-warn" onclick="setCmd('beet remove format:AIFF')">⚠ Fjern AIFF fra DB</button>
-          <button class="btn btn-warn" onclick="setCmd('beet remove format:WAV')">⚠ Fjern WAV fra DB</button>
+          <button class="btn btn-warn" onclick="setCmd('beet remove format:AIFF')">⚠ Remove AIFF from DB</button>
+          <button class="btn btn-warn" onclick="setCmd('beet remove format:WAV')">⚠ Remove WAV from DB</button>
         </div>
       </div>
 
       <div class="section">
-        <div class="section-title" data-i18n="conv_xld_title">Konverter med XLD</div>
-        <div class="drop-zone" id="xld-drop"><span class="drop-icon">🎵</span><span data-i18n="xld_drop">Træk kildefil eller -mappe hertil</span></div>
-        <div class="field"><label data-i18n="lbl_srcfile">Kildefil/-mappe</label><input type="text" id="xld-src" placeholder="/Volumes/Harddisk/album.wav" oninput="buildXldCmd()"></div>
+        <div class="section-title">Convert with XLD</div>
+        <div class="drop-zone" id="xld-drop"><span class="drop-icon">🎵</span><span>Drag source file or folder here</span></div>
+        <div class="field"><label>Source file/folder</label><input type="text" id="xld-src" placeholder="/Volumes/Harddisk/album.wav" oninput="buildXldCmd()"></div>
         <div class="field-row">
-          <div class="field"><label data-i18n="lbl_outfmt">Output-format</label><select id="xld-fmt" onchange="buildXldCmd()"><option value="alac">ALAC</option><option value="flac">FLAC</option><option value="aiff">AIFF</option><option value="mp3">MP3 320</option></select></div>
-          <div class="field"><label data-i18n="lbl_outdir">Output-mappe</label><input type="text" id="xld-out" placeholder="~/Music/Konverteret" oninput="buildXldCmd()"></div>
+          <div class="field"><label>Output format</label><select id="xld-fmt" onchange="buildXldCmd()"><option value="alac">ALAC</option><option value="flac">FLAC</option><option value="aiff">AIFF</option><option value="mp3">MP3 320</option></select></div>
+          <div class="field"><label>Output folder</label><input type="text" id="xld-out" placeholder="~/Music/Konverteret" oninput="buildXldCmd()"></div>
         </div>
         <div class="check-group" style="margin-bottom:0.5rem;">
-          <label class="radio-item"><input type="radio" name="xld-mode" value="single" checked onchange="buildXldCmd()"><span data-i18n="xld_single">Enkelt fil</span></label>
-          <label class="radio-item"><input type="radio" name="xld-mode" value="batch" onchange="buildXldCmd()"><span data-i18n="xld_batch">Alle WAV i mappen (loop)</span></label>
+          <label class="radio-item"><input type="radio" name="xld-mode" value="single" checked onchange="buildXldCmd()"><span>Single file</span></label>
+          <label class="radio-item"><input type="radio" name="xld-mode" value="batch" onchange="buildXldCmd()"><span>All WAV in folder (loop)</span></label>
         </div>
-        <div class="btn-row"><button class="btn btn-primary" onclick="buildXldCmd()"><span data-i18n="btn_build_xld">Byg XLD-kommando</span></button></div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="buildXldCmd()"><span>Build XLD command</span></button></div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="conv_wavtags_title">WAV-tags fra filnavn</div>
-        <div class="alert alert-yellow" style="font-size:10px;" data-i18n="conv_wavtags_note">Brug "Importer med fromfilename" i Import-fanen efter konvertering.<br>Beets gætter metadata fra filnavnet (Artist - Titel.wav) og søger MusicBrainz.</div>
+        <div class="section-title">WAV tags from filename</div>
+        <div class="alert alert-yellow" style="font-size:10px;">Use "Import with fromfilename" in the Import tab after converting.<br>Beets guesses metadata from the filename (Artist - Title.wav) and searches MusicBrainz.</div>
       </div>
     </div>
 
     <!-- FIND -->
     <div id="tab-find" class="tab-panel">
       <div class="section">
-        <div class="section-title" data-i18n="lbl_path">Sti</div>
-        <div class="drop-zone" id="find-drop"><span class="drop-icon">🔍</span><span data-i18n="drop_folder">Træk mappe hertil</span><div class="drop-hint" data-i18n="drop_hint_short">Eller skriv stien</div></div>
-        <div class="field"><label data-i18n="lbl_path">Sti</label><input type="text" id="find-path" placeholder="/Volumes/Harddisk/Musik" oninput="buildFindCmd('all')"></div>
+        <div class="section-title">Path</div>
+        <div class="drop-zone" id="find-drop"><span class="drop-icon">🔍</span><span>Drag folder here</span><div class="drop-hint">Or type the path</div></div>
+        <div class="field"><label>Path</label><input type="text" id="find-path" placeholder="/Volumes/Harddisk/Music" oninput="buildFindCmd('all')"></div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="find_excl_title">Ekskluder mapper</div>
+        <div class="section-title">Exclude folders</div>
         <div class="check-row" id="find-excl">
           <label class="check-item"><input type="checkbox" value="Samples" onchange="buildFindCmd('all')"> Samples</label>
           <label class="check-item"><input type="checkbox" value="Stems" onchange="buildFindCmd('all')"> Stems</label>
@@ -434,14 +445,14 @@
         </div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="find_cmds_title">Kommandoer</div>
-        <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;" data-i18n="fd_note_find">Bruger <span class="mono">fd</span> — 5-10× hurtigere end find, ignorerer automatisk skjulte systemmapper. Kræver: <span class="mono">brew install fd</span></div>
+        <div class="section-title">Commands</div>
+        <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">Uses <span class="mono">fd</span> — 5-10× faster than find, ignores hidden system folders automatically. Requires: <span class="mono">brew install fd</span></div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="buildFindCmd('all')"><span data-i18n="btn_find_all">Find alle lydfiler</span></button>
-          <button class="btn" onclick="buildFindCmd('count')"><span data-i18n="btn_count">Tæl filer</span></button>
-          <button class="btn" onclick="buildFindCmd('save')"><span data-i18n="btn_save_list">Gem liste til fil</span></button>
-          <button class="btn" onclick="buildFindCmd('du')"><span data-i18n="btn_du">Mappestørrelser (du)</span></button>
-          <button class="btn" onclick="buildFindCmd('itunes')"><span data-i18n="btn_itunes">Find iTunes-bibl.</span></button>
+          <button class="btn btn-primary" onclick="buildFindCmd('all')"><span>Find all audio files</span></button>
+          <button class="btn" onclick="buildFindCmd('count')"><span>Count files</span></button>
+          <button class="btn" onclick="buildFindCmd('save')"><span>Save list to file</span></button>
+          <button class="btn" onclick="buildFindCmd('du')"><span>Folder sizes (du)</span></button>
+          <button class="btn" onclick="buildFindCmd('itunes')"><span>Find iTunes lib.</span></button>
         </div>
       </div>
     </div>
@@ -449,47 +460,47 @@
     <!-- SETTINGS -->
     <div id="tab-settings" class="tab-panel">
       <div class="section">
-        <div class="section-title" data-i18n="settings_lib_title">Bibliotek</div>
-        <div class="field"><label data-i18n="lbl_dir">directory — bibliotekssti</label><input type="text" id="cfg-dir" placeholder="~/Music/Bibliotek" oninput="buildConfig()"></div>
-        <div class="field"><label data-i18n="lbl_db">library — database-fil</label><input type="text" id="cfg-lib" placeholder="~/Music/bibliotek.db" oninput="buildConfig()"></div>
+        <div class="section-title">Library</div>
+        <div class="field"><label>directory — library path</label><input type="text" id="cfg-dir" placeholder="~/Music/Library" oninput="buildConfig()"></div>
+        <div class="field"><label>library — database file</label><input type="text" id="cfg-lib" placeholder="~/Music/library.db" oninput="buildConfig()"></div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="settings_import_title">Import-strategi</div>
+        <div class="section-title">Import strategy</div>
         <div class="check-group">
-          <label class="radio-item"><input type="radio" name="cfg-import" value="copy" checked onchange="buildConfig()"><span data-i18n="move_copy">Kopier (standard)</span></label>
-          <label class="radio-item"><input type="radio" name="cfg-import" value="move" onchange="buildConfig()"><span data-i18n="move_move">Flyt</span></label>
-          <label class="radio-item"><input type="radio" name="cfg-import" value="none" onchange="buildConfig()"><span data-i18n="move_inplace">Behold på plads</span></label>
+          <label class="radio-item"><input type="radio" name="cfg-import" value="copy" checked onchange="buildConfig()"><span>Copy (default)</span></label>
+          <label class="radio-item"><input type="radio" name="cfg-import" value="move" onchange="buildConfig()"><span>Move</span></label>
+          <label class="radio-item"><input type="radio" name="cfg-import" value="none" onchange="buildConfig()"><span>Keep in place</span></label>
         </div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="settings_paths_title">Mappestruktur</div>
+        <div class="section-title">Folder structure</div>
         <div class="field-row">
-          <div class="field"><label data-i18n="lbl_artist_part">Kunstner-del</label><select id="path-artist" onchange="updatePathPreview()"><option value="$albumartist">$albumartist</option><option value="$artist">$artist</option></select></div>
-          <div class="field"><label data-i18n="lbl_album_part">Album-del</label><select id="path-album" onchange="updatePathPreview()"><option value="$year - $album">$year - $album</option><option value="$album">$album</option><option value="$album ($year)">$album ($year)</option></select></div>
-          <div class="field"><label data-i18n="lbl_track_part">Spor-del</label><select id="path-track" onchange="updatePathPreview()"><option value="$track - $title">$track - $title</option><option value="$track. $title">$track. $title</option><option value="$title">$title</option></select></div>
+          <div class="field"><label>Artist part</label><select id="path-artist" onchange="updatePathPreview()"><option value="$albumartist">$albumartist</option><option value="$artist">$artist</option></select></div>
+          <div class="field"><label>Album part</label><select id="path-album" onchange="updatePathPreview()"><option value="$year - $album">$year - $album</option><option value="$album">$album</option><option value="$album ($year)">$album ($year)</option></select></div>
+          <div class="field"><label>Track part</label><select id="path-track" onchange="updatePathPreview()"><option value="$track - $title">$track - $title</option><option value="$track. $title">$track. $title</option><option value="$title">$title</option></select></div>
         </div>
         <div class="path-preview" id="path-preview">Burial/2007 - Burial/01 - Archangel.alac</div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="plugins_meta_title">Plugins — Metadata-kilder</div>
+        <div class="section-title">Plugins — Metadata sources</div>
         <div class="plugin-grid">
-          <label class="check-item"><input type="checkbox" class="plugin" value="musicbrainz" checked onchange="buildConfig()"> musicbrainz <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
-          <label class="check-item"><input type="checkbox" class="plugin" value="chroma" checked onchange="buildConfig()"> chroma <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
-          <label class="check-item"><input type="checkbox" class="plugin" value="beatport4" checked onchange="buildConfig()"> beatport4 <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
-          <label class="check-item"><input type="checkbox" class="plugin" value="discogs" checked onchange="buildConfig()"> discogs <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="musicbrainz" checked onchange="buildConfig()"> musicbrainz <span class="badge badge-rec">recommended</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="chroma" checked onchange="buildConfig()"> chroma <span class="badge badge-rec">recommended</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="beatport4" checked onchange="buildConfig()"> beatport4 <span class="badge badge-rec">recommended</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="discogs" checked onchange="buildConfig()"> discogs <span class="badge badge-rec">recommended</span></label>
           <label class="check-item"><input type="checkbox" class="plugin" value="deezer" onchange="buildConfig()"> deezer</label>
           <label class="check-item"><input type="checkbox" class="plugin" value="spotify" onchange="buildConfig()"> spotify</label>
           <label class="check-item"><input type="checkbox" class="plugin" value="tidal" onchange="buildConfig()"> tidal</label>
         </div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="plugins_enrich_title">Plugins — Berigelse</div>
+        <div class="section-title">Plugins — Enrichment</div>
         <div class="plugin-grid">
-          <label class="check-item"><input type="checkbox" class="plugin" value="fetchart" checked onchange="buildConfig()"> fetchart <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
-          <label class="check-item"><input type="checkbox" class="plugin" value="embedart" checked onchange="buildConfig()"> embedart <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
-          <label class="check-item"><input type="checkbox" class="plugin" value="lastgenre" checked onchange="buildConfig()"> lastgenre <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
-          <label class="check-item"><input type="checkbox" class="plugin" value="fromfilename" checked onchange="buildConfig()"> fromfilename <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
-          <label class="check-item"><input type="checkbox" class="plugin" value="bpsync" checked onchange="buildConfig()"> bpsync <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="fetchart" checked onchange="buildConfig()"> fetchart <span class="badge badge-rec">recommended</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="embedart" checked onchange="buildConfig()"> embedart <span class="badge badge-rec">recommended</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="lastgenre" checked onchange="buildConfig()"> lastgenre <span class="badge badge-rec">recommended</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="fromfilename" checked onchange="buildConfig()"> fromfilename <span class="badge badge-rec">recommended</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="bpsync" checked onchange="buildConfig()"> bpsync <span class="badge badge-rec">recommended</span></label>
           <label class="check-item"><input type="checkbox" class="plugin" value="convert" onchange="buildConfig()"> convert</label>
           <label class="check-item"><input type="checkbox" class="plugin" value="autobpm" onchange="buildConfig()"> autobpm</label>
           <label class="check-item"><input type="checkbox" class="plugin" value="keyfinder" onchange="buildConfig()"> keyfinder</label>
@@ -497,19 +508,19 @@
         </div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="plugins_maint_title">Plugins — Vedligehold</div>
+        <div class="section-title">Plugins — Maintenance</div>
         <div class="plugin-grid">
-          <label class="check-item"><input type="checkbox" class="plugin" value="duplicates" checked onchange="buildConfig()"> duplicates <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="duplicates" checked onchange="buildConfig()"> duplicates <span class="badge badge-rec">recommended</span></label>
           <label class="check-item"><input type="checkbox" class="plugin" value="missing" onchange="buildConfig()"> missing</label>
-          <label class="check-item"><input type="checkbox" class="plugin" value="mbsync" checked onchange="buildConfig()"> mbsync <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
-          <label class="check-item"><input type="checkbox" class="plugin" value="importfeeds" checked onchange="buildConfig()"> importfeeds <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="mbsync" checked onchange="buildConfig()"> mbsync <span class="badge badge-rec">recommended</span></label>
+          <label class="check-item"><input type="checkbox" class="plugin" value="importfeeds" checked onchange="buildConfig()"> importfeeds <span class="badge badge-rec">recommended</span></label>
           <label class="check-item"><input type="checkbox" class="plugin" value="dirfields" onchange="buildConfig()"> dirfields</label>
         </div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="settings_excl_title">Import — ekskluder mapper</div>
+        <div class="section-title">Import — exclude folders</div>
         <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">
-          <b>valid_extensions</b> anbefales som whitelist — stopper al non-audio (.jpg, .als, .nml, wavedata) uden at liste dem eksplicit. Aktiveres altid i genereret config.
+          <b>valid_extensions</b> is recommended as a whitelist — blocks all non-audio (.jpg, .als, .nml, wavedata) without listing them explicitly. Always enabled in the generated config.
         </div>
         <div class="check-row">
           <label class="check-item"><input type="checkbox" class="excl" value="Samples" checked onchange="buildConfig()"> Samples</label>
@@ -531,13 +542,13 @@
         </div>
       </div>
       <div class="section">
-        <div class="section-title" data-i18n="settings_config_title">Genereret config.yaml</div>
+        <div class="section-title">Generated config.yaml</div>
         <pre class="pre-out" id="config-out"># Udfyld felterne ovenfor</pre>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="copyConfig()"><span data-i18n="btn_copy_config">Kopier config.yaml</span></button>
-          <button class="btn" onclick="buildConfig()"><span data-i18n="btn_generate">Generer</span></button>
+          <button class="btn btn-primary" onclick="copyConfig()"><span>Copy config.yaml</span></button>
+          <button class="btn" onclick="buildConfig()"><span>Generate</span></button>
         </div>
-        <div class="alert alert-yellow" style="font-size:10px;" data-i18n="config_hint">Indsæt i terminal: <span class="mono">beet config -e</span> — åbner config-filen i din editor.</div>
+        <div class="alert alert-yellow" style="font-size:10px;">Paste in terminal: <span class="mono">beet config -e</span> — opens the config file in your editor.</div>
       </div>
     </div>
 
@@ -550,23 +561,23 @@
         </div>
         <div class="auth-card-body">
           <div class="check-group" style="margin-bottom:0.75rem;">
-            <label class="radio-item"><input type="radio" name="discogs-method" value="token" checked onchange="buildConfig()">Personal Access Token <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
-            <label class="radio-item"><input type="radio" name="discogs-method" value="oauth" onchange="buildConfig()"><span data-i18n="discogs_oauth">OAuth (automatisk ved første import)</span></label>
+            <label class="radio-item"><input type="radio" name="discogs-method" value="token" checked onchange="buildConfig()">Personal Access Token <span class="badge badge-rec">recommended</span></label>
+            <label class="radio-item"><input type="radio" name="discogs-method" value="oauth" onchange="buildConfig()"><span>OAuth (automatic on first import)</span></label>
           </div>
           <div id="discogs-token-wrap">
             <div class="field">
               <label>Token</label>
               <div class="field-row">
                 <div class="field" style="margin-bottom:0"><input type="text" id="discogs-token" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" oninput="buildConfig()"></div>
-                <button class="btn btn-sm" onclick="window.open('https://www.discogs.com/settings/developers','_blank')" data-i18n="btn_get_token">Hent token ↗</button>
+                <button class="btn btn-sm" onclick="window.open('https://www.discogs.com/settings/developers','_blank')">Get token ↗</button>
               </div>
             </div>
-            <div class="alert alert-yellow" style="font-size:10px;" data-i18n="discogs_token_guide">1. Log ind på Discogs → Settings → Developer<br>2. Klik "Generate new token" → kopier token</div>
+            <div class="alert alert-yellow" style="font-size:10px;">1. Log in to Discogs → Settings → Developer<br>2. Click "Generate new token" → copy token</div>
           </div>
           <div id="discogs-oauth-wrap" style="display:none;">
-            <div class="alert alert-yellow" style="font-size:10px;" data-i18n="discogs_oauth_note">OAuth sker automatisk når du kører <span class="mono">beet import</span> første gang med discogs-pluginet aktivt. Beets åbner en browser og gemmer token i <span class="mono">~/.config/beets/</span>.</div>
+            <div class="alert alert-yellow" style="font-size:10px;">OAuth happens automatically when you run <span class="mono">beet import</span> for the first time with the discogs plugin active. Beets opens a browser and saves the token to <span class="mono">~/.config/beets/</span>.</div>
           </div>
-          <div class="alert alert-red" style="font-size:10px; margin-top:0.5rem;" data-i18n="discogs_warn">⚠ Discogs-token giver fuld adgang til din konto — hold den privat.</div>
+          <div class="alert alert-red" style="font-size:10px; margin-top:0.5rem;">⚠ Discogs token gives full access to your account — keep it private.</div>
         </div>
       </div>
       <div class="auth-card" id="card-mb">
@@ -575,9 +586,9 @@
           <span class="auth-card-chevron">▼</span>
         </div>
         <div class="auth-card-body">
-          <div class="field"><label data-i18n="lbl_username">Brugernavn</label><input type="text" id="mb-user" placeholder="dit_brugernavn" oninput="buildConfig()"></div>
-          <div class="field"><label data-i18n="lbl_password">Kodeord</label><input type="password" id="mb-pass" placeholder="••••••••" oninput="buildConfig()"></div>
-          <div class="alert alert-yellow" style="font-size:10px;" data-i18n="mb_warn">⚠ Kodeord gemmes i plain text i config.yaml. Opret konto: <a href="https://musicbrainz.org/account/register" target="_blank" style="color:inherit;">musicbrainz.org</a></div>
+          <div class="field"><label>Username</label><input type="text" id="mb-user" placeholder="dit_brugernavn" oninput="buildConfig()"></div>
+          <div class="field"><label>Password</label><input type="password" id="mb-pass" placeholder="••••••••" oninput="buildConfig()"></div>
+          <div class="alert alert-yellow" style="font-size:10px;">⚠ Password stored in plain text in config.yaml. Create account: <a href="https://musicbrainz.org/account/register" target="_blank" style="color:inherit;">musicbrainz.org</a></div>
         </div>
       </div>
       <div class="auth-card" id="card-bp4">
@@ -586,30 +597,30 @@
           <span class="auth-card-chevron">▼</span>
         </div>
         <div class="auth-card-body">
-          <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.6rem;" data-i18n="bp4_install">Kræver: <span class="mono">pipx inject beets beets-beatport4</span><br>Pluginet skal hedde <b>beatport4</b> i config (ikke beatport).</div>
+          <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.6rem;">Requires: <span class="mono">pipx inject beets beets-beatport4</span><br>Plugin must be named <b>beatport4</b> in config (not beatport).</div>
           <div class="check-group" style="margin-bottom:0.75rem;">
-            <label class="radio-item"><input type="radio" name="bp4-method" value="userpass" checked onchange="toggleBp4Method()"><span data-i18n="lbl_username">Brugernavn</span> + <span data-i18n="lbl_password">kodeord</span> <span class="badge badge-rec" data-i18n="badge_rec">anbefalet</span></label>
-            <label class="radio-item"><input type="radio" name="bp4-method" value="token" onchange="toggleBp4Method()"><span data-i18n="bp4_token_method">Token-fil (avanceret)</span></label>
+            <label class="radio-item"><input type="radio" name="bp4-method" value="userpass" checked onchange="toggleBp4Method()"><span>Username</span> + <span>Password</span> <span class="badge badge-rec">recommended</span></label>
+            <label class="radio-item"><input type="radio" name="bp4-method" value="token" onchange="toggleBp4Method()"><span>Token file (advanced)</span></label>
           </div>
           <div id="bp4-userpass-wrap">
-            <div class="field"><label data-i18n="lbl_username">Brugernavn</label><input type="text" id="bp4-user" placeholder="dit_beatport_login" oninput="buildConfig()"></div>
-            <div class="field"><label data-i18n="lbl_password">Kodeord</label><input type="password" id="bp4-pass" placeholder="••••••••" oninput="buildConfig()"></div>
+            <div class="field"><label>Username</label><input type="text" id="bp4-user" placeholder="dit_beatport_login" oninput="buildConfig()"></div>
+            <div class="field"><label>Password</label><input type="password" id="bp4-pass" placeholder="••••••••" oninput="buildConfig()"></div>
           </div>
           <div id="bp4-token-wrap" style="display:none;">
-            <div class="alert alert-yellow" style="font-size:10px;" data-i18n="bp4_token_guide">1. Log ind på beatport.com i Chrome/Edge<br>2. Åbn Developer Tools (Cmd+Opt+I) → Network<br>3. Filtrer på "token" → find POST-request → kopiér Response-JSON<br>4. Gem som <span class="mono">~/.config/beets/beatport_token.json</span><br>Token læses automatisk af pluginet.</div>
+            <div class="alert alert-yellow" style="font-size:10px;">1. Log in to beatport.com in Chrome/Edge<br>2. Open Developer Tools (Cmd+Opt+I) → Network<br>3. Filter on "token" → find POST request → copy Response JSON<br>4. Save as <span class="mono">~/.config/beets/beatport_token.json</span><br>Token is read automatically by the plugin.</div>
           </div>
           <div class="field-row" style="margin-top:0.5rem;">
-            <div class="field" style="max-width:160px;"><label data-i18n="lbl_priority">Prioritet (lavere = bedre)</label><input type="number" id="bp4-priority" value="0.3" min="0" max="1" step="0.05" oninput="buildConfig()"></div>
-            <div class="field" style="align-self:flex-end;"><label class="check-item"><input type="checkbox" id="bp4-art" checked onchange="buildConfig()"><span data-i18n="bp4_art">Hent album art (art: yes)</span></label></div>
+            <div class="field" style="max-width:160px;"><label>Priority (lower = higher)</label><input type="number" id="bp4-priority" value="0.3" min="0" max="1" step="0.05" oninput="buildConfig()"></div>
+            <div class="field" style="align-self:flex-end;"><label class="check-item"><input type="checkbox" id="bp4-art" checked onchange="buildConfig()"><span>Fetch album art (art: yes)</span></label></div>
           </div>
-          <div class="alert alert-yellow" style="font-size:10px; margin-top:0.4rem;" data-i18n="bp4_warn">⚠ Login-oplysninger gemmes i plain text i config.yaml.</div>
+          <div class="alert alert-yellow" style="font-size:10px; margin-top:0.4rem;">⚠ Login credentials stored in plain text in config.yaml.</div>
         </div>
       </div>
       <hr class="divider">
-      <div class="section-title" style="margin-bottom:0.5rem;" data-i18n="auth_version_title">Vejledning: beet version</div>
-      <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;" data-i18n="auth_version_note"><b>beet version</b> (ikke --plugins) viser aktive plugins.<br>Plugins aktiveres kun når de er listet under <span class="mono">plugins:</span> i config.yaml.<br>⚠ Kør aldrig <span class="mono">beet config -e</span> mens GUI redigerer.</div>
+      <div class="section-title" style="margin-bottom:0.5rem;">Note: beet version</div>
+      <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;"><b>beet version</b> (not --plugins) shows active plugins.<br>Plugins only activate when listed under <span class="mono">plugins:</span> in config.yaml.<br>⚠ Never run <span class="mono">beet config -e</span> while the GUI is editing.</div>
       <div class="btn-row">
-        <button class="btn btn-primary" onclick="buildConfig(); switchTabByName('settings')"><span data-i18n="btn_save_to_config">Gem til config (gå til Settings)</span></button>
+        <button class="btn btn-primary" onclick="buildConfig(); switchTabByName('settings')"><span>Save to config (go to Settings)</span></button>
         <button class="btn" onclick="setCmd('beet version')">beet version</button>
       </div>
     </div>
@@ -620,33 +631,14 @@
     <div style="display:flex;flex-direction:column;flex:1;gap:2px;">
       <div style="display:flex;align-items:center;gap:0.5rem;">
         <input type="text" class="cmd-field" id="cmd-out" readonly value="beet import ~/Music">
-        <button class="btn-copy" id="copy-btn" onclick="copyCmd()" data-i18n="btn_copy">Kopier</button>
+        <button class="btn-copy" id="copy-btn" onclick="copyCmd()">Copy</button>
       </div>
-      <div class="cmd-hint" data-i18n="cmd_hint">Kør denne kommando i Terminal</div>
+      <div class="cmd-hint">Run this command in Terminal</div>
     </div>
   </div>
 
 </div>
 <script>
-const LANG={da:{subtitle:'beets musikbibliotek-assistent',tab_import:'Import',tab_library:'Bibliotek',tab_cleanup:'Ryd op',tab_convert:'Konverter',tab_find:'Find',tab_settings:'Settings',tab_auth:'Tjenester',import_path_title:'Sti til musik',import_path_tip:'Beets kan importere .zip og .tar archives direkte — du behøver ikke pakke ud manuelt.',import_drop:'Træk mappe eller zip/tar hertil',drop_hint:'Eller skriv stien nedenfor',drop_folder:'Træk mappe hertil',drop_hint_short:'Eller skriv stien',lbl_path:'Sti',lbl_logpath:'Log-fil sti',lbl_freetext:'Fritekst',lbl_field:'Felt',lbl_fieldval:'Felt-værdi',lbl_format:'Output-format',lbl_newval:'Ny værdi',lbl_srcfile:'Kildefil/-mappe',lbl_outfmt:'Output-format',lbl_outdir:'Output-mappe',lbl_dir:'directory — bibliotekssti',lbl_db:'library — database-fil',lbl_artist_part:'Kunstner-del',lbl_album_part:'Album-del',lbl_track_part:'Spor-del',lbl_username:'Brugernavn',lbl_password:'Kodeord',lbl_priority:'Prioritet (lavere = bedre)',lbl_pl_path:'Sti til playliste-mapper',import_mode_title:'Tilstand',mode_interactive:'Autotag interaktiv (standard)',mode_auto:'Hurtig',mode_auto_sub:'(ingen spørgsmål)',mode_quiet:'Stille',mode_timid:'Forsigtig',mode_timid_tip:'Spørger kun når beets er usikker på matchet. Anbefalet til elektronisk musik — auto-accepterer åbenlyse matches, men beder om bekræftelse ved lav score. Justér strong_rec_thresh i Settings.',import_filehandling:'Filhåndtering',import_filehandling_tip:'Flyt er sikkert — beets genkender allerede importerede filer og laver aldrig dubletter.',move_copy:'Kopier (standard)',move_move:'Flyt',move_inplace:'Behold på plads',import_extra:'Ekstra',extra_resume:'Genoptag afbrudt import',extra_singleton:'Singleton-mode (enkeltspor, ikke albums)',extra_incremental:'Incremental (spring allerede importerede over)',extra_log:'Log til fil',import_excl_title:'Ekskluder mapper',import_excl_tip:'Ekskluderinger sættes i config.yaml under import: ignore: — ikke i selve kommandoen. Aktiver dem i Settings.',import_excl_note:'Ekskluderinger sættes i config.yaml (Settings-fanen), ikke direkte i kommandoen.',icloud_warn:'⚠ ADVARSEL: Denne sti ligger i iCloud! Dette kan ødelægge din Traktor/Lexicon collection. Flyt musikken til en lokal mappe eller ekstern disk inden import.',lib_search_title:'Søg',lib_view_title:'Visning',lib_quickcmds:'Hurtigkommandoer',opt_nofield:'— ingen felt —',view_tracks:'Tracks (standard)',view_albums:'Albums',format_tip:'Brug $artist, $album, $year, $title, $format, $bitrate, $path o.l. til at forme output.',fmt_artist_album:'artist · album · år',fmt_path:'sti',lib_export_txt:'Eksporter til fil',lib_export_m3u:'Eksporter .m3u til Lexicon',lib_export_m3u_tip:'Gemmer alle tracks som .m3u på skrivebordet. I Lexicon: File → Import → M3U playlist. Tilføj en query i søgefeltet for at eksportere et subset.',cleanup_dupes_title:'Dubletter',cleanup_dupes_tip:'Under import: beets spørger automatisk ved dubletter. Med -q springes der automatisk over. Efter import: duplicates-pluginet sammenligner på MusicBrainz-ID, ikke filnavne.',cleanup_preview_first:'Altid preview først — slet-knapper er røde og sekundære.',btn_preview_dupes:'Preview dubletter (detaljer)',btn_del_bitrate:'Slet laveste bitrate',btn_del_format:'Slet laveste format',cleanup_del_warn:'Slet-kommandoer fjerner filer permanent. Kør altid preview først.',cleanup_art_title:'Cover art',fetchart_tip:'Kigger i mappen først (cover.jpg, folder.jpg, front.jpg), derefter nettet.',cleanup_meta_title:'Metadata',btn_build_modify:'Byg modify-kommando',cleanup_playlist_title:'Playlister → Lexicon / Traktor',cleanup_playlist_note:'Kør dette <b>inden</b> du importerer med move — eksporterer dine mapper som .m3u-filer så Lexicon og Traktor kan genfinde dem.',btn_export_m3u:'Eksporter mapper → .m3u',btn_save_tracklist:'Gem trackliste (til Traktor relocation)',traktor_title:'Traktor: Genfind filer efter move',traktor_guide:'1. I Traktor: Højreklik på <b>Track Collection</b> → <b>Check Consistency</b><br>2. Vælg ALLE missing tracks (<b>Cmd+A</b>)<br>3. Klik <b>Relocate</b> → naviger til din Beets-biblioteksmappe<br>4. ⚠ Vælg flere filer ad gangen — undgår Traktor 4.2 freeze<br>5. Cues og grids følger automatisk med',cleanup_remove_title:'Fjern fra bibliotek',btn_remove_db:'Fjern fra database',btn_remove_disk:'Slet også fil fra disk',remove_note:'<b>beet remove</b> fjerner kun fra database, ikke disk. <b>beet remove -d</b> sletter filen permanent.',conv_find_title:'Find lydfiler (fd)',fd_note_conv:'Bruger <span class="mono">fd</span> — ignorerer .Spotlight-V100, .Trashes og andre skjulte systemmapper automatisk.',btn_find_wav:'Find WAV',btn_find_aiff:'Find AIFF',btn_count_wav:'Tæl WAV+AIFF',conv_xld_title:'Konverter med XLD',xld_drop:'Træk kildefil eller -mappe hertil',xld_single:'Enkelt fil',xld_batch:'Alle WAV i mappen (loop)',btn_build_xld:'Byg XLD-kommando',conv_wavtags_title:'WAV-tags fra filnavn',conv_wavtags_note:'Brug "Importer med fromfilename" i Import-fanen efter konvertering.<br>Beets gætter metadata fra filnavnet (Artist - Titel.wav) og søger MusicBrainz.',find_excl_title:'Ekskluder mapper',find_cmds_title:'Kommandoer',fd_note_find:'Bruger <span class="mono">fd</span> — 5-10× hurtigere end find, ignorerer automatisk skjulte systemmapper. Kræver: <span class="mono">brew install fd</span>',btn_find_all:'Find alle lydfiler',btn_count:'Tæl filer',btn_save_list:'Gem liste til fil',btn_du:'Mappestørrelser (du)',btn_itunes:'Find iTunes-bibl.',settings_lib_title:'Bibliotek',settings_import_title:'Import-strategi',settings_paths_title:'Mappestruktur',plugins_meta_title:'Plugins — Metadata-kilder',plugins_enrich_title:'Plugins — Berigelse',plugins_maint_title:'Plugins — Vedligehold',settings_excl_title:'Import — ekskluder mapper',settings_config_title:'Genereret config.yaml',config_placeholder:'# Udfyld felterne ovenfor',btn_copy_config:'Kopier config.yaml',btn_generate:'Generer',config_hint:'Indsæt i terminal: <span class="mono">beet config -e</span> — åbner config-filen i din editor.',badge_rec:'anbefalet',discogs_oauth:'OAuth (automatisk ved første import)',btn_get_token:'Hent token ↗',discogs_token_guide:'1. Log ind på Discogs → Settings → Developer<br>2. Klik "Generate new token" → kopier token',discogs_oauth_note:'OAuth sker automatisk når du kører <span class="mono">beet import</span> første gang med discogs-pluginet aktivt. Beets åbner en browser og gemmer token i <span class="mono">~/.config/beets/</span>.',discogs_warn:'⚠ Discogs-token giver fuld adgang til din konto — hold den privat.',mb_warn:'⚠ Kodeord gemmes i plain text i config.yaml. Opret konto: <a href="https://musicbrainz.org/account/register" target="_blank" style="color:inherit;">musicbrainz.org</a>',bp4_install:'Kræver: <span class="mono">pipx inject beets beets-beatport4</span><br>Pluginet skal hedde <b>beatport4</b> i config (ikke beatport).',bp4_token_method:'Token-fil (avanceret)',bp4_token_guide:'1. Log ind på beatport.com i Chrome/Edge<br>2. Åbn Developer Tools (Cmd+Opt+I) → Network<br>3. Filtrer på "token" → find POST-request → kopiér Response-JSON<br>4. Gem som <span class="mono">~/.config/beets/beatport_token.json</span><br>Token læses automatisk af pluginet.',bp4_art:'Hent album art (art: yes)',bp4_warn:'⚠ Login-oplysninger gemmes i plain text i config.yaml.',auth_version_title:'Vejledning: beet version',auth_version_note:'<b>beet version</b> (ikke --plugins) viser aktive plugins.<br>Plugins aktiveres kun når de er listet under <span class="mono">plugins:</span> i config.yaml.<br>⚠ Kør aldrig <span class="mono">beet config -e</span> mens GUI redigerer.',btn_save_to_config:'Gem til config (gå til Settings)',btn_copy:'Kopier',btn_copy_done:'Kopieret!',cmd_hint:'Kør denne kommando i Terminal',drop_relative_warn:'Stien er relativ. Kopier fuld sti manuelt fra Finder (⌘I på mappen).',volume_prompt:'Disknavn (fx Harddisk):',modify_placeholder:'beet modify <felt>="<værdi>" <query>'},
-en:{subtitle:'beets music library assistant',tab_import:'Import',tab_library:'Library',tab_cleanup:'Clean up',tab_convert:'Convert',tab_find:'Find',tab_settings:'Settings',tab_auth:'Services',import_path_title:'Music path',import_path_tip:'Beets can import .zip and .tar archives directly — no need to unpack manually.',import_drop:'Drag folder or zip/tar here',drop_hint:'Or type the path below',drop_folder:'Drag folder here',drop_hint_short:'Or type the path',lbl_path:'Path',lbl_logpath:'Log file path',lbl_freetext:'Free text',lbl_field:'Field',lbl_fieldval:'Field value',lbl_format:'Output format',lbl_newval:'New value',lbl_srcfile:'Source file/folder',lbl_outfmt:'Output format',lbl_outdir:'Output folder',lbl_dir:'directory — library path',lbl_db:'library — database file',lbl_artist_part:'Artist part',lbl_album_part:'Album part',lbl_track_part:'Track part',lbl_username:'Username',lbl_password:'Password',lbl_priority:'Priority (lower = higher)',lbl_pl_path:'Path to playlist folders',import_mode_title:'Mode',mode_interactive:'Autotag interactive (default)',mode_auto:'Fast',mode_auto_sub:'(no prompts)',mode_quiet:'Quiet',mode_timid:'Timid',mode_timid_tip:'Only prompts when beets is uncertain about a match. Recommended for electronic music — auto-accepts obvious matches, asks for confirmation on low scores. Adjust strong_rec_thresh in Settings.',import_filehandling:'File handling',import_filehandling_tip:'Move is safe — beets recognises already-imported files and never creates duplicates.',move_copy:'Copy (default)',move_move:'Move',move_inplace:'Keep in place',import_extra:'Extra',extra_resume:'Resume interrupted import',extra_singleton:'Singleton mode (single tracks, not albums)',extra_incremental:'Incremental (skip already imported)',extra_log:'Log to file',import_excl_title:'Exclude folders',import_excl_tip:'Exclusions are set in config.yaml under import: ignore: — not in the command itself. Enable them in Settings.',import_excl_note:'Exclusions are set in config.yaml (Settings tab), not directly in the command.',icloud_warn:'⚠ WARNING: This path is inside iCloud! This can corrupt your Traktor/Lexicon collection. Move music to a local folder or external drive before importing.',lib_search_title:'Search',lib_view_title:'View',lib_quickcmds:'Quick commands',opt_nofield:'— no field —',view_tracks:'Tracks (default)',view_albums:'Albums',format_tip:'Use $artist, $album, $year, $title, $format, $bitrate, $path etc. to shape output.',fmt_artist_album:'artist · album · year',fmt_path:'path',lib_export_txt:'Export to file',lib_export_m3u:'Export .m3u for Lexicon',lib_export_m3u_tip:'Saves all tracks as .m3u on the desktop. In Lexicon: File → Import → M3U playlist. Add a query in the search field to export a subset.',cleanup_dupes_title:'Duplicates',cleanup_dupes_tip:'During import: beets prompts automatically for duplicates. With -q it skips automatically. After import: the duplicates plugin compares on MusicBrainz ID, not filenames.',cleanup_preview_first:'Always preview first — delete buttons are red and secondary.',btn_preview_dupes:'Preview duplicates (details)',btn_del_bitrate:'Delete lowest bitrate',btn_del_format:'Delete lowest format',cleanup_del_warn:'Delete commands remove files permanently. Always run preview first.',cleanup_art_title:'Cover art',fetchart_tip:'Checks the folder first (cover.jpg, folder.jpg, front.jpg), then the internet.',cleanup_meta_title:'Metadata',btn_build_modify:'Build modify command',cleanup_playlist_title:'Playlists → Lexicon / Traktor',cleanup_playlist_note:'Run this <b>before</b> importing with move — exports your folders as .m3u files so Lexicon and Traktor can relocate them.',btn_export_m3u:'Export folders → .m3u',btn_save_tracklist:'Save tracklist (for Traktor relocation)',traktor_title:'Traktor: Relocate files after move',traktor_guide:'1. In Traktor: Right-click <b>Track Collection</b> → <b>Check Consistency</b><br>2. Select ALL missing tracks (<b>Cmd+A</b>)<br>3. Click <b>Relocate</b> → navigate to your Beets library folder<br>4. ⚠ Select multiple files at a time — avoids Traktor 4.2 freeze<br>5. Cues and grids follow automatically',cleanup_remove_title:'Remove from library',btn_remove_db:'Remove from database',btn_remove_disk:'Also delete file from disk',remove_note:'<b>beet remove</b> only removes from database, not disk. <b>beet remove -d</b> deletes the file permanently.',conv_find_title:'Find audio files (fd)',fd_note_conv:'Uses <span class="mono">fd</span> — ignores .Spotlight-V100, .Trashes and other hidden system folders automatically.',btn_find_wav:'Find WAV',btn_find_aiff:'Find AIFF',btn_count_wav:'Count WAV+AIFF',conv_xld_title:'Convert with XLD',xld_drop:'Drag source file or folder here',xld_single:'Single file',xld_batch:'All WAV in folder (loop)',btn_build_xld:'Build XLD command',conv_wavtags_title:'WAV tags from filename',conv_wavtags_note:'Use "Import with fromfilename" in the Import tab after converting.<br>Beets guesses metadata from the filename (Artist - Title.wav) and searches MusicBrainz.',find_excl_title:'Exclude folders',find_cmds_title:'Commands',fd_note_find:'Uses <span class="mono">fd</span> — 5-10× faster than find, ignores hidden system folders automatically. Requires: <span class="mono">brew install fd</span>',btn_find_all:'Find all audio files',btn_count:'Count files',btn_save_list:'Save list to file',btn_du:'Folder sizes (du)',btn_itunes:'Find iTunes lib.',settings_lib_title:'Library',settings_import_title:'Import strategy',settings_paths_title:'Folder structure',plugins_meta_title:'Plugins — Metadata sources',plugins_enrich_title:'Plugins — Enrichment',plugins_maint_title:'Plugins — Maintenance',settings_excl_title:'Import — exclude folders',settings_config_title:'Generated config.yaml',config_placeholder:'# Fill in the fields above',btn_copy_config:'Copy config.yaml',btn_generate:'Generate',config_hint:'Paste in terminal: <span class="mono">beet config -e</span> — opens the config file in your editor.',badge_rec:'recommended',discogs_oauth:'OAuth (automatic on first import)',btn_get_token:'Get token ↗',discogs_token_guide:'1. Log in to Discogs → Settings → Developer<br>2. Click "Generate new token" → copy token',discogs_oauth_note:'OAuth happens automatically when you run <span class="mono">beet import</span> for the first time with the discogs plugin active. Beets opens a browser and saves the token to <span class="mono">~/.config/beets/</span>.',discogs_warn:'⚠ Discogs token gives full access to your account — keep it private.',mb_warn:'⚠ Password stored in plain text in config.yaml. Create account: <a href="https://musicbrainz.org/account/register" target="_blank" style="color:inherit;">musicbrainz.org</a>',bp4_install:'Requires: <span class="mono">pipx inject beets beets-beatport4</span><br>Plugin must be named <b>beatport4</b> in config (not beatport).',bp4_token_method:'Token file (advanced)',bp4_token_guide:'1. Log in to beatport.com in Chrome/Edge<br>2. Open Developer Tools (Cmd+Opt+I) → Network<br>3. Filter on "token" → find POST request → copy Response JSON<br>4. Save as <span class="mono">~/.config/beets/beatport_token.json</span><br>Token is read automatically by the plugin.',bp4_art:'Fetch album art (art: yes)',bp4_warn:'⚠ Login credentials stored in plain text in config.yaml.',auth_version_title:'Note: beet version',auth_version_note:'<b>beet version</b> (not --plugins) shows active plugins.<br>Plugins only activate when listed under <span class="mono">plugins:</span> in config.yaml.<br>⚠ Never run <span class="mono">beet config -e</span> while the GUI is editing.',btn_save_to_config:'Save to config (go to Settings)',btn_copy:'Copy',btn_copy_done:'Copied!',cmd_hint:'Run this command in Terminal',drop_relative_warn:'Path is relative. Copy the full path manually from Finder (⌘I on the folder).',volume_prompt:'Disk name (e.g. Harddisk):',modify_placeholder:'beet modify <field>="<value>" <query>'}};
-
-let currentLang='da';
-function t(k){return LANG[currentLang][k]||LANG.da[k]||k}
-function applyLang(){
-  document.documentElement.lang=currentLang;
-  document.querySelectorAll('[data-i18n]').forEach(el=>{
-    const k=el.getAttribute('data-i18n'),v=t(k);
-    if(el.tagName==='INPUT'&&el.type!=='checkbox'&&el.type!=='radio')el.placeholder=v;
-    else el.innerHTML=v;
-  });
-  const co=document.getElementById('config-out');
-  if(co&&co.textContent.trim().startsWith('#'))co.textContent=t('config_placeholder');
-  const cb=document.getElementById('copy-btn');
-  if(cb&&!cb.classList.contains('copied'))cb.textContent=t('btn_copy');
-  document.getElementById('lang-btn').textContent=currentLang==='da'?'EN':'DA';
-}
-function toggleLang(){currentLang=currentLang==='da'?'en':'da';applyLang();buildImportCmd();}
 
 let activeTab='import';
 function switchTab(name,btn){
@@ -657,7 +649,7 @@ function switchTab(name,btn){
   activeTab=name;
   if(name==='settings')buildConfig();
   if(name==='import')buildImportCmd();
-  if(name==='library')buildLibCmd();
+  if(name==='library'){buildLibCmd();loadLibrary();}
   if(name==='find')buildFindCmd('all');
   if(name==='convert')buildXldCmd();
 }
@@ -671,8 +663,8 @@ function copyCmd(){
   const v=document.getElementById('cmd-out').value;
   navigator.clipboard.writeText(v).then(()=>{
     const b=document.getElementById('copy-btn');
-    b.textContent=t('btn_copy_done');b.classList.add('copied');
-    setTimeout(()=>{b.textContent=t('btn_copy');b.classList.remove('copied');},1800);
+    b.textContent='Copied!';b.classList.add('copied');
+    setTimeout(()=>{b.textContent='Copy';b.classList.remove('copied');},1800);
   });
 }
 
@@ -693,7 +685,7 @@ function setupDrop(zoneId,targetId,onDrop){
       if(path){document.getElementById(targetId).value=path;}
       else{
         document.getElementById(targetId).value=file.name;
-        const w=document.createElement('div');w.className='alert alert-yellow';w.style.fontSize='10px';w.style.marginTop='0.3rem';w.textContent=t('drop_relative_warn');
+        const w=document.createElement('div');w.className='alert alert-yellow';w.style.fontSize='10px';w.style.marginTop='0.3rem';w.textContent='Path is relative. Copy the full path manually from Finder (⌘I on the folder).';
         zone.parentNode.insertBefore(w,zone.nextSibling);setTimeout(()=>w.remove(),4000);
       }
       if(onDrop)onDrop(path||file.name);
@@ -721,10 +713,10 @@ function buildImportCmd(){
 }
 function toggleLog(){document.getElementById('log-path-wrap').style.display=document.getElementById('import-log').checked?'block':'none';buildImportCmd();}
 function setPath(fieldId,value){document.getElementById(fieldId).value=value;buildImportCmd();}
-function promptVolume(){const name=prompt(t('volume_prompt'));if(name){document.getElementById('import-path').value='/Volumes/'+name;buildImportCmd();}}
+function promptVolume(){const name=prompt('Disk name (e.g. Harddisk):');if(name){document.getElementById('import-path').value='/Volumes/'+name;buildImportCmd();}}
 function checkiCloud(path){
   const warn=document.getElementById('import-warnings');
-  if(path.includes('Mobile Documents')||path.toLowerCase().includes('icloud'))warn.innerHTML='<div class="alert alert-red">'+t('icloud_warn')+'</div>';
+  if(path.includes('Mobile Documents')||path.toLowerCase().includes('icloud'))warn.innerHTML='<div class="alert alert-red">'+'⚠ WARNING: This path is inside iCloud! This can corrupt your Traktor/Lexicon collection. Move music to a local folder or external drive before importing.'+'</div>';
   else warn.innerHTML='';
 }
 function buildLibCmd(){
@@ -739,15 +731,55 @@ function buildLibCmd(){
   if(fmt)parts.push('-f "'+fmt+'"');
   if(q)parts.push(q);
   if(field&&fval)parts.push(field+':'+fval);
-  if(exp)parts.push('> ~/Desktop/bibliotek.txt');
+  if(exp)parts.push('> ~/Desktop/library.txt');
   setCmd(parts.join(' '));
 }
 function setFormat(f){document.getElementById('lib-format').value=f;buildLibCmd();}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtDuration(sec){
+  sec=Math.round(sec||0);
+  const m=Math.floor(sec/60),s=sec%60;
+  return m+':'+String(s).padStart(2,'0');
+}
+let libLoadSeq=0;
+function loadLibrary(){
+  const q=document.getElementById('lib-query').value.trim();
+  const seq=++libLoadSeq;
+  fetch('/library?q='+encodeURIComponent(q)+'&limit=200')
+    .then(r=>r.json())
+    .then(data=>{ if(seq===libLoadSeq)renderLibrary(data,q); })
+    .catch(()=>{ if(seq===libLoadSeq)renderLibrary({ok:false},q); });
+}
+function renderLibrary(data,q){
+  const el=document.getElementById('lib-results'),count=document.getElementById('lib-count');
+  if(!data.ok){
+    count.textContent='';
+    el.innerHTML='<div class="lib-empty">Could not reach the library. Is the server running?</div>';
+    return;
+  }
+  if(!data.albums.length){
+    count.textContent='';
+    el.innerHTML='<div class="lib-empty">'+(q?'No albums match "'+escapeHtml(q)+'".':'No albums yet — import some music to get started.')+'</div>';
+    return;
+  }
+  count.textContent=data.total+' album'+(data.total===1?'':'s');
+  el.innerHTML=data.albums.map(a=>
+    '<div class="lib-row">'+
+      '<div class="lib-row-title"><span class="lib-row-artist">'+escapeHtml(a.albumartist||'Unknown artist')+'</span>'+
+      ' — '+escapeHtml(a.album||'Untitled')+
+      (a.year?' <span class="lib-row-year">('+a.year+')</span>':'')+'</div>'+
+      '<div class="lib-row-meta">'+(a.format||'')+' · '+a.track_count+' track'+(a.track_count===1?'':'s')+' · '+fmtDuration(a.duration)+'</div>'+
+    '</div>'
+  ).join('');
+}
 function buildModifyCmd(){
   const f=document.getElementById('mod-field').value.trim();
   const v=document.getElementById('mod-value').value.trim();
   const q=document.getElementById('mod-query').value.trim();
-  if(!f||!v){setCmd(t('modify_placeholder'));return;}
+  if(!f||!v){setCmd('beet modify <field>="<value>" <query>');return;}
   let cmd='beet modify '+f+'="'+v+'"';if(q)cmd+=' '+q;setCmd(cmd);
 }
 function buildRemoveCmdStr(del){
@@ -764,7 +796,7 @@ function buildShortRemoveCmd(){
   setCmd('beet remove length:..'+secs);
 }
 function buildPlaylistExportCmd(){
-  const src=document.getElementById('pl-path').value.trim()||'/Volumes/Harddisk/OldPlaylister';
+  const src=document.getElementById('pl-path').value.trim()||'/Volumes/Harddisk/OldPlaylists';
   setCmd(`for dir in $(fd -d 1 -t d . "${src}"); do name=$(basename "$dir"); fd -e mp3 -e flac -e aiff -e wav -e m4a -e alac . "$dir" > ~/Desktop/playlister/${name}.m3u; done`);
 }
 function buildConvFindCmd(type){
@@ -790,7 +822,7 @@ function buildXldCmd(){
   else{const ext=fmt==='aiff'?'aiff':'wav';setCmd('fd -e '+ext+' . "'+src+'" --exclude Samples --exclude Stems | while read f; do xld -f '+fmt+' -o "'+out+'" "$f"; done');}
 }
 function buildFindCmd(type){
-  const src=document.getElementById('find-path').value.trim()||'/Volumes/Harddisk/Musik';
+  const src=document.getElementById('find-path').value.trim()||'/Volumes/Harddisk/Music';
   const exclFlags=Array.from(document.querySelectorAll('#find-excl input:checked')).map(b=>'--exclude "'+b.value+'"').join(' ');
   const exts='-e mp3 -e aiff -e wav -e flac -e m4a -e alac';
   if(type==='all')setCmd('fd '+exts+' . "'+src+'"'+(exclFlags?' '+exclFlags:''));
@@ -807,8 +839,8 @@ function updatePathPreview(){
 function getActivePlugins(){return Array.from(document.querySelectorAll('.plugin:checked')).map(c=>c.value);}
 function getActiveExclusions(){return Array.from(document.querySelectorAll('.excl:checked')).map(c=>c.value);}
 function buildConfig(){
-  const dir=document.getElementById('cfg-dir').value||'~/Music/Bibliotek';
-  const lib=document.getElementById('cfg-lib').value||'~/Music/bibliotek.db';
+  const dir=document.getElementById('cfg-dir').value||'~/Music/Library';
+  const lib=document.getElementById('cfg-lib').value||'~/Music/library.db';
   const importStrat=document.querySelector('input[name="cfg-import"]:checked').value;
   const pa=document.getElementById('path-artist').value,pb=document.getElementById('path-album').value,pt=document.getElementById('path-track').value;
   const plugins=getActivePlugins(),excl=getActiveExclusions();
@@ -825,7 +857,7 @@ function buildConfig(){
   // valid_extensions whitelist — always included
   imp+='  valid_extensions: [.mp3, .aiff, .aif, .wav, .flac, .alac, .m4a, .aac, .ogg]\n';
   if(excl.length)imp+='  ignore:\n'+excl.map(e=>"    - '"+e+"'").join('\n')+'\n';
-  let y='directory: '+dir+'\nlibrary: '+lib+'\n\n'+imp+'\npaths:\n  default: '+pa+'/'+pb+'/'+pt+'\n  singleton: Diverse/$artist - $title\n  comp: Compilations/$album/'+pt+'\n\n';
+  let y='directory: '+dir+'\nlibrary: '+lib+'\n\n'+imp+'\npaths:\n  default: '+pa+'/'+pb+'/'+pt+'\n  singleton: Various/$artist - $title\n  comp: Compilations/$album/'+pt+'\n\n';
   if(plugins.length){y+='plugins:\n';plugins.forEach(p=>y+='  - '+p+'\n');y+='\n';}
   if(plugins.includes('fetchart'))y+='fetchart:\n  auto: yes\n  sources:\n    - filesystem\n    - coverart\n    - itunes\n    - amazon\n\n';
   if(plugins.includes('embedart'))y+='embedart:\n  auto: yes\n  if_empty: yes\n\n';
@@ -844,9 +876,9 @@ function copyConfig(){
   buildConfig();
   const text=document.getElementById('config-out').textContent;
   navigator.clipboard.writeText(text).then(()=>{
-    const btn=event.target.closest('button'),span=btn.querySelector('[data-i18n]');
-    if(span)span.textContent=t('btn_copy_done');
-    setTimeout(()=>{if(span)span.textContent=t('btn_copy_config');},1800);
+    const btn=event.target.closest('button'),span=btn.querySelector('span');
+    if(span)span.textContent='Copied!';
+    setTimeout(()=>{if(span)span.textContent='Copy config.yaml';},1800);
   });
 }
 function toggleCard(id){
@@ -870,7 +902,7 @@ function toggleBp4Method(){
   document.getElementById('bp4-token-wrap').style.display=isUp?'none':'block';
   buildConfig();
 }
-applyLang();buildImportCmd();updatePathPreview();
+buildImportCmd();updatePathPreview();
 </script>
 </body>
 </html>

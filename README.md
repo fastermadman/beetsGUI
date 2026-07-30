@@ -18,7 +18,6 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
 - **Unimported** — scan a folder for music not yet in beets
 - **Settings** — edit `config.yaml` directly in the app, generate config from UI
 - **Services** — configure Discogs, MusicBrainz, Beatport4
-- Bilingual: 🇩🇰 Danish / 🇬🇧 English
 - Dark + light mode (follows macOS system preference)
 
 ## Requirements
