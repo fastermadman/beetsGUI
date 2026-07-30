@@ -7,7 +7,9 @@ Stop: Ctrl+C
 Serves beetsgui.html on http://localhost:1312
 and offers /run?cmd=... to execute beet commands with live output.
 """
+import json
 import os
+import queue
 import re
 import sqlite3
 import sys
@@ -23,8 +25,17 @@ except ImportError:
     print("Install: pip install flask   (or: pip3 install flask)")
     sys.exit(1)
 
+try:
+    import importsession
+except ImportError as e:
+    print(f"beets not importable: {e}")
+    print("Run this with the Python that has beets installed, e.g.")
+    print("  ~/.local/pipx/venvs/beets/bin/python server.py")
+    sys.exit(1)
+
 # ── Configuration ──────────────────────────────────────────────────────────────
-PORT       = 1312
+PORT       = int(os.environ.get('BEETSGUI_PORT', 1312))
+OPEN_APP   = os.environ.get('BEETSGUI_NO_OPEN') != '1'
 SCRIPT_DIR = Path(__file__).parent.resolve()
 HTML_FILE  = 'beetsgui.html'
 
@@ -223,6 +234,97 @@ def status():
     })
 
 
+# ── Import: the beets importer driven in-process ──────────────────────────────
+# See importsession.py. /run still exists for the other tabs.
+
+@app.route('/import/start', methods=['POST'])
+def import_start():
+    """Start an import. Body: {"path": "...", "mode": "interactive"}
+    or {"paths": ["...", "..."], "mode": "interactive"} for a curated
+    multi-folder selection (e.g. from Unimported or an fd search)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        job = importsession.start(data.get('path'), data.get('mode', 'interactive'),
+                                  paths=data.get('paths'))
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 409
+    return jsonify({'ok': True, 'id': job.id, 'paths': job.paths, 'mode': job.mode})
+
+
+@app.route('/import/current')
+def import_current():
+    """The running import, if any — lets a reloaded page rejoin its stream."""
+    job = importsession.current_job()
+    if not job:
+        return jsonify({'ok': True, 'id': None})
+    return jsonify({'ok': True, 'id': job.id, 'paths': job.paths, 'mode': job.mode,
+                    'decision': job.pending()})
+
+
+@app.route('/import/<job_id>/events')
+def import_events(job_id):
+    """SSE stream of status, decision and done events. One consumer at a time."""
+    job = importsession.get_job(job_id)
+    if not job:
+        return jsonify({'ok': False, 'error': 'unknown import id'}), 404
+
+    def generate():
+        # A reconnecting client must not have to wait out the decision timeout,
+        # so replay the waiting decision — but send each one only once, since
+        # the queue may still hold the copy this replaces.
+        sent = set()
+        pending = job.pending()
+        if pending:
+            sent.add(pending['decision_id'])
+            yield f"data: {json.dumps(pending)}\n\n"
+        while True:
+            try:
+                event = job.events.get(timeout=15)
+            except queue.Empty:
+                yield ": keepalive\n\n"
+                continue
+            if event['type'] == 'decision':
+                if event['decision_id'] in sent:
+                    continue
+                sent.add(event['decision_id'])
+            yield f"data: {json.dumps(event)}\n\n"
+            if event['type'] == 'done':
+                return
+
+    return Response(generate(), mimetype='text/event-stream', headers={
+        'Cache-Control':     'no-cache',
+        'X-Accel-Buffering': 'no',
+        'Connection':        'keep-alive',
+    })
+
+
+@app.route('/import/<job_id>/decide', methods=['POST'])
+def import_decide(job_id):
+    """Answer the waiting decision. Body: {"decision_id": "...", "choice": "...",
+    "candidate": 0}."""
+    job = importsession.get_job(job_id)
+    if not job:
+        return jsonify({'ok': False, 'error': 'unknown import id'}), 404
+    data = request.get_json(silent=True) or {}
+    error = job.answer(data.get('decision_id'), data)
+    if error:
+        return jsonify({'ok': False, 'error': error}), 409
+    return jsonify({'ok': True})
+
+
+@app.route('/import/<job_id>/abort', methods=['POST'])
+def import_abort(job_id):
+    """Cancel the import and release any blocked decision."""
+    job = importsession.get_job(job_id)
+    if not job:
+        return jsonify({'ok': False, 'error': 'unknown import id'}), 404
+    job.abort()
+    job.done.wait(timeout=30)
+    return jsonify({'ok': True, 'finished': job.done.is_set()})
+
+
 @app.route('/run')
 def run_cmd():
     """
@@ -318,7 +420,8 @@ if __name__ == '__main__':
     print(f"{'─'*52}")
     print(f"  Stop: Ctrl+C\n")
 
-    threading.Thread(target=open_app_when_ready, daemon=True).start()
+    if OPEN_APP:
+        threading.Thread(target=open_app_when_ready, daemon=True).start()
 
     try:
         app.run(

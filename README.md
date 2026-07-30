@@ -77,6 +77,46 @@ Open **Automator → New → Application → Run Shell Script**:
 
 Save as `beetsGUI Launcher.app`, drag to Dock. One click starts everything.
 
+## Import API
+
+The importer runs **inside** the server through the beets Python API — no
+`beet import` subprocess, so match decisions can be made in the app instead of
+in Terminal. One import runs at a time. The endpoints work with `curl` alone
+(the UI comes later):
+
+```bash
+# Start: mode is interactive | fast | quiet | timid
+curl -s -X POST localhost:1312/import/start -H 'Content-Type: application/json' \
+     -d '{"path":"~/Downloads/some album","mode":"interactive"}'
+
+# Or a curated set of folders (e.g. picked in Unimported, or an fd search) —
+# beets groups them itself, same as `beet import path1 path2`
+curl -s -X POST localhost:1312/import/start -H 'Content-Type: application/json' \
+     -d '{"paths":["~/Downloads/album1","~/Downloads/album2"],"mode":"interactive"}'
+```
+
+```bash
+# Watch: status lines, decisions and a final done event, as SSE
+curl -sN localhost:1312/import/<id>/events
+```
+
+```bash
+# Answer a decision: choice is apply | skip | asis | tracks | albums
+curl -s -X POST localhost:1312/import/<id>/decide -H 'Content-Type: application/json' \
+     -d '{"decision_id":"<from the event>","choice":"apply","candidate":0}'
+```
+
+`POST /import/<id>/abort` cancels cleanly, and `GET /import/current` returns the
+running import plus its waiting decision, so a reloaded page can rejoin.
+An unanswered decision times out after 15 minutes (`BEETSGUI_DECISION_TIMEOUT`)
+and aborts the import rather than blocking the server forever.
+
+Test it end to end (needs ffmpeg; runs against a throwaway library):
+
+```bash
+~/.local/pipx/venvs/beets/bin/python test_importsession.py
+```
+
 ## DJ workflow notes
 
 - Lossless files (WAV, AIFF, FLAC) convert to **ALAC 24-bit** on import — 32-bit float is handled automatically
