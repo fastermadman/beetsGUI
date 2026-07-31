@@ -30,6 +30,9 @@ DECISION_TIMEOUT = int(os.environ.get('BEETSGUI_DECISION_TIMEOUT', 900))
 # Import modes, mirroring the radio buttons in the Import tab.
 MODES = ('interactive', 'fast', 'quiet', 'timid')
 
+# File-handling choices, mirroring the Import tab's radio group.
+HANDLING = ('copy', 'move', 'keep')
+
 # Answers accepted per decision kind.
 ALLOWED = {
     'album':     {'apply', 'skip', 'asis', 'tracks', 'albums'},
@@ -103,18 +106,68 @@ def serialize_task(task):
     }
 
 
+# ── Quality ranking ─────────────────────────────────────────────────────────
+# This is a DJ/audiophile library: a lossy file silently overwriting a
+# lossless one is data loss that only shows up in a club. The invariant is
+# not a preference — lossless may replace lossy, lossy must never replace
+# lossless.
+
+LOSSLESS_FORMATS = {'AIFF', 'ALAC', 'FLAC', 'WAVE', 'APE', 'WAVPACK', 'DSD STREAM FILE'}
+
+# The app's own convert step never lands above 24-bit ALAC (32-bit float
+# sources are downsampled there too), so ranking a 32-bit float AIFF at its
+# raw bitdepth would make it look better than what it will actually become.
+_MAX_RANKED_BITDEPTH = 24
+
+
+def _quality_fields(item):
+    """format/bitdepth/samplerate or format/bitrate for one track, for the UI."""
+    if item is None:
+        return {}
+    fmt = (item.format or '').upper()
+    if fmt in LOSSLESS_FORMATS:
+        return {'bitdepth': item.bitdepth, 'samplerate': item.samplerate}
+    return {'bitrate': item.bitrate}
+
+
+def _track_quality(item):
+    fmt = (item.format or '').upper()
+    if fmt in LOSSLESS_FORMATS:
+        return (1, min(item.bitdepth or 0, _MAX_RANKED_BITDEPTH), item.samplerate or 0, 0)
+    return (0, 0, 0, item.bitrate or 0)
+
+
+def quality_rank(items):
+    """Comparable quality tuple for one or more tracks.
+
+    Lossless always outranks lossy, regardless of bitdepth/bitrate — that
+    is the invariant, not a tiebreaker. An album's rank is its *worst*
+    track's, so one lossy track in an otherwise-lossless release can't
+    make the release count as equal to a fully lossless one.
+    """
+    items = list(items)
+    if not items:
+        return (0, 0, 0, 0)
+    return min(_track_quality(i) for i in items)
+
+
 def _summarize(obj, is_album):
     """Describe an existing library album/item for the duplicate prompt."""
     if is_album:
         items = list(obj.items())
-        return {
+        first = items[0] if items else None
+        out = {
             'artist': obj.albumartist,
             'name':   obj.album,
             'tracks': len(items),
-            'format': items[0].format if items else None,
+            'format': first.format if first else None,
         }
-    return {'artist': obj.artist, 'name': obj.title, 'tracks': 1,
-            'format': obj.format}
+    else:
+        first = obj
+        out = {'artist': obj.artist, 'name': obj.title, 'tracks': 1,
+               'format': obj.format}
+    out.update(_quality_fields(first))
+    return out
 
 
 # ── The job: thread, event stream and decision handshake ──────────────────────
@@ -122,10 +175,15 @@ def _summarize(obj, is_album):
 class ImportJob:
     """One import run. Owns the worker thread and the pending decision."""
 
-    def __init__(self, paths, mode):
+    def __init__(self, paths, mode, handling='copy', incremental=False,
+                 singleton=False, log_path=None):
         self.id = uuid.uuid4().hex
         self.paths = paths
         self.mode = mode
+        self.handling = handling
+        self.incremental = incremental
+        self.singleton = singleton
+        self.log_path = log_path
         self.events = queue.Queue()
         self.done = threading.Event()
         self.aborted = threading.Event()
@@ -277,7 +335,25 @@ class WebImportSession(ImportSession):
     def resolve_duplicate(self, task, found_duplicates):
         items = task.imported_items()
         chosen = task.chosen_info()
-        reply = self.job.ask({
+
+        new_rank = quality_rank(items)
+        existing_ranks = [
+            quality_rank(d.items() if task.is_album else [d])
+            for d in found_duplicates
+        ]
+        # The best copy already in the library — 'remove' deletes every
+        # found duplicate at once, so it's only recommended when the
+        # incoming files beat all of them, and auto-skip only fires when
+        # they're worse than all of them.
+        existing_rank = max(existing_ranks) if existing_ranks else new_rank
+
+        if new_rank < existing_rank:
+            self.job.emit('status', message=(
+                'Auto-skip: an existing copy is higher quality'))
+            task.set_choice(Action.SKIP)
+            return
+
+        payload = {
             'kind':      'duplicate',
             'is_album':  task.is_album,
             'existing':  [_summarize(d, task.is_album) for d in found_duplicates],
@@ -286,8 +362,12 @@ class WebImportSession(ImportSession):
                 'name':   chosen.get('album') if task.is_album else chosen.get('title'),
                 'tracks': len(items),
                 'format': items[0].format if items else None,
+                **_quality_fields(items[0] if items else None),
             },
-        })
+        }
+        if new_rank > existing_rank:
+            payload['recommendation'] = 'remove'
+        reply = self.job.ask(payload)
         choice = reply['choice']
         if choice == 'skip':
             task.set_choice(Action.SKIP)
@@ -315,11 +395,24 @@ def get_library():
     return _lib
 
 
-def _apply_mode(mode):
-    """Map an Import tab mode onto beets' import config."""
-    config['import']['autotag'] = mode != 'fast'
-    config['import']['quiet']   = mode == 'quiet'
-    config['import']['timid']   = mode == 'timid'
+def _apply_options(job):
+    """Map the Import tab's choices onto beets' import config.
+
+    Same config keys the `beet import` CLI sets from its own flags
+    (`config['import'].set_args(opts)` in beets' own command handler) —
+    matched here since the web session drives the same pipeline stages.
+    """
+    config['import']['autotag'] = job.mode != 'fast'
+    config['import']['quiet']   = job.mode == 'quiet'
+    config['import']['timid']   = job.mode == 'timid'
+    config['import']['move']    = job.handling == 'move'
+    config['import']['copy']    = job.handling == 'copy'
+    if job.handling == 'keep':
+        config['import']['write'] = False
+    config['import']['incremental'] = bool(job.incremental)
+    config['import']['singletons']  = bool(job.singleton)
+    if job.log_path:
+        config['import']['log'] = job.log_path
 
 
 # ── Job registry ──────────────────────────────────────────────────────────────
@@ -344,7 +437,7 @@ def current_job():
 def _run(job):
     try:
         lib = get_library()
-        _apply_mode(job.mode)
+        _apply_options(job)
         paths = [os.fsencode(p) for p in job.paths]
         label = job.paths[0] if len(job.paths) == 1 else f'{len(job.paths)} folders'
         job.emit('status', message=f'Importing {label} ({job.mode})')
@@ -365,7 +458,8 @@ def _resolve_path(path):
     return path
 
 
-def start(path=None, mode='interactive', paths=None):
+def start(path=None, mode='interactive', paths=None, handling='copy',
+          incremental=False, singleton=False, log_path=None):
     """Start an import on a background thread. Returns the ImportJob.
 
     Accepts either a single `path` or a `paths` list — a curated selection
@@ -377,11 +471,15 @@ def start(path=None, mode='interactive', paths=None):
     """
     if mode not in MODES:
         raise ValueError(f'mode must be one of {list(MODES)}')
+    if handling not in HANDLING:
+        raise ValueError(f'handling must be one of {list(HANDLING)}')
     if paths is None:
         paths = [path]
     if not paths:
         raise ValueError('no path specified')
     resolved = [_resolve_path(p) for p in paths]
+    if log_path:
+        log_path = os.path.abspath(os.path.expanduser(log_path))
 
     with _jobs_lock:
         for job in list(_jobs.values()):
@@ -389,7 +487,7 @@ def start(path=None, mode='interactive', paths=None):
                 del _jobs[job.id]
             else:
                 raise RuntimeError('an import is already running')
-        job = ImportJob(resolved, mode)
+        job = ImportJob(resolved, mode, handling, incremental, singleton, log_path)
         _jobs[job.id] = job
 
     job.thread = threading.Thread(target=_run, args=(job,), daemon=True)

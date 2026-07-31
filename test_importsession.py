@@ -54,9 +54,9 @@ def events(job_id):
 job = [None]   # id of the import currently under test
 
 
-def run(path, mode='interactive'):
+def run(path, mode='interactive', **extra):
     """Start an import and return its event stream."""
-    status, body = post('/import/start', {'path': str(path), 'mode': mode})
+    status, body = post('/import/start', {'path': str(path), 'mode': mode, **extra})
     assert status == 200 and body['ok'], body
     job[0] = body['id']
     return events(job[0])
@@ -77,16 +77,21 @@ def decide(event, expect=200, **choice):
     return code, reply
 
 
-def make_album(directory, artist, album, titles):
-    directory.mkdir(parents=True, exist_ok=True)
+def make_track(path, artist, album, title, track):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([
+        'ffmpeg', '-loglevel', 'error', '-y',
+        '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', '1',
+        '-metadata', f'artist={artist}', '-metadata', f'album={album}',
+        '-metadata', f'title={title}', '-metadata', f'track={track}',
+        str(path),
+    ], check=True)
+
+
+def make_album(directory, artist, album, titles, ext='mp3'):
+    """MP3 by default (lossy); pass ext='flac' for a lossless fixture."""
     for i, title in enumerate(titles, 1):
-        subprocess.run([
-            'ffmpeg', '-loglevel', 'error', '-y',
-            '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', '1',
-            '-metadata', f'artist={artist}', '-metadata', f'album={album}',
-            '-metadata', f'title={title}', '-metadata', f'track={i}',
-            str(directory / f'{i:02d} {title}.mp3'),
-        ], check=True)
+        make_track(directory / f'{i:02d} {title}.{ext}', artist, album, title, i)
 
 
 # A fake metadata source, so the test gets candidates without the network.
@@ -151,6 +156,39 @@ def albums_in(beetsdir):
     rows = con.execute('SELECT albumartist, album FROM albums').fetchall()
     con.close()
     return rows
+
+
+def formats_in(beetsdir, albumartist=None, artist=None, title=None):
+    """Distinct item formats for an album (by albumartist) or a singleton
+    (by artist+title) — used to check whether a duplicate was replaced."""
+    import sqlite3
+    con = sqlite3.connect(beetsdir / 'library.db')
+    if albumartist is not None:
+        rows = con.execute(
+            'SELECT DISTINCT i.format FROM items i JOIN albums a ON i.album_id = a.id '
+            'WHERE a.albumartist = ?', (albumartist,)).fetchall()
+    else:
+        rows = con.execute(
+            'SELECT DISTINCT format FROM items WHERE artist = ? AND title = ?',
+            (artist, title)).fetchall()
+    con.close()
+    return sorted(r[0] for r in rows)
+
+
+def resolve_asis(stream):
+    """Drive a stream that should ask exactly one match decision (answered
+    asis) and then either a duplicate decision or none. Returns the
+    duplicate decision event, or None if it was auto-skipped."""
+    dup_event = None
+    for event in stream:
+        if event['type'] != 'decision':
+            continue
+        if event['kind'] in ('album', 'item'):
+            decide(event, choice='asis')
+        elif event['kind'] == 'duplicate':
+            dup_event = event
+            return dup_event, stream
+    return dup_event, stream
 
 
 def main():
@@ -298,6 +336,76 @@ def main():
         assert code == 400, (code, reply)
         code, reply = post('/import/does-not-exist/abort', {})
         assert code == 404, (code, reply)
+
+        # 10. Quality-aware duplicates. `duplicate_keys` defaults to plain
+        #    albumartist+album (or artist+title) text, no MusicBrainz ID
+        #    needed, so asis imports of the same name are enough to collide.
+
+        # 10a. Lossless replacing lossy: still asks, and recommends 'remove'.
+        make_album(src / 'q1' / 'existing', 'Quality One', 'Album One', ['A'], ext='mp3')
+        dup, stream = resolve_asis(run(src / 'q1' / 'existing'))
+        assert dup is None
+        make_album(src / 'q1' / 'incoming', 'Quality One', 'Album One', ['A'], ext='flac')
+        dup, stream = resolve_asis(run(src / 'q1' / 'incoming'))
+        assert dup is not None, 'lossless duplicate of a lossy album should still ask'
+        assert dup.get('recommendation') == 'remove', dup
+        decide(dup, choice='remove')
+        list(stream)
+        assert formats_in(beetsdir, albumartist='Quality One') == ['FLAC'], \
+            formats_in(beetsdir, albumartist='Quality One')
+
+        # 10b. Lossy vs existing lossless: auto-skipped, no decision, no
+        #     'remove' reaching the existing (better) copy.
+        make_album(src / 'q2' / 'existing', 'Quality Two', 'Album Two', ['A'], ext='flac')
+        dup, stream = resolve_asis(run(src / 'q2' / 'existing'))
+        assert dup is None
+        make_album(src / 'q2' / 'incoming', 'Quality Two', 'Album Two', ['A'], ext='mp3')
+        dup, stream = resolve_asis(run(src / 'q2' / 'incoming'))
+        assert dup is None, 'a lossy duplicate of a lossless album must not ask'
+        assert formats_in(beetsdir, albumartist='Quality Two') == ['FLAC'], \
+            'auto-skip must not touch the existing lossless copy'
+
+        # 10c. Equal quality: still asks, with no recommendation.
+        make_album(src / 'q3' / 'existing', 'Quality Three', 'Album Three', ['A'], ext='mp3')
+        dup, stream = resolve_asis(run(src / 'q3' / 'existing'))
+        assert dup is None
+        make_album(src / 'q3' / 'incoming', 'Quality Three', 'Album Three', ['A'], ext='mp3')
+        dup, stream = resolve_asis(run(src / 'q3' / 'incoming'))
+        assert dup is not None
+        assert 'recommendation' not in dup, dup
+        decide(dup, choice='keep')
+        list(stream)
+
+        # 10d. Worst-track rule: one lossy track among lossless ranks the
+        #     whole album as lossy, so it loses to a fully lossless existing
+        #     copy exactly like 10b — auto-skipped, no decision.
+        (src / 'q4' / 'existing').mkdir(parents=True)
+        make_track(src / 'q4' / 'existing' / '01 A.flac', 'Quality Four', 'Album Four', 'A', 1)
+        make_track(src / 'q4' / 'existing' / '02 B.flac', 'Quality Four', 'Album Four', 'B', 2)
+        dup, stream = resolve_asis(run(src / 'q4' / 'existing'))
+        assert dup is None
+        (src / 'q4' / 'incoming').mkdir(parents=True)
+        make_track(src / 'q4' / 'incoming' / '01 A.flac', 'Quality Four', 'Album Four', 'A', 1)
+        make_track(src / 'q4' / 'incoming' / '02 B.mp3', 'Quality Four', 'Album Four', 'B', 2)
+        dup, stream = resolve_asis(run(src / 'q4' / 'incoming'))
+        assert dup is None, 'one lossy track must make the whole album rank as lossy'
+        assert formats_in(beetsdir, albumartist='Quality Four') == ['FLAC'], \
+            formats_in(beetsdir, albumartist='Quality Four')
+
+        # 10e. Singletons follow the same rule as albums. A bare file path
+        #     works the same as a directory; `singleton=True` is what makes
+        #     beets group it as an individual track instead of an album.
+        make_track(src / 'q5existing.mp3', 'Quality Five', '', 'Solo Track', 1)
+        dup, stream = resolve_asis(run(src / 'q5existing.mp3', singleton=True))
+        assert dup is None
+        make_track(src / 'q5incoming.flac', 'Quality Five', '', 'Solo Track', 1)
+        dup, stream = resolve_asis(run(src / 'q5incoming.flac', singleton=True))
+        assert dup is not None, 'lossless duplicate of a lossy singleton should still ask'
+        assert dup.get('recommendation') == 'remove', dup
+        decide(dup, choice='remove')
+        list(stream)
+        assert formats_in(beetsdir, artist='Quality Five', title='Solo Track') == ['FLAC'], \
+            formats_in(beetsdir, artist='Quality Five', title='Solo Track')
     finally:
         stop_server(proc)
 

@@ -239,18 +239,27 @@ def status():
 
 @app.route('/import/start', methods=['POST'])
 def import_start():
-    """Start an import. Body: {"path": "...", "mode": "interactive"}
-    or {"paths": ["...", "..."], "mode": "interactive"} for a curated
+    """Start an import. Body: {"path": "...", "mode": "interactive",
+    "handling": "copy", "incremental": false, "singleton": false,
+    "log_path": null} or {"paths": [...]} instead of "path" for a curated
     multi-folder selection (e.g. from Unimported or an fd search)."""
     data = request.get_json(silent=True) or {}
     try:
-        job = importsession.start(data.get('path'), data.get('mode', 'interactive'),
-                                  paths=data.get('paths'))
+        job = importsession.start(
+            data.get('path'), data.get('mode', 'interactive'),
+            paths=data.get('paths'),
+            handling=data.get('handling', 'copy'),
+            incremental=bool(data.get('incremental', False)),
+            singleton=bool(data.get('singleton', False)),
+            log_path=data.get('log_path'),
+        )
     except ValueError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
     except RuntimeError as e:
         return jsonify({'ok': False, 'error': str(e)}), 409
-    return jsonify({'ok': True, 'id': job.id, 'paths': job.paths, 'mode': job.mode})
+    return jsonify({'ok': True, 'id': job.id, 'paths': job.paths, 'mode': job.mode,
+                    'handling': job.handling, 'incremental': job.incremental,
+                    'singleton': job.singleton})
 
 
 @app.route('/import/current')
@@ -260,7 +269,8 @@ def import_current():
     if not job:
         return jsonify({'ok': True, 'id': None})
     return jsonify({'ok': True, 'id': job.id, 'paths': job.paths, 'mode': job.mode,
-                    'decision': job.pending()})
+                    'handling': job.handling, 'incremental': job.incremental,
+                    'singleton': job.singleton, 'decision': job.pending()})
 
 
 @app.route('/import/<job_id>/events')
@@ -330,7 +340,7 @@ def run_cmd():
     """
     Execute a command and stream output as Server-Sent Events (SSE).
 
-    Parameter: ?cmd=beet import -A "/Volumes/Harddisk/Musik"
+    Parameter: ?cmd=beet import -A "/Volumes/Harddisk/Music"
 
     SSE lines:
       data: <output-line>\n\n

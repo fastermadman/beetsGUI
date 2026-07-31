@@ -91,6 +91,30 @@
   .lib-row-meta { color:var(--text3); font-size:10px; letter-spacing:0.04em; white-space:nowrap; }
   .lib-empty { color:var(--text3); font-size:12px; padding:1.5rem; text-align:center; }
   .lib-count { color:var(--text3); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.5rem; }
+  details.section summary.section-title { cursor:pointer; user-select:none; }
+  details.section summary.section-title::-webkit-details-marker { color:var(--text3); }
+  .kbd { background:var(--bg3); border:1px solid var(--border2); border-radius:3px; color:var(--text3); font-size:9px; padding:0.05rem 0.3rem; margin-right:0.35rem; }
+  .decision-head { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.75rem; }
+  .decision-current { font-size:12px; color:var(--text2); }
+  .decision-actions { display:flex; gap:0.4rem; flex-wrap:wrap; }
+  .candidate-list { display:flex; flex-direction:column; gap:0.5rem; margin-bottom:0.75rem; }
+  .candidate-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:0.65rem 0.85rem; cursor:pointer; transition:border-color 0.1s; }
+  .candidate-card.selected { border-color:var(--accent); }
+  .candidate-head { display:flex; align-items:baseline; gap:0.5rem; }
+  .candidate-index { background:var(--bg3); border-radius:3px; color:var(--text3); font-size:10px; padding:0.05rem 0.35rem; }
+  .candidate-title { flex:1; font-size:13px; color:var(--text); }
+  .candidate-sim { color:var(--text3); font-size:11px; }
+  .candidate-artist { color:var(--text2); font-size:12px; margin-top:0.15rem; }
+  .candidate-meta { color:var(--text3); font-size:10px; margin-top:0.25rem; }
+  .diff { color:var(--accent); font-weight:700; }
+  .track-diff { margin-top:0.4rem; font-size:10px; color:var(--text3); }
+  .track-diff summary { cursor:pointer; }
+  .track-diff-row { padding:0.15rem 0; }
+  .dup-compare { display:flex; gap:0.75rem; margin-bottom:0.75rem; flex-wrap:wrap; }
+  .dup-side { flex:1; min-width:200px; }
+  .dup-side .candidate-card { cursor:default; }
+  .rec-badge { background:var(--accent2); border-radius:3px; color:var(--text); font-size:9px; letter-spacing:0.06em; padding:0.05rem 0.35rem; text-transform:uppercase; }
+  .import-log-wrap summary { color:var(--text3); cursor:pointer; font-size:10px; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.4rem; }
   .auth-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:0.75rem; overflow:hidden; }
   .auth-card-hd { display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; cursor:pointer; user-select:none; border-bottom:1px solid transparent; transition:background 0.1s; }
   .auth-card-hd:hover { background:var(--bg3); }
@@ -139,78 +163,95 @@
 
     <!-- IMPORT -->
     <div id="tab-import" class="tab-panel active">
-      <div class="section">
-        <div class="section-title">
-          <span>Music path</span>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Beets can import .zip and .tar archives directly — no need to unpack manually.</span></span>
-        </div>
-        <div class="drop-zone" id="import-drop">
-          <span class="drop-icon">📂</span>
-          <span>Drag folder or zip/tar here</span>
-          <div class="drop-hint">Or type the path below</div>
-        </div>
-        <div class="field">
-          <label>Path</label>
-          <div class="field-row">
-            <div class="field" style="margin-bottom:0">
-              <input type="text" id="import-path" placeholder="/Volumes/Harddisk/Music" oninput="buildImportCmd(); checkiCloud(this.value)">
+      <div id="import-setup">
+        <div class="section">
+          <div class="section-title">
+            <span>Music path</span>
+            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Beets can import .zip and .tar archives directly — no need to unpack manually.</span></span>
+          </div>
+          <div class="drop-zone" id="import-drop">
+            <span class="drop-icon">📂</span>
+            <span>Drag folder or zip/tar here</span>
+            <div class="drop-hint">Or type the path below</div>
+          </div>
+          <div class="field">
+            <label>Path</label>
+            <div class="field-row">
+              <div class="field" style="margin-bottom:0">
+                <input type="text" id="import-path" placeholder="/Volumes/Harddisk/Music" oninput="checkiCloud(this.value)">
+              </div>
+              <button class="btn btn-sm" onclick="setPath('import-path','~/Music')">~/Music</button>
+              <button class="btn btn-sm" onclick="promptVolume()">Volumes/…</button>
             </div>
-            <button class="btn btn-sm" onclick="setPath('import-path','~/Music')">~/Music</button>
-            <button class="btn btn-sm" onclick="promptVolume()">Volumes/…</button>
+          </div>
+          <div id="import-warnings"></div>
+        </div>
+        <div class="section">
+          <div class="section-title">
+            <span>File handling</span>
+            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Move is safe — beets recognises already-imported files and never creates duplicates.</span></span>
+          </div>
+          <div class="check-group">
+            <label class="radio-item"><input type="radio" name="import-handling" value="copy" checked><span>Copy (default)</span></label>
+            <label class="radio-item"><input type="radio" name="import-handling" value="move"><span>Move</span></label>
+            <label class="radio-item"><input type="radio" name="import-handling" value="keep"><span>Keep in place</span></label>
           </div>
         </div>
-        <div id="import-warnings"></div>
+        <div class="section">
+          <label class="check-item"><input type="checkbox" id="import-incremental"><span>Incremental (skip already imported)</span></label>
+        </div>
+        <details class="section">
+          <summary class="section-title">Advanced</summary>
+          <div class="check-group" style="margin-top:0.6rem;">
+            <label class="radio-item"><input type="radio" name="import-mode" value="interactive" checked><span>Interactive (default)</span></label>
+            <label class="radio-item"><input type="radio" name="import-mode" value="fast"><span>Fast (no prompts)</span></label>
+            <label class="radio-item"><input type="radio" name="import-mode" value="quiet"><span>Quiet</span></label>
+            <label class="radio-item">
+              <input type="radio" name="import-mode" value="timid">
+              <span>Timid</span>
+              <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Only prompts when beets is uncertain about a match. Recommended for electronic music — auto-accepts obvious matches, asks for confirmation on low scores. Adjust strong_rec_thresh in Settings.</span></span>
+            </label>
+          </div>
+          <div class="check-group" style="margin-top:0.6rem;">
+            <label class="check-item"><input type="checkbox" id="import-singleton"><span>Singleton mode (single tracks, not albums)</span></label>
+            <label class="check-item"><input type="checkbox" id="import-log" onchange="toggleLog()"><span>Log to file</span></label>
+          </div>
+          <div id="log-path-wrap" style="display:none; margin-top:0.5rem;">
+            <div class="field"><label>Log file path</label><input type="text" id="import-log-path" value="~/beets-import.log"></div>
+          </div>
+        </details>
+        <div class="section">
+          <div class="section-title">
+            <span>Exclude folders</span>
+            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Exclusions are set in config.yaml under import: ignore: — not in the command itself. Enable them in Settings.</span></span>
+          </div>
+          <div class="alert alert-yellow" style="margin-bottom:0.5rem; font-size:10px;">Exclusions are set in config.yaml (Settings tab), not directly in the command.</div>
+          <div class="check-row">
+            <label class="check-item"><input type="checkbox" disabled checked> Samples</label>
+            <label class="check-item"><input type="checkbox" disabled checked> Stems</label>
+            <label class="check-item"><input type="checkbox" disabled checked> Splice</label>
+            <label class="check-item"><input type="checkbox" disabled checked> Ableton</label>
+            <label class="check-item"><input type="checkbox" disabled checked> One Shots</label>
+            <label class="check-item"><input type="checkbox" disabled checked> *.als</label>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="startImport()">Start Import</button>
+        </div>
+        <div id="import-start-error"></div>
       </div>
-      <div class="section">
-        <div class="section-title">Mode</div>
-        <div class="check-group">
-          <label class="radio-item"><input type="radio" name="import-mode" value="" checked onchange="buildImportCmd()"><span>Autotag interactive (default)</span></label>
-          <label class="radio-item"><input type="radio" name="import-mode" value="-A" onchange="buildImportCmd()"><span>Fast</span> <span class="mono">-A</span> <span>(no prompts)</span></label>
-          <label class="radio-item"><input type="radio" name="import-mode" value="-q" onchange="buildImportCmd()"><span>Quiet</span> <span class="mono">-q</span></label>
-          <label class="radio-item">
-            <input type="radio" name="import-mode" value="--timid" onchange="buildImportCmd()">
-            <span>Timid</span> <span class="mono">--timid</span>
-            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Only prompts when beets is uncertain about a match. Recommended for electronic music — auto-accepts obvious matches, asks for confirmation on low scores. Adjust strong_rec_thresh in Settings.</span></span>
-          </label>
+
+      <div id="import-run" style="display:none;">
+        <div class="section-title">Import running</div>
+        <div class="lib-count" id="import-progress-text"></div>
+        <div id="import-decision" style="display:none;"></div>
+        <div class="btn-row">
+          <button class="btn btn-danger" onclick="abortImport()">Abort</button>
         </div>
-      </div>
-      <div class="section">
-        <div class="section-title">
-          <span>File handling</span>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Move is safe — beets recognises already-imported files and never creates duplicates.</span></span>
-        </div>
-        <div class="check-group">
-          <label class="radio-item"><input type="radio" name="import-move" value="" checked onchange="buildImportCmd()"><span>Copy (default)</span></label>
-          <label class="radio-item"><input type="radio" name="import-move" value="-m" onchange="buildImportCmd()"><span>Move</span> <span class="mono">-m</span></label>
-          <label class="radio-item"><input type="radio" name="import-move" value="-C -W" onchange="buildImportCmd()"><span>Keep in place</span> <span class="mono">-C -W</span></label>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-title">Extra</div>
-        <div class="check-group">
-          <label class="check-item"><input type="checkbox" id="import-resume" onchange="buildImportCmd()"><span>Resume interrupted import</span> <span class="mono">-p</span></label>
-          <label class="check-item"><input type="checkbox" id="import-singleton" onchange="buildImportCmd()"><span>Singleton mode (single tracks, not albums)</span> <span class="mono">-s</span></label>
-          <label class="check-item"><input type="checkbox" id="import-incremental" onchange="buildImportCmd()"><span>Incremental (skip already imported)</span> <span class="mono">-i</span></label>
-          <label class="check-item"><input type="checkbox" id="import-log" onchange="toggleLog()"><span>Log to file</span> <span class="mono">-l</span></label>
-        </div>
-        <div id="log-path-wrap" style="display:none; margin-top:0.5rem;">
-          <div class="field"><label>Log file path</label><input type="text" id="import-log-path" value="~/beets-import.log" oninput="buildImportCmd()"></div>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-title">
-          <span>Exclude folders</span>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Exclusions are set in config.yaml under import: ignore: — not in the command itself. Enable them in Settings.</span></span>
-        </div>
-        <div class="alert alert-yellow" style="margin-bottom:0.5rem; font-size:10px;">Exclusions are set in config.yaml (Settings tab), not directly in the command.</div>
-        <div class="check-row">
-          <label class="check-item"><input type="checkbox" disabled checked> Samples</label>
-          <label class="check-item"><input type="checkbox" disabled checked> Stems</label>
-          <label class="check-item"><input type="checkbox" disabled checked> Splice</label>
-          <label class="check-item"><input type="checkbox" disabled checked> Ableton</label>
-          <label class="check-item"><input type="checkbox" disabled checked> One Shots</label>
-          <label class="check-item"><input type="checkbox" disabled checked> *.als</label>
-        </div>
+        <details class="import-log-wrap">
+          <summary>Raw log</summary>
+          <pre class="pre-out" id="import-log-lines"></pre>
+        </details>
       </div>
     </div>
 
@@ -648,7 +689,6 @@ function switchTab(name,btn){
   if(btn)btn.classList.add('active');
   activeTab=name;
   if(name==='settings')buildConfig();
-  if(name==='import')buildImportCmd();
   if(name==='library'){buildLibCmd();loadLibrary();}
   if(name==='find')buildFindCmd('all');
   if(name==='convert')buildXldCmd();
@@ -692,33 +732,246 @@ function setupDrop(zoneId,targetId,onDrop){
     }
   });
 }
-setupDrop('import-drop','import-path',()=>buildImportCmd());
+setupDrop('import-drop','import-path',p=>checkiCloud(p));
 setupDrop('find-drop','find-path',()=>buildFindCmd('all'));
 setupDrop('find-drop2','conv-src',()=>buildConvFindCmd());
 setupDrop('xld-drop','xld-src',()=>buildXldCmd());
 document.body.addEventListener('dragover',e=>e.preventDefault());
 document.body.addEventListener('drop',e=>e.preventDefault());
 
-function buildImportCmd(){
-  const path=document.getElementById('import-path').value.trim()||'~/Music';
-  const mode=document.querySelector('input[name="import-mode"]:checked').value;
-  const move=document.querySelector('input[name="import-move"]:checked').value;
-  const resume=document.getElementById('import-resume').checked?'-p':'';
-  const singleton=document.getElementById('import-singleton').checked?'-s':'';
-  const incr=document.getElementById('import-incremental').checked?'-i':'';
-  const doLog=document.getElementById('import-log').checked;
-  const logPath=doLog?'-l '+(document.getElementById('import-log-path').value||'~/beets-import.log'):'';
-  const flags=[mode,move,resume,singleton,incr,logPath].filter(Boolean).join(' ');
-  setCmd('beet import'+(flags?' '+flags:'')+' "'+path+'"');
-}
-function toggleLog(){document.getElementById('log-path-wrap').style.display=document.getElementById('import-log').checked?'block':'none';buildImportCmd();}
-function setPath(fieldId,value){document.getElementById(fieldId).value=value;buildImportCmd();}
-function promptVolume(){const name=prompt('Disk name (e.g. Harddisk):');if(name){document.getElementById('import-path').value='/Volumes/'+name;buildImportCmd();}}
+function toggleLog(){document.getElementById('log-path-wrap').style.display=document.getElementById('import-log').checked?'block':'none';}
+function setPath(fieldId,value){document.getElementById(fieldId).value=value;}
+function promptVolume(){const name=prompt('Disk name (e.g. Harddisk):');if(name){document.getElementById('import-path').value='/Volumes/'+name;}}
 function checkiCloud(path){
   const warn=document.getElementById('import-warnings');
   if(path.includes('Mobile Documents')||path.toLowerCase().includes('icloud'))warn.innerHTML='<div class="alert alert-red">'+'⚠ WARNING: This path is inside iCloud! This can corrupt your Traktor/Lexicon collection. Move music to a local folder or external drive before importing.'+'</div>';
   else warn.innerHTML='';
 }
+
+// ── Import triage ────────────────────────────────────────────────────────────
+// Turns the /import/* SSE stream into a decision queue: candidate cards for
+// album/item matches, a compare view for duplicates, and a keyboard-first
+// flow so a 40-album import never needs the mouse.
+let importState={jobId:null,es:null,decision:null,selected:0,decided:0,log:[],running:false};
+
+function importOptionsPayload(){
+  return {
+    path: document.getElementById('import-path').value.trim(),
+    handling: document.querySelector('input[name="import-handling"]:checked').value,
+    incremental: document.getElementById('import-incremental').checked,
+    mode: document.querySelector('input[name="import-mode"]:checked').value,
+    singleton: document.getElementById('import-singleton').checked,
+    log_path: document.getElementById('import-log').checked
+      ? (document.getElementById('import-log-path').value.trim()||'~/beets-import.log') : null,
+  };
+}
+
+function startImport(){
+  const payload=importOptionsPayload();
+  const errEl=document.getElementById('import-start-error');
+  errEl.innerHTML='';
+  if(!payload.path){errEl.innerHTML='<div class="alert alert-red">Enter a path to import.</div>';return;}
+  fetch('/import/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){errEl.innerHTML='<div class="alert alert-red">'+escapeHtml(data.error)+'</div>';return;}
+      attachImport(data.id);
+    })
+    .catch(()=>{errEl.innerHTML='<div class="alert alert-red">Could not reach the server.</div>';});
+}
+
+function checkCurrentImport(){
+  fetch('/import/current').then(r=>r.json()).then(data=>{
+    if(!data.id)return;
+    attachImport(data.id);
+    if(data.decision){importState.decision=data.decision;importState.selected=0;renderDecision();}
+  }).catch(()=>{});
+}
+
+function attachImport(jobId){
+  importState.jobId=jobId;importState.running=true;importState.decided=0;
+  importState.log=[];importState.decision=null;
+  setImportUiRunning(true);renderImportProgress();
+  if(importState.es)importState.es.close();
+  const es=new EventSource('/import/'+jobId+'/events');
+  importState.es=es;
+  es.onmessage=e=>handleImportEvent(JSON.parse(e.data));
+}
+
+function handleImportEvent(ev){
+  if(ev.type==='status'){importLog(ev.message);renderImportProgress();}
+  else if(ev.type==='error'){importLog('Error: '+ev.message);renderImportProgress();}
+  else if(ev.type==='decision'){
+    if(importState.decision&&importState.decision.decision_id===ev.decision_id)return;
+    importState.decision=ev;importState.selected=0;renderDecision();
+  } else if(ev.type==='done'){
+    importState.decided=ev.decided;importState.decision=null;importState.running=false;
+    importLog(ev.aborted?'Import aborted.':'Import finished — '+ev.decided+' decision'+(ev.decided===1?'':'s')+'.');
+    renderImportProgress();renderDecision();setImportUiRunning(false);
+    if(importState.es){importState.es.close();importState.es=null;}
+  }
+}
+
+function setImportUiRunning(running){
+  document.getElementById('import-setup').style.display=running?'none':'block';
+  document.getElementById('import-run').style.display=running?'block':'none';
+}
+
+function abortImport(){
+  if(!importState.jobId)return;
+  fetch('/import/'+importState.jobId+'/abort',{method:'POST'});
+}
+
+function importLog(msg){
+  importState.log.push(msg);
+  const el=document.getElementById('import-log-lines');
+  if(el)el.textContent=importState.log.join('\n');
+}
+
+function renderImportProgress(){
+  const el=document.getElementById('import-progress-text');
+  if(!el)return;
+  el.textContent=importState.running
+    ?(importState.decided+' decided so far'+(importState.decision?' — waiting for you':' — working…'))
+    :'';
+}
+
+function sendDecision(choice,candidate){
+  const d=importState.decision;
+  if(!d)return;
+  const payload={decision_id:d.decision_id,choice};
+  if(candidate!=null)payload.candidate=candidate;
+  importState.decision=null;renderDecision();renderImportProgress();
+  fetch('/import/'+importState.jobId+'/decide',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(r=>r.json())
+    .then(data=>{if(!data.ok)importLog('Decision error: '+data.error);})
+    .catch(()=>importLog('Could not reach the server.'));
+}
+function decideImport(choice){sendDecision(choice);}
+function applyCandidate(i){sendDecision('apply',i);}
+function selectCandidate(i){importState.selected=i;renderDecision();}
+
+function renderDecision(){
+  const wrap=document.getElementById('import-decision');
+  const d=importState.decision;
+  if(!d){wrap.style.display='none';wrap.innerHTML='';return;}
+  wrap.style.display='block';
+  if(d.kind==='resume')wrap.innerHTML=renderResumeDecision(d);
+  else if(d.kind==='duplicate')wrap.innerHTML=renderDuplicateDecision(d);
+  else wrap.innerHTML=renderMatchDecision(d);
+}
+
+function renderResumeDecision(d){
+  return '<div class="decision-head"><div class="decision-current">Resume interrupted import of <b>'+escapeHtml(d.path)+'</b>?</div></div>'+
+    '<div class="decision-actions">'+
+      '<button class="btn btn-primary" onclick="decideImport(\'resume\')"><span class="kbd">Enter</span>Resume</button>'+
+      '<button class="btn" onclick="decideImport(\'restart\')"><span class="kbd">N</span>Restart</button>'+
+    '</div>';
+}
+
+function qualityLabel(o){
+  if(!o)return'';
+  if(o.bitdepth!=null)return(o.format||'')+' '+o.bitdepth+'-bit/'+Math.round((o.samplerate||0)/1000)+'kHz';
+  if(o.bitrate!=null)return(o.format||'')+' '+Math.round(o.bitrate/1000)+'kbps';
+  return o.format||'';
+}
+
+function renderDuplicateDecision(d){
+  const rec=d.recommendation;
+  let html='<div class="decision-head"><div class="decision-current">Possible duplicate</div></div>';
+  html+='<div class="dup-compare">';
+  html+='<div class="dup-side"><div class="lib-row-meta">Already in library</div>'+
+    d.existing.map(e=>'<div class="candidate-card">'+escapeHtml(e.artist||'')+' — '+escapeHtml(e.name||'')+
+      '<div class="lib-row-meta">'+e.tracks+' track'+(e.tracks===1?'':'s')+' · '+escapeHtml(qualityLabel(e))+'</div></div>').join('')+
+    '</div>';
+  html+='<div class="dup-side"><div class="lib-row-meta">Incoming'+(rec==='remove'?' <span class="rec-badge">recommended</span>':'')+'</div>'+
+    '<div class="candidate-card'+(rec==='remove'?' selected':'')+'">'+escapeHtml(d.new.artist||'')+' — '+escapeHtml(d.new.name||'')+
+    '<div class="lib-row-meta">'+d.new.tracks+' track'+(d.new.tracks===1?'':'s')+' · '+escapeHtml(qualityLabel(d.new))+'</div></div></div>';
+  html+='</div>';
+  html+='<div class="decision-actions">'+
+    '<button class="btn" onclick="decideImport(\'keep\')"><span class="kbd">K</span>Keep both</button>'+
+    '<button class="btn" onclick="decideImport(\'skip\')"><span class="kbd">S</span>Skip new</button>'+
+    '<button class="btn" onclick="decideImport(\'merge\')"><span class="kbd">M</span>Merge</button>'+
+    '<button class="btn btn-danger'+(rec==='remove'?' btn-primary':'')+'" onclick="decideImport(\'remove\')"><span class="kbd">R</span>Replace (delete old)</button>'+
+  '</div>';
+  return html;
+}
+
+function fieldDiff(newVal,curVal){
+  const same=(newVal||'')===(curVal||'');
+  return '<span class="'+(same?'':'diff')+'">'+escapeHtml(newVal||'—')+'</span>';
+}
+
+function candidateCard(c,i,d){
+  const curArtist=d.current.artist,curTitle=d.kind==='album'?d.current.album:d.current.title;
+  const selected=i===importState.selected;
+  const renamed=(c.tracks||[]).filter(t=>t.current!==t.new);
+  const trackNote=c.tracks&&c.tracks.length
+    ?c.tracks.length+' track'+(c.tracks.length===1?'':'s')+(renamed.length?', '+renamed.length+' renamed':'')
+    :'';
+  const trackDetail=renamed.length?'<details class="track-diff"><summary>Show renamed tracks</summary>'+
+      renamed.map(t=>'<div class="track-diff-row">'+escapeHtml(t.current)+' → '+escapeHtml(t.new)+'</div>').join('')+
+    '</details>':'';
+  return '<div class="candidate-card'+(selected?' selected':'')+'" onclick="selectCandidate('+i+')">'+
+    '<div class="candidate-head">'+
+      '<span class="candidate-index">'+(i+1)+'</span>'+
+      '<div class="candidate-title">'+fieldDiff(c.title,curTitle)+' <span class="lib-row-year">'+(c.year||'')+'</span></div>'+
+      '<div class="candidate-sim">'+c.similarity+'%</div>'+
+    '</div>'+
+    '<div class="candidate-artist">'+fieldDiff(c.artist,curArtist)+'</div>'+
+    '<div class="candidate-meta">'+[c.label,c.country,c.media,c.albumtype].filter(Boolean).map(escapeHtml).join(' · ')+'</div>'+
+    (trackNote?'<div class="lib-row-meta">'+trackNote+'</div>'+trackDetail:'')+
+    '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();applyCandidate('+i+')">Apply <span class="kbd">'+(i+1)+'</span></button>'+
+  '</div>';
+}
+
+function renderMatchDecision(d){
+  const cur=d.kind==='album'?(d.current.artist+' — '+d.current.album):(d.current.artist+' — '+d.current.title);
+  let html='<div class="decision-head">'+
+    '<div class="decision-current">Currently on disk: <b>'+escapeHtml(cur)+'</b> · '+d.item_count+' track'+(d.item_count===1?'':'s')+'</div>'+
+    '<div class="decision-actions">'+
+      '<button class="btn" onclick="decideImport(\'asis\')"><span class="kbd">A</span>As-is</button>'+
+      '<button class="btn btn-danger" onclick="decideImport(\'skip\')"><span class="kbd">S</span>Skip</button>'+
+    '</div></div>';
+  html+=d.candidates.length
+    ?'<div class="candidate-list">'+d.candidates.map((c,i)=>candidateCard(c,i,d)).join('')+'</div>'
+    :'<div class="lib-empty">No candidates found.</div>';
+  return html;
+}
+
+document.addEventListener('keydown',function(e){
+  if(activeTab!=='import'||!importState.decision)return;
+  const tag=(document.activeElement.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||tag==='select')return;
+  const d=importState.decision,key=e.key;
+  if(d.kind==='resume'){
+    if(key==='Enter')decideImport('resume');
+    else if(key.toLowerCase()==='n')decideImport('restart');
+    return;
+  }
+  if(d.kind==='duplicate'){
+    const k=key.toLowerCase();
+    if(k==='k')decideImport('keep');
+    else if(k==='s')decideImport('skip');
+    else if(k==='m')decideImport('merge');
+    else if(k==='r')decideImport('remove');
+    return;
+  }
+  if(key>='1'&&key<='9'){
+    const i=parseInt(key,10)-1;
+    if(i<d.candidates.length)applyCandidate(i);
+  } else if(key==='Enter'){
+    if(d.candidates.length)applyCandidate(importState.selected);
+  } else if(key==='ArrowDown'){
+    importState.selected=Math.min(importState.selected+1,d.candidates.length-1);renderDecision();e.preventDefault();
+  } else if(key==='ArrowUp'){
+    importState.selected=Math.max(importState.selected-1,0);renderDecision();e.preventDefault();
+  } else if(key.toLowerCase()==='s'){
+    decideImport('skip');
+  } else if(key.toLowerCase()==='a'){
+    decideImport('asis');
+  }
+});
 function buildLibCmd(){
   const q=document.getElementById('lib-query').value.trim();
   const field=document.getElementById('lib-field').value;
@@ -902,7 +1155,7 @@ function toggleBp4Method(){
   document.getElementById('bp4-token-wrap').style.display=isUp?'none':'block';
   buildConfig();
 }
-buildImportCmd();updatePathPreview();
+updatePathPreview();checkCurrentImport();
 </script>
 </body>
 </html>

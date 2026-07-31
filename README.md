@@ -77,17 +77,30 @@ Open **Automator → New → Application → Run Shell Script**:
 
 Save as `beetsGUI Launcher.app`, drag to Dock. One click starts everything.
 
-## Import API
+## Import
 
 The importer runs **inside** the server through the beets Python API — no
-`beet import` subprocess, so match decisions can be made in the app instead of
-in Terminal. One import runs at a time. The endpoints work with `curl` alone
-(the UI comes later):
+`beet import` subprocess, so match decisions are made in the app instead of
+in Terminal. The Import tab is a decision queue: candidate cards for
+album/track matches, a side-by-side compare for duplicates, and full keyboard
+control (`1`-`9` picks a candidate, `Enter` applies, `S` skips, `A` keeps
+tags as-is; duplicates use `K`/`S`/`M`/`R` for keep/skip/merge/replace). One
+import runs at a time; closing the tab mid-import is safe — reopening the app
+rejoins whatever is still running.
+
+Duplicates are ranked by quality before you're ever asked: a lossy copy of an
+album already in the library is skipped automatically, a lossless copy
+recommends replacing the existing one, and equal-quality duplicates still ask
+with no recommendation either way. See `quality_rank()` in `importsession.py`.
+
+The underlying endpoints also work with `curl` alone, for scripting or
+debugging:
 
 ```bash
 # Start: mode is interactive | fast | quiet | timid
+# handling is copy | move | keep; incremental and singleton are booleans
 curl -s -X POST localhost:1312/import/start -H 'Content-Type: application/json' \
-     -d '{"path":"~/Downloads/some album","mode":"interactive"}'
+     -d '{"path":"~/Downloads/some album","mode":"interactive","handling":"copy"}'
 
 # Or a curated set of folders (e.g. picked in Unimported, or an fd search) —
 # beets groups them itself, same as `beet import path1 path2`
@@ -101,7 +114,8 @@ curl -sN localhost:1312/import/<id>/events
 ```
 
 ```bash
-# Answer a decision: choice is apply | skip | asis | tracks | albums
+# Answer a decision. choice is apply|skip|asis|tracks|albums for a match,
+# skip|keep|remove|merge for a duplicate, or resume|restart to resume.
 curl -s -X POST localhost:1312/import/<id>/decide -H 'Content-Type: application/json' \
      -d '{"decision_id":"<from the event>","choice":"apply","candidate":0}'
 ```
