@@ -10,12 +10,9 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
 
 ## Features
 
-- **Import** — configure and run `beet import` with all options
-- **Library** — search and export your collection
-- **Clean up** — manage duplicates, cover art, metadata
-- **Convert** — find WAV/AIFF files; auto-convert lossless → ALAC on import (via ffmpeg)
-- **Find** — fast file search with `fd`
-- **Unimported** — scan a folder for music not yet in beets
+- **Inbox** — scan a folder for music not yet in your library (matches on artist/title, not path, so it's correct however previous imports were copied or moved), then import with a keyboard-driven decision queue for matches and duplicates
+- **Library** — search and browse your collection, manage duplicates, cover art and metadata, convert WAV/AIFF/FLAC to ALAC, remove tracks
+- **Export** — playlists and tracklists for Lexicon/Traktor, USB mirror
 - **Settings** — edit `config.yaml` directly in the app, generate config from UI
 - **Services** — configure Discogs, MusicBrainz, Beatport4
 - Dark + light mode (follows macOS system preference)
@@ -32,7 +29,7 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
   ```bash
   brew install ffmpeg
   ```
-- [fd](https://github.com/sharkdp/fd) (required for the **Find** and **Unimported** tabs):
+- [fd](https://github.com/sharkdp/fd) (required for Inbox's Utilities section and Library's Formats/WAV-AIFF finder — the unimported-music scan itself doesn't need it):
   ```bash
   brew install fd
   ```
@@ -81,7 +78,7 @@ Save as `beetsGUI Launcher.app`, drag to Dock. One click starts everything.
 
 The importer runs **inside** the server through the beets Python API — no
 `beet import` subprocess, so match decisions are made in the app instead of
-in Terminal. The Import tab is a decision queue: candidate cards for
+in Terminal. The Inbox tab is a decision queue: candidate cards for
 album/track matches, a side-by-side compare for duplicates, and full keyboard
 control (`1`-`9` picks a candidate, `Enter` applies, `S` skips, `A` keeps
 tags as-is; duplicates use `K`/`S`/`M`/`R` for keep/skip/merge/replace). One
@@ -102,7 +99,7 @@ debugging:
 curl -s -X POST localhost:1312/import/start -H 'Content-Type: application/json' \
      -d '{"path":"~/Downloads/some album","mode":"interactive","handling":"copy"}'
 
-# Or a curated set of folders (e.g. picked in Unimported, or an fd search) —
+# Or a curated set of folders (e.g. found while scanning in Inbox, or via an fd search) —
 # beets groups them itself, same as `beet import path1 path2`
 curl -s -X POST localhost:1312/import/start -H 'Content-Type: application/json' \
      -d '{"paths":["~/Downloads/album1","~/Downloads/album2"],"mode":"interactive"}'

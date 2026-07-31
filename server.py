@@ -27,11 +27,15 @@ except ImportError:
 
 try:
     import importsession
+    from mediafile import MediaFile, UnreadableFileError
 except ImportError as e:
     print(f"beets not importable: {e}")
     print("Run this with the Python that has beets installed, e.g.")
     print("  ~/.local/pipx/venvs/beets/bin/python server.py")
     sys.exit(1)
+
+# Extensions scanned by /unimported — matches beets' default valid_extensions.
+AUDIO_EXTENSIONS = {'.mp3', '.aiff', '.aif', '.wav', '.flac', '.m4a', '.aac', '.ogg'}
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 PORT       = int(os.environ.get('BEETSGUI_PORT', 1312))
@@ -199,6 +203,63 @@ def library():
         return jsonify({'ok': True, 'albums': albums, 'total': total})
     except sqlite3.Error as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+def _known_track_keys(con):
+    """(artist, title) pairs already in the library.
+
+    Matching on metadata, not path, is required: beets stores a copied or
+    moved file's path relative to the library `directory:`, not the path it
+    was imported from — so diffing the scan folder against `items.path`
+    would report every already-imported file as unimported again. This
+    mirrors beets' own default duplicate_keys (artist title).
+    """
+    rows = con.execute('SELECT DISTINCT artist, title FROM items').fetchall()
+    return {(a or '', t or '') for a, t in rows}
+
+
+@app.route('/unimported')
+def unimported():
+    """Audio files under `dir` whose (artist, title) isn't in the library yet."""
+    dir_path = os.path.expanduser(request.args.get('dir', '').strip())
+    exclude = [e.strip().lower() for e in request.args.get('exclude', '').split(',') if e.strip()]
+    if not dir_path or not os.path.isdir(dir_path):
+        return jsonify({'ok': False, 'error': 'no such directory'}), 400
+
+    known = set()
+    db_path = get_library_db_path()
+    if Path(db_path).exists():
+        try:
+            con = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
+            known = _known_track_keys(con)
+            con.close()
+        except sqlite3.Error:
+            pass
+
+    root = Path(dir_path)
+    folders = {}
+    total = 0
+    for f in root.rglob('*'):
+        if not f.is_file() or f.suffix.lower() not in AUDIO_EXTENSIONS:
+            continue
+        rel_parts = f.relative_to(root).parts[:-1]
+        if any(part.startswith('.') for part in rel_parts):
+            continue
+        fstr = str(f).lower()
+        if exclude and any(e in fstr for e in exclude):
+            continue
+        try:
+            mf = MediaFile(f)
+        except (UnreadableFileError, OSError):
+            continue
+        if (mf.artist or '', mf.title or '') in known:
+            continue
+        folder = str(f.parent)
+        folders[folder] = folders.get(folder, 0) + 1
+        total += 1
+
+    result = [{'path': p, 'count': c} for p, c in sorted(folders.items())]
+    return jsonify({'ok': True, 'dir': str(root), 'folders': result, 'total_files': total})
 
 
 @app.route('/playlists')

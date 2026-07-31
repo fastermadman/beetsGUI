@@ -150,19 +150,56 @@
   </div>
 
   <div class="tabs" role="tablist">
-    <button class="tab-btn active" onclick="switchTab('import',this)">Import</button>
+    <button class="tab-btn active" onclick="switchTab('inbox',this)">Inbox</button>
     <button class="tab-btn" onclick="switchTab('library',this)">Library</button>
-    <button class="tab-btn" onclick="switchTab('cleanup',this)">Clean up</button>
-    <button class="tab-btn" onclick="switchTab('convert',this)">Convert</button>
-    <button class="tab-btn" onclick="switchTab('find',this)">Find</button>
+    <button class="tab-btn" onclick="switchTab('export',this)">Export</button>
     <button class="tab-btn" onclick="switchTab('settings',this)">Settings</button>
     <button class="tab-btn" onclick="switchTab('auth',this)">Services</button>
   </div>
 
   <div class="content">
 
-    <!-- IMPORT -->
-    <div id="tab-import" class="tab-panel active">
+    <!-- INBOX -->
+    <div id="tab-inbox" class="tab-panel active">
+      <div class="section">
+        <div class="section-title">
+          <span>Scan for new music</span>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Matches each file's artist/title against your library — works no matter where a previous copy or move import put the files.</span></span>
+        </div>
+        <div class="drop-zone" id="scan-drop"><span class="drop-icon">🔍</span><span>Drag folder here</span><div class="drop-hint">Or type the path below</div></div>
+        <div class="field">
+          <label>Path</label>
+          <div class="field-row">
+            <div class="field" style="margin-bottom:0"><input type="text" id="scan-path" placeholder="/Volumes/Harddisk/Music"></div>
+            <button class="btn btn-sm" onclick="setPath('scan-path','~/Music')">~/Music</button>
+            <button class="btn btn-sm" onclick="promptVolume('scan-path')">Volumes/…</button>
+          </div>
+        </div>
+        <div class="check-row" id="scan-excl">
+          <label class="check-item"><input type="checkbox" value="Samples"> Samples</label>
+          <label class="check-item"><input type="checkbox" value="Stems"> Stems</label>
+          <label class="check-item"><input type="checkbox" value="Ableton"> Ableton</label>
+          <label class="check-item"><input type="checkbox" value="Splice"> Splice</label>
+          <label class="check-item"><input type="checkbox" value="One Shots"> One Shots</label>
+        </div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="scanUnimported()">Scan for unimported music</button></div>
+        <div class="lib-count" id="scan-count"></div>
+        <div class="lib-results" id="scan-results"></div>
+      </div>
+
+      <details class="section">
+        <summary class="section-title">Utilities</summary>
+        <div class="alert alert-green" style="font-size:10px; margin:0.6rem 0;">Uses <span class="mono">fd</span> — 5-10× faster than find, ignores hidden system folders automatically. Requires: <span class="mono">brew install fd</span></div>
+        <div class="btn-row">
+          <button class="btn" onclick="buildFindCmd('count')"><span>Count files</span></button>
+          <button class="btn" onclick="buildFindCmd('save')"><span>Save list to file</span></button>
+          <button class="btn" onclick="buildFindCmd('du')"><span>Folder sizes (du)</span></button>
+          <button class="btn" onclick="buildFindCmd('itunes')"><span>Find iTunes lib.</span></button>
+        </div>
+      </details>
+
+      <hr class="divider">
+
       <div id="import-setup">
         <div class="section">
           <div class="section-title">
@@ -181,7 +218,7 @@
                 <input type="text" id="import-path" placeholder="/Volumes/Harddisk/Music" oninput="checkiCloud(this.value)">
               </div>
               <button class="btn btn-sm" onclick="setPath('import-path','~/Music')">~/Music</button>
-              <button class="btn btn-sm" onclick="promptVolume()">Volumes/…</button>
+              <button class="btn btn-sm" onclick="promptVolume('import-path')">Volumes/…</button>
             </div>
           </div>
           <div id="import-warnings"></div>
@@ -300,10 +337,6 @@
         <div class="field">
           <label class="check-item"><input type="checkbox" id="lib-export" onchange="buildLibCmd()"><span>Export to file</span> <span class="mono">&gt; ~/Desktop/library.txt</span></label>
         </div>
-        <div class="btn-row">
-          <button class="btn" onclick="setCmd('beet list -f \'$path\' > ~/Desktop/beets_export.m3u')"><span>Export .m3u for Lexicon</span></button>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Saves all tracks as .m3u on the desktop. In Lexicon: File → Import → M3U playlist. Add a query in the search field to export a subset.</span></span>
-        </div>
       </div>
       <hr class="divider">
       <div class="section-title" style="margin-bottom:0.5rem;">Quick commands</div>
@@ -313,14 +346,12 @@
         <button class="btn" onclick="setCmd('beet version')">beet version</button>
         <button class="btn" onclick="setCmd('while true; do beet list -a | wc -l; sleep 2; done')" title="Monitor the library (replaces watch on macOS)">monitor (loop)</button>
       </div>
-    </div>
 
-    <!-- CLEANUP -->
-    <div id="tab-cleanup" class="tab-panel">
+      <hr class="divider">
       <div class="section">
         <div class="section-title">
           <span>Duplicates</span>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">During import: beets prompts automatically for duplicates. With -q it skips automatically. After import: the duplicates plugin compares on MusicBrainz ID, not filenames.</span></span>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">During import: beets ranks quality automatically and asks only when it can't tell. After import: the duplicates plugin compares on MusicBrainz ID, not filenames.</span></span>
         </div>
         <div class="alert alert-yellow">Always preview first — delete buttons are red and secondary.</div>
         <div class="btn-row">
@@ -356,6 +387,118 @@
           <button class="btn" onclick="setCmd('beet missing')">missing</button>
         </div>
       </div>
+
+      <details class="section">
+        <summary class="section-title">Formats</summary>
+        <div style="margin-top:0.6rem;">
+          <div class="section-title">Find audio files (fd)</div>
+          <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">Uses <span class="mono">fd</span> — ignores .Spotlight-V100, .Trashes and other hidden system folders automatically.</div>
+          <div class="drop-zone" id="find-drop2"><span class="drop-icon">📁</span><span>Drag folder here</span><div class="drop-hint">Or type the path</div></div>
+          <div class="field"><label>Path</label><input type="text" id="conv-src" placeholder="/Volumes/Harddisk" oninput="buildConvFindCmd()"></div>
+          <div class="btn-row">
+            <button class="btn" onclick="buildConvFindCmd('wav')"><span>Find WAV</span></button>
+            <button class="btn" onclick="buildConvFindCmd('aiff')"><span>Find AIFF</span></button>
+            <button class="btn" onclick="buildConvFindCmd('count')"><span>Count WAV+AIFF</span></button>
+          </div>
+        </div>
+
+        <div style="margin-top:1rem;">
+          <div class="section-title">
+            Beets convert → ALAC (ffmpeg)
+            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Uses beets' own convert plugin with ffmpeg. Makes copies — originals are NOT deleted automatically. Requires: <span class="mono">pipx inject beets beets-convert</span> + <span class="mono">brew install ffmpeg</span></span></span>
+          </div>
+          <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">
+            <b>Important:</b> <span class="mono">beet convert</span> makes copies of the files — originals are untouched. Verify the output before deleting originals manually.
+          </div>
+          <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;">
+            Add to config.yaml (the Settings tab does not enable convert automatically — paste manually):<br>
+            <pre style="margin-top:0.3rem; white-space:pre; font-size:10px; color:var(--accent);">convert:
+  format: alac
+  never_convert_lossy_files: yes
+  formats:
+    alac:
+      command: ffmpeg -i $source -c:a alac -map_metadata 0 $dest
+      extension: m4a</pre>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Source format</label>
+              <select id="beet-conv-fmt" onchange="buildBeetsConvCmd()">
+                <option value="AIFF">AIFF</option>
+                <option value="WAV">WAV</option>
+                <option value="FLAC">FLAC</option>
+              </select>
+            </div>
+            <div class="field" style="align-self:flex-end;">
+              <label class="check-item"><input type="checkbox" id="beet-conv-pretend" checked onchange="buildBeetsConvCmd()"><span>Preview (--pretend)</span></label>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="buildBeetsConvCmd()">Build beet convert command</button>
+          </div>
+          <hr class="divider">
+          <div style="font-size:10px; color:var(--text3); margin-bottom:0.5rem;">Delete originals from the database AFTER verifying (files stay on disk):</div>
+          <div class="btn-row">
+            <button class="btn btn-warn" onclick="setCmd('beet remove format:AIFF')">⚠ Remove AIFF from DB</button>
+            <button class="btn btn-warn" onclick="setCmd('beet remove format:WAV')">⚠ Remove WAV from DB</button>
+          </div>
+        </div>
+
+        <div style="margin-top:1rem;">
+          <div class="section-title">Convert with XLD</div>
+          <div class="drop-zone" id="xld-drop"><span class="drop-icon">🎵</span><span>Drag source file or folder here</span></div>
+          <div class="field"><label>Source file/folder</label><input type="text" id="xld-src" placeholder="/Volumes/Harddisk/album.wav" oninput="buildXldCmd()"></div>
+          <div class="field-row">
+            <div class="field"><label>Output format</label><select id="xld-fmt" onchange="buildXldCmd()"><option value="alac">ALAC</option><option value="flac">FLAC</option><option value="aiff">AIFF</option><option value="mp3">MP3 320</option></select></div>
+            <div class="field"><label>Output folder</label><input type="text" id="xld-out" placeholder="~/Music/Converted" oninput="buildXldCmd()"></div>
+          </div>
+          <div class="check-group" style="margin-bottom:0.5rem;">
+            <label class="radio-item"><input type="radio" name="xld-mode" value="single" checked onchange="buildXldCmd()"><span>Single file</span></label>
+            <label class="radio-item"><input type="radio" name="xld-mode" value="batch" onchange="buildXldCmd()"><span>All WAV in folder (loop)</span></label>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" onclick="buildXldCmd()"><span>Build XLD command</span></button></div>
+        </div>
+
+        <div style="margin-top:1rem;">
+          <div class="section-title">WAV tags from filename</div>
+          <div class="alert alert-yellow" style="font-size:10px;">Use "Import with fromfilename" in the Inbox tab after converting.<br>Beets guesses metadata from the filename (Artist - Title.wav) and searches MusicBrainz.</div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary class="section-title">Remove from library</summary>
+        <div style="margin-top:0.6rem;">
+          <div class="field"><label>Query</label><input type="text" id="rm-query" placeholder="artist:Burial album:Untrue"></div>
+          <div class="btn-row">
+            <button class="btn btn-warn" onclick="buildRemoveCmd(false)">⚠ <span>Remove from database</span></button>
+            <button class="btn btn-danger" onclick="confirmDangerousCmd(buildRemoveCmdStr(true), 'This permanently deletes the file from disk. Run preview FIRST. Continue?')">⚠ <span>Also delete file from disk</span></button>
+          </div>
+          <div class="alert alert-yellow" style="font-size:10px;"><b>beet remove</b> only removes from database, not disk. <b>beet remove -d</b> deletes the file permanently.</div>
+          <hr class="divider">
+          <div class="section-title" style="margin-bottom:0.4rem;">Remove short files (one shots) from database</div>
+          <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Removes tracks under X seconds from the database (files stay on disk). Beets has no duration import filter — use this after importing.</div>
+          <div class="field-row">
+            <div class="field" style="max-width:120px;"><label>Max seconds</label><input type="number" id="short-secs" value="10" min="1" max="60" oninput="buildShortRemoveCmd()"></div>
+            <div class="field" style="align-self:flex-end;">
+              <button class="btn btn-sm" onclick="buildShortRemovePreview()">Preview short files</button>
+            </div>
+            <div class="field" style="align-self:flex-end;">
+              <button class="btn btn-warn btn-sm" onclick="buildShortRemoveCmd()">⚠ Remove from DB</button>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- EXPORT -->
+    <div id="tab-export" class="tab-panel">
+      <div class="section">
+        <div class="section-title">Export .m3u for Lexicon</div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="setCmd('beet list -f \'$path\' > ~/Desktop/beets_export.m3u')"><span>Export .m3u for Lexicon</span></button>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Saves all tracks as .m3u on the desktop. In Lexicon: File → Import → M3U playlist. Go to Library and search first to export a subset.</span></span>
+        </div>
+      </div>
       <div class="section">
         <div class="section-title">Playlists → Lexicon / Traktor</div>
         <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Run this <b>before</b> importing with move — exports your folders as .m3u files so Lexicon and Traktor can relocate them.</div>
@@ -369,132 +512,15 @@
         <div class="alert alert-yellow" style="font-size:10px;">1. In Traktor: Right-click <b>Track Collection</b> → <b>Check Consistency</b><br>2. Select ALL missing tracks (<b>Cmd+A</b>)<br>3. Click <b>Relocate</b> → navigate to your Beets library folder<br>4. ⚠ Select multiple files at a time — avoids Traktor 4.2 freeze<br>5. Cues and grids follow automatically</div>
       </div>
       <div class="section">
-        <div class="section-title">Remove from library</div>
-        <div class="field"><label>Query</label><input type="text" id="rm-query" placeholder="artist:Burial album:Untrue"></div>
-        <div class="btn-row">
-          <button class="btn btn-warn" onclick="buildRemoveCmd(false)">⚠ <span>Remove from database</span></button>
-          <button class="btn btn-danger" onclick="confirmDangerousCmd(buildRemoveCmdStr(true), 'This permanently deletes the file from disk. Run preview FIRST. Continue?')">⚠ <span>Also delete file from disk</span></button>
-        </div>
-        <div class="alert alert-yellow" style="font-size:10px;"><b>beet remove</b> only removes from database, not disk. <b>beet remove -d</b> deletes the file permanently.</div>
-        <hr class="divider">
-        <div class="section-title" style="margin-bottom:0.4rem;">Remove short files (one shots) from database</div>
-        <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Removes tracks under X seconds from the database (files stay on disk). Beets has no duration import filter — use this after importing.</div>
-        <div class="field-row">
-          <div class="field" style="max-width:120px;"><label>Max seconds</label><input type="number" id="short-secs" value="10" min="1" max="60" oninput="buildShortRemoveCmd()"></div>
-          <div class="field" style="align-self:flex-end;">
-            <button class="btn btn-sm" onclick="buildShortRemovePreview()">Preview short files</button>
-          </div>
-          <div class="field" style="align-self:flex-end;">
-            <button class="btn btn-warn btn-sm" onclick="buildShortRemoveCmd()">⚠ Remove from DB</button>
+        <div class="section-title">Playlists on this Mac (USB mirror)</div>
+        <div class="field">
+          <label>Playlist folder</label>
+          <div class="field-row">
+            <div class="field" style="margin-bottom:0"><input type="text" id="usb-dir" placeholder="~/Playlister" value="~/Playlister"></div>
+            <button class="btn btn-sm btn-primary" onclick="listPlaylists()">List playlists</button>
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- CONVERT -->
-    <div id="tab-convert" class="tab-panel">
-      <div class="section">
-        <div class="section-title">Find audio files (fd)</div>
-        <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">Uses <span class="mono">fd</span> — ignores .Spotlight-V100, .Trashes and other hidden system folders automatically.</div>
-        <div class="drop-zone" id="find-drop2"><span class="drop-icon">📁</span><span>Drag folder here</span><div class="drop-hint">Or type the path</div></div>
-        <div class="field"><label>Path</label><input type="text" id="conv-src" placeholder="/Volumes/Harddisk" oninput="buildConvFindCmd()"></div>
-        <div class="btn-row">
-          <button class="btn" onclick="buildConvFindCmd('wav')"><span>Find WAV</span></button>
-          <button class="btn" onclick="buildConvFindCmd('aiff')"><span>Find AIFF</span></button>
-          <button class="btn" onclick="buildConvFindCmd('count')"><span>Count WAV+AIFF</span></button>
-        </div>
-      </div>
-
-      <!-- BEETS CONVERT (ffmpeg/ALAC) -->
-      <div class="section">
-        <div class="section-title">
-          Beets convert → ALAC (ffmpeg)
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Uses beets' own convert plugin with ffmpeg. Makes copies — originals are NOT deleted automatically. Requires: <span class="mono">pipx inject beets beets-convert</span> + <span class="mono">brew install ffmpeg</span></span></span>
-        </div>
-        <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">
-          <b>Important:</b> <span class="mono">beet convert</span> makes copies of the files — originals are untouched. Verify the output before deleting originals manually.
-        </div>
-        <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;">
-          Add to config.yaml (the Settings tab does not enable convert automatically — paste manually):<br>
-          <pre style="margin-top:0.3rem; white-space:pre; font-size:10px; color:var(--accent);">convert:
-  format: alac
-  never_convert_lossy_files: yes
-  formats:
-    alac:
-      command: ffmpeg -i $source -c:a alac -map_metadata 0 $dest
-      extension: m4a</pre>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label>Source format</label>
-            <select id="beet-conv-fmt" onchange="buildBeetsConvCmd()">
-              <option value="AIFF">AIFF</option>
-              <option value="WAV">WAV</option>
-              <option value="FLAC">FLAC</option>
-            </select>
-          </div>
-          <div class="field" style="align-self:flex-end;">
-            <label class="check-item"><input type="checkbox" id="beet-conv-pretend" checked onchange="buildBeetsConvCmd()"><span>Preview (--pretend)</span></label>
-          </div>
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="buildBeetsConvCmd()">Build beet convert command</button>
-        </div>
-        <hr class="divider">
-        <div style="font-size:10px; color:var(--text3); margin-bottom:0.5rem;">Delete originals from the database AFTER verifying (files stay on disk):</div>
-        <div class="btn-row">
-          <button class="btn btn-warn" onclick="setCmd('beet remove format:AIFF')">⚠ Remove AIFF from DB</button>
-          <button class="btn btn-warn" onclick="setCmd('beet remove format:WAV')">⚠ Remove WAV from DB</button>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Convert with XLD</div>
-        <div class="drop-zone" id="xld-drop"><span class="drop-icon">🎵</span><span>Drag source file or folder here</span></div>
-        <div class="field"><label>Source file/folder</label><input type="text" id="xld-src" placeholder="/Volumes/Harddisk/album.wav" oninput="buildXldCmd()"></div>
-        <div class="field-row">
-          <div class="field"><label>Output format</label><select id="xld-fmt" onchange="buildXldCmd()"><option value="alac">ALAC</option><option value="flac">FLAC</option><option value="aiff">AIFF</option><option value="mp3">MP3 320</option></select></div>
-          <div class="field"><label>Output folder</label><input type="text" id="xld-out" placeholder="~/Music/Konverteret" oninput="buildXldCmd()"></div>
-        </div>
-        <div class="check-group" style="margin-bottom:0.5rem;">
-          <label class="radio-item"><input type="radio" name="xld-mode" value="single" checked onchange="buildXldCmd()"><span>Single file</span></label>
-          <label class="radio-item"><input type="radio" name="xld-mode" value="batch" onchange="buildXldCmd()"><span>All WAV in folder (loop)</span></label>
-        </div>
-        <div class="btn-row"><button class="btn btn-primary" onclick="buildXldCmd()"><span>Build XLD command</span></button></div>
-      </div>
-      <div class="section">
-        <div class="section-title">WAV tags from filename</div>
-        <div class="alert alert-yellow" style="font-size:10px;">Use "Import with fromfilename" in the Import tab after converting.<br>Beets guesses metadata from the filename (Artist - Title.wav) and searches MusicBrainz.</div>
-      </div>
-    </div>
-
-    <!-- FIND -->
-    <div id="tab-find" class="tab-panel">
-      <div class="section">
-        <div class="section-title">Path</div>
-        <div class="drop-zone" id="find-drop"><span class="drop-icon">🔍</span><span>Drag folder here</span><div class="drop-hint">Or type the path</div></div>
-        <div class="field"><label>Path</label><input type="text" id="find-path" placeholder="/Volumes/Harddisk/Music" oninput="buildFindCmd('all')"></div>
-      </div>
-      <div class="section">
-        <div class="section-title">Exclude folders</div>
-        <div class="check-row" id="find-excl">
-          <label class="check-item"><input type="checkbox" value="Samples" onchange="buildFindCmd('all')"> Samples</label>
-          <label class="check-item"><input type="checkbox" value="Stems" onchange="buildFindCmd('all')"> Stems</label>
-          <label class="check-item"><input type="checkbox" value="Ableton" onchange="buildFindCmd('all')"> Ableton</label>
-          <label class="check-item"><input type="checkbox" value="Splice" onchange="buildFindCmd('all')"> Splice</label>
-          <label class="check-item"><input type="checkbox" value="One Shots" onchange="buildFindCmd('all')"> One Shots</label>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-title">Commands</div>
-        <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">Uses <span class="mono">fd</span> — 5-10× faster than find, ignores hidden system folders automatically. Requires: <span class="mono">brew install fd</span></div>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="buildFindCmd('all')"><span>Find all audio files</span></button>
-          <button class="btn" onclick="buildFindCmd('count')"><span>Count files</span></button>
-          <button class="btn" onclick="buildFindCmd('save')"><span>Save list to file</span></button>
-          <button class="btn" onclick="buildFindCmd('du')"><span>Folder sizes (du)</span></button>
-          <button class="btn" onclick="buildFindCmd('itunes')"><span>Find iTunes lib.</span></button>
-        </div>
+        <div class="lib-results" id="usb-results"></div>
       </div>
     </div>
 
@@ -584,7 +610,7 @@
       </div>
       <div class="section">
         <div class="section-title">Generated config.yaml</div>
-        <pre class="pre-out" id="config-out"># Udfyld felterne ovenfor</pre>
+        <pre class="pre-out" id="config-out"># Fill in the fields above</pre>
         <div class="btn-row">
           <button class="btn btn-primary" onclick="copyConfig()"><span>Copy config.yaml</span></button>
           <button class="btn" onclick="buildConfig()"><span>Generate</span></button>
@@ -627,7 +653,7 @@
           <span class="auth-card-chevron">▼</span>
         </div>
         <div class="auth-card-body">
-          <div class="field"><label>Username</label><input type="text" id="mb-user" placeholder="dit_brugernavn" oninput="buildConfig()"></div>
+          <div class="field"><label>Username</label><input type="text" id="mb-user" placeholder="your_username" oninput="buildConfig()"></div>
           <div class="field"><label>Password</label><input type="password" id="mb-pass" placeholder="••••••••" oninput="buildConfig()"></div>
           <div class="alert alert-yellow" style="font-size:10px;">⚠ Password stored in plain text in config.yaml. Create account: <a href="https://musicbrainz.org/account/register" target="_blank" style="color:inherit;">musicbrainz.org</a></div>
         </div>
@@ -644,7 +670,7 @@
             <label class="radio-item"><input type="radio" name="bp4-method" value="token" onchange="toggleBp4Method()"><span>Token file (advanced)</span></label>
           </div>
           <div id="bp4-userpass-wrap">
-            <div class="field"><label>Username</label><input type="text" id="bp4-user" placeholder="dit_beatport_login" oninput="buildConfig()"></div>
+            <div class="field"><label>Username</label><input type="text" id="bp4-user" placeholder="your_beatport_login" oninput="buildConfig()"></div>
             <div class="field"><label>Password</label><input type="password" id="bp4-pass" placeholder="••••••••" oninput="buildConfig()"></div>
           </div>
           <div id="bp4-token-wrap" style="display:none;">
@@ -681,7 +707,7 @@
 </div>
 <script>
 
-let activeTab='import';
+let activeTab='inbox';
 function switchTab(name,btn){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
@@ -690,11 +716,9 @@ function switchTab(name,btn){
   activeTab=name;
   if(name==='settings')buildConfig();
   if(name==='library'){buildLibCmd();loadLibrary();}
-  if(name==='find')buildFindCmd('all');
-  if(name==='convert')buildXldCmd();
 }
 function switchTabByName(name){
-  const tabs=['import','library','cleanup','convert','find','settings','auth'];
+  const tabs=['inbox','library','export','settings','auth'];
   const idx=tabs.indexOf(name);
   if(idx>=0)switchTab(name,document.querySelectorAll('.tab-btn')[idx]);
 }
@@ -733,7 +757,7 @@ function setupDrop(zoneId,targetId,onDrop){
   });
 }
 setupDrop('import-drop','import-path',p=>checkiCloud(p));
-setupDrop('find-drop','find-path',()=>buildFindCmd('all'));
+setupDrop('scan-drop','scan-path');
 setupDrop('find-drop2','conv-src',()=>buildConvFindCmd());
 setupDrop('xld-drop','xld-src',()=>buildXldCmd());
 document.body.addEventListener('dragover',e=>e.preventDefault());
@@ -741,7 +765,7 @@ document.body.addEventListener('drop',e=>e.preventDefault());
 
 function toggleLog(){document.getElementById('log-path-wrap').style.display=document.getElementById('import-log').checked?'block':'none';}
 function setPath(fieldId,value){document.getElementById(fieldId).value=value;}
-function promptVolume(){const name=prompt('Disk name (e.g. Harddisk):');if(name){document.getElementById('import-path').value='/Volumes/'+name;}}
+function promptVolume(fieldId){fieldId=fieldId||'import-path';const name=prompt('Disk name (e.g. Harddisk):');if(name){document.getElementById(fieldId).value='/Volumes/'+name;}}
 function checkiCloud(path){
   const warn=document.getElementById('import-warnings');
   if(path.includes('Mobile Documents')||path.toLowerCase().includes('icloud'))warn.innerHTML='<div class="alert alert-red">'+'⚠ WARNING: This path is inside iCloud! This can corrupt your Traktor/Lexicon collection. Move music to a local folder or external drive before importing.'+'</div>';
@@ -940,7 +964,7 @@ function renderMatchDecision(d){
 }
 
 document.addEventListener('keydown',function(e){
-  if(activeTab!=='import'||!importState.decision)return;
+  if(activeTab!=='inbox'||!importState.decision)return;
   const tag=(document.activeElement.tagName||'').toLowerCase();
   if(tag==='input'||tag==='textarea'||tag==='select')return;
   const d=importState.decision,key=e.key;
@@ -1069,21 +1093,70 @@ function buildBeetsConvCmd(){
 function buildXldCmd(){
   const src=document.getElementById('xld-src').value.trim()||'/path/to/file.wav';
   const fmt=document.getElementById('xld-fmt').value;
-  const out=document.getElementById('xld-out').value.trim()||'~/Music/Konverteret';
+  const out=document.getElementById('xld-out').value.trim()||'~/Music/Converted';
   const mode=document.querySelector('input[name="xld-mode"]:checked').value;
   if(mode==='single')setCmd('xld -f '+fmt+' -o "'+out+'" "'+src+'"');
   else{const ext=fmt==='aiff'?'aiff':'wav';setCmd('fd -e '+ext+' . "'+src+'" --exclude Samples --exclude Stems | while read f; do xld -f '+fmt+' -o "'+out+'" "$f"; done');}
 }
 function buildFindCmd(type){
-  const src=document.getElementById('find-path').value.trim()||'/Volumes/Harddisk/Music';
-  const exclFlags=Array.from(document.querySelectorAll('#find-excl input:checked')).map(b=>'--exclude "'+b.value+'"').join(' ');
+  const src=document.getElementById('scan-path').value.trim()||'/Volumes/Harddisk/Music';
+  const exclFlags=Array.from(document.querySelectorAll('#scan-excl input:checked')).map(b=>'--exclude "'+b.value+'"').join(' ');
   const exts='-e mp3 -e aiff -e wav -e flac -e m4a -e alac';
-  if(type==='all')setCmd('fd '+exts+' . "'+src+'"'+(exclFlags?' '+exclFlags:''));
-  else if(type==='count')setCmd('fd -e mp3 -e wav -e aiff -e flac -e m4a -e alac . "'+src+'"'+(exclFlags?' '+exclFlags:'')+' | wc -l');
-  else if(type==='save')setCmd('fd '+exts+' . "'+src+'"'+(exclFlags?' '+exclFlags:'')+' | sort > ~/Desktop/musikoversigt.txt');
+  if(type==='count')setCmd('fd -e mp3 -e wav -e aiff -e flac -e m4a -e alac . "'+src+'"'+(exclFlags?' '+exclFlags:'')+' | wc -l');
+  else if(type==='save')setCmd('fd '+exts+' . "'+src+'"'+(exclFlags?' '+exclFlags:'')+' | sort > ~/Desktop/music_list.txt');
   else if(type==='du')setCmd('du -sh "'+src+'/"*/');
   else if(type==='itunes')setCmd('fd -H -e xml -g "iTunes Library.xml" ~');
 }
+
+function scanUnimported(){
+  const dir=document.getElementById('scan-path').value.trim();
+  const excl=Array.from(document.querySelectorAll('#scan-excl input:checked')).map(c=>c.value).join(',');
+  const results=document.getElementById('scan-results'),count=document.getElementById('scan-count');
+  if(!dir){results.innerHTML='<div class="lib-empty">Enter a path to scan.</div>';count.textContent='';return;}
+  results.innerHTML='<div class="lib-empty">Scanning…</div>';count.textContent='';
+  checkiCloud(dir);
+  fetch('/unimported?dir='+encodeURIComponent(dir)+(excl?'&exclude='+encodeURIComponent(excl):''))
+    .then(r=>r.json())
+    .then(data=>renderUnimported(data))
+    .catch(()=>{results.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function renderUnimported(data){
+  const results=document.getElementById('scan-results'),count=document.getElementById('scan-count');
+  if(!data.ok){count.textContent='';results.innerHTML='<div class="lib-empty">'+escapeHtml(data.error)+'</div>';return;}
+  if(!data.folders.length){
+    count.textContent='';
+    results.innerHTML='<div class="lib-empty">Nothing new — everything here is already in your library.</div>';
+    return;
+  }
+  count.textContent=data.total_files+' unimported file'+(data.total_files===1?'':'s')+' in '+data.folders.length+' folder'+(data.folders.length===1?'':'s');
+  results.innerHTML=data.folders.map(f=>
+    '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f.path)+'</div>'+
+    '<div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">'+
+      '<span class="lib-row-meta">'+f.count+' file'+(f.count===1?'':'s')+'</span>'+
+      '<button class="btn btn-sm btn-primary" onclick="useForImport(this.dataset.path)" data-path="'+escapeHtml(f.path)+'">Import →</button>'+
+    '</div></div>'
+  ).join('');
+}
+function useForImport(path){
+  document.getElementById('import-path').value=path;
+  checkiCloud(path);
+  document.getElementById('import-setup').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function listPlaylists(){
+  const dir=document.getElementById('usb-dir').value.trim()||'~/Playlister';
+  const el=document.getElementById('usb-results');
+  el.innerHTML='<div class="lib-empty">Loading…</div>';
+  fetch('/playlists?dir='+encodeURIComponent(dir))
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Could not read that folder.')+'</div>';return;}
+      if(!data.playlists.length){el.innerHTML='<div class="lib-empty">No .m3u playlists found in '+escapeHtml(data.dir)+'.</div>';return;}
+      el.innerHTML=data.playlists.map(p=>'<div class="lib-row"><div class="lib-row-title">'+escapeHtml(p)+'.m3u</div></div>').join('');
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+
 function updatePathPreview(){
   const a=document.getElementById('path-artist').value,b=document.getElementById('path-album').value,t2=document.getElementById('path-track').value;
   document.getElementById('path-preview').textContent='Burial/2007 - Burial/01 - Archangel.alac\n→ '+a+'/'+b+'/'+t2+'.alac';
