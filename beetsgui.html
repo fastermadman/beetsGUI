@@ -30,6 +30,15 @@
   html,body { height:100%; background:var(--bg); color:var(--text); font-family:'SF Mono','Menlo',var(--font-mono); font-size:13px; line-height:1.6; }
   .app { display:flex; flex-direction:column; height:100vh; max-width:860px; margin:0 auto; }
   .app-header { display:flex; align-items:baseline; gap:0.75rem; padding:1rem 1.25rem 0; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .prefs-btn { align-self:center; background:none; border:none; color:var(--text3); cursor:pointer; font-size:15px; margin-left:auto; padding:0.2rem 0.3rem; transition:color 0.1s; }
+  .prefs-btn:hover { color:var(--text2); }
+  #prefs-dialog { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--text); margin:auto; max-height:85vh; padding:0; width:min(620px, 92vw); }
+  #prefs-dialog::backdrop { background:rgba(0,0,0,0.55); }
+  .prefs-header { align-items:center; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; padding:0.85rem 1.25rem; }
+  .prefs-title { color:var(--accent); font-size:13px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; }
+  .prefs-close { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; padding:0.2rem 0.4rem; }
+  .prefs-close:hover { color:var(--text); }
+  .prefs-body { max-height:calc(85vh - 54px); overflow-y:auto; padding:1.25rem; }
   .app-title { font-size:15px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent); }
   .app-sub { font-size:11px; color:var(--text3); letter-spacing:0.04em; }
   .tabs { display:flex; padding:0 1.25rem; border-bottom:1px solid var(--border); flex-shrink:0; overflow-x:auto; scrollbar-width:none; }
@@ -40,9 +49,12 @@
   .content { flex:1; overflow-y:auto; padding:1.25rem; padding-bottom:0; }
   .tab-panel { display:none; }
   .tab-panel.active { display:block; }
-  .cmd-box { flex-shrink:0; border-top:1px solid var(--border); padding:0.75rem 1.25rem; background:var(--bg); display:flex; gap:0.5rem; align-items:center; }
+  .cmd-box { flex-shrink:0; border-top:1px solid var(--border); background:var(--bg); }
+  .cmd-box summary { cursor:pointer; color:var(--text3); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; padding:0.5rem 1.25rem; user-select:none; }
+  .cmd-box summary:hover { color:var(--text2); }
+  .cmd-box[open] summary { border-bottom:1px solid var(--border); }
+  .cmd-box-body { display:flex; align-items:center; gap:0.5rem; padding:0.6rem 1.25rem; }
   .cmd-field { flex:1; background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius); color:var(--accent); font-family:var(--font-mono); font-size:12px; padding:0.5rem 0.75rem; outline:none; overflow-x:auto; white-space:nowrap; }
-  .cmd-hint { font-size:10px; color:var(--text3); padding:0 0.25rem; letter-spacing:0.04em; }
   .btn-copy { background:var(--accent); border:none; border-radius:var(--radius); color:var(--bg); cursor:pointer; font-family:inherit; font-size:11px; font-weight:700; letter-spacing:0.08em; padding:0.45rem 1rem; text-transform:uppercase; transition:opacity 0.1s; white-space:nowrap; }
   .btn-copy:hover { opacity:0.85; }
   .btn-copy.copied { background:var(--green); }
@@ -147,14 +159,13 @@
   <div class="app-header">
     <span class="app-title">BeetsGUI</span>
     <span class="app-sub">beets music library assistant</span>
+    <button class="prefs-btn" onclick="openPrefs()" title="Preferences (⌘,)">⚙</button>
   </div>
 
   <div class="tabs" role="tablist">
     <button class="tab-btn active" onclick="switchTab('inbox',this)">Inbox</button>
     <button class="tab-btn" onclick="switchTab('library',this)">Library</button>
     <button class="tab-btn" onclick="switchTab('export',this)">Export</button>
-    <button class="tab-btn" onclick="switchTab('settings',this)">Settings</button>
-    <button class="tab-btn" onclick="switchTab('auth',this)">Services</button>
   </div>
 
   <div class="content">
@@ -262,7 +273,7 @@
             <span>Exclude folders</span>
             <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Exclusions are set in config.yaml under import: ignore: — not in the command itself. Enable them in Settings.</span></span>
           </div>
-          <div class="alert alert-yellow" style="margin-bottom:0.5rem; font-size:10px;">Exclusions are set in config.yaml (Settings tab), not directly in the command.</div>
+          <div class="alert alert-yellow" style="margin-bottom:0.5rem; font-size:10px;">Exclusions are set in config.yaml (Preferences), not directly in the command.</div>
           <div class="check-row">
             <label class="check-item"><input type="checkbox" disabled checked> Samples</label>
             <label class="check-item"><input type="checkbox" disabled checked> Stems</label>
@@ -411,7 +422,7 @@
             <b>Important:</b> <span class="mono">beet convert</span> makes copies of the files — originals are untouched. Verify the output before deleting originals manually.
           </div>
           <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;">
-            Add to config.yaml (the Settings tab does not enable convert automatically — paste manually):<br>
+            Add to config.yaml (Preferences does not enable convert automatically — paste manually):<br>
             <pre style="margin-top:0.3rem; white-space:pre; font-size:10px; color:var(--accent);">convert:
   format: alac
   never_convert_lossy_files: yes
@@ -524,8 +535,12 @@
       </div>
     </div>
 
-    <!-- SETTINGS -->
-    <div id="tab-settings" class="tab-panel">
+  <dialog id="prefs-dialog">
+    <div class="prefs-header">
+      <span class="prefs-title">Preferences</span>
+      <button class="prefs-close" onclick="closePrefs()">✕</button>
+    </div>
+    <div class="prefs-body">
       <div class="section">
         <div class="section-title">Library</div>
         <div class="field"><label>directory — library path</label><input type="text" id="cfg-dir" placeholder="~/Music/Library" oninput="buildConfig()"></div>
@@ -617,10 +632,8 @@
         </div>
         <div class="alert alert-yellow" style="font-size:10px;">Paste in terminal: <span class="mono">beet config -e</span> — opens the config file in your editor.</div>
       </div>
-    </div>
-
-    <!-- AUTH -->
-    <div id="tab-auth" class="tab-panel">
+      <hr class="divider">
+      <div class="section-title" style="margin-bottom:0.75rem;">Services</div>
       <div class="auth-card open" id="card-discogs">
         <div class="auth-card-hd" onclick="toggleCard('card-discogs')">
           <span><span class="auth-status" id="status-discogs"></span><span class="auth-card-title">Discogs</span></span>
@@ -687,22 +700,21 @@
       <div class="section-title" style="margin-bottom:0.5rem;">Note: beet version</div>
       <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;"><b>beet version</b> (not --plugins) shows active plugins.<br>Plugins only activate when listed under <span class="mono">plugins:</span> in config.yaml.<br>⚠ Never run <span class="mono">beet config -e</span> while the GUI is editing.</div>
       <div class="btn-row">
-        <button class="btn btn-primary" onclick="buildConfig(); switchTabByName('settings')"><span>Save to config (go to Settings)</span></button>
+        <button class="btn btn-primary" onclick="buildConfig(); document.getElementById('config-out').scrollIntoView({behavior:'smooth'})"><span>Save to config</span></button>
         <button class="btn" onclick="setCmd('beet version')">beet version</button>
       </div>
     </div>
+  </dialog>
 
   </div>
 
-  <div class="cmd-box">
-    <div style="display:flex;flex-direction:column;flex:1;gap:2px;">
-      <div style="display:flex;align-items:center;gap:0.5rem;">
-        <input type="text" class="cmd-field" id="cmd-out" readonly value="beet import ~/Music">
-        <button class="btn-copy" id="copy-btn" onclick="copyCmd()">Copy</button>
-      </div>
-      <div class="cmd-hint">Run this command in Terminal</div>
+  <details class="cmd-box" id="cmd-box">
+    <summary>Command</summary>
+    <div class="cmd-box-body">
+      <input type="text" class="cmd-field" id="cmd-out" readonly value="beet import ~/Music">
+      <button class="btn-copy" id="copy-btn" onclick="copyCmd()">Copy</button>
     </div>
-  </div>
+  </details>
 
 </div>
 <script>
@@ -714,14 +726,16 @@ function switchTab(name,btn){
   document.getElementById('tab-'+name).classList.add('active');
   if(btn)btn.classList.add('active');
   activeTab=name;
-  if(name==='settings')buildConfig();
   if(name==='library'){buildLibCmd();loadLibrary();}
 }
-function switchTabByName(name){
-  const tabs=['inbox','library','export','settings','auth'];
-  const idx=tabs.indexOf(name);
-  if(idx>=0)switchTab(name,document.querySelectorAll('.tab-btn')[idx]);
+function openPrefs(){
+  buildConfig();
+  document.getElementById('prefs-dialog').showModal();
 }
+function closePrefs(){document.getElementById('prefs-dialog').close();}
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key===','){e.preventDefault();openPrefs();}
+});
 function setCmd(cmd){document.getElementById('cmd-out').value=cmd;}
 function copyCmd(){
   const v=document.getElementById('cmd-out').value;
@@ -964,7 +978,7 @@ function renderMatchDecision(d){
 }
 
 document.addEventListener('keydown',function(e){
-  if(activeTab!=='inbox'||!importState.decision)return;
+  if(activeTab!=='inbox'||!importState.decision||document.getElementById('prefs-dialog').open)return;
   const tag=(document.activeElement.tagName||'').toLowerCase();
   if(tag==='input'||tag==='textarea'||tag==='select')return;
   const d=importState.decision,key=e.key;
@@ -1228,6 +1242,11 @@ function toggleBp4Method(){
   document.getElementById('bp4-token-wrap').style.display=isUp?'none':'block';
   buildConfig();
 }
+(function(){
+  const box=document.getElementById('cmd-box');
+  if(localStorage.getItem('cmdBoxOpen')==='1')box.open=true;
+  box.addEventListener('toggle',()=>localStorage.setItem('cmdBoxOpen',box.open?'1':'0'));
+})();
 updatePathPreview();checkCurrentImport();
 </script>
 </body>

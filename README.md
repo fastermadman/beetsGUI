@@ -13,8 +13,7 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
 - **Inbox** — scan a folder for music not yet in your library (matches on artist/title, not path, so it's correct however previous imports were copied or moved), then import with a keyboard-driven decision queue for matches and duplicates
 - **Library** — search and browse your collection, manage duplicates, cover art and metadata, convert WAV/AIFF/FLAC to ALAC, remove tracks
 - **Export** — playlists and tracklists for Lexicon/Traktor, USB mirror
-- **Settings** — edit `config.yaml` directly in the app, generate config from UI
-- **Services** — configure Discogs, MusicBrainz, Beatport4
+- **Preferences** (⚙ in the header, or ⌘,) — library/import/plugin config with a live `config.yaml` preview, and Discogs/MusicBrainz/Beatport4 credentials
 - Dark + light mode (follows macOS system preference)
 
 ## Requirements
