@@ -57,7 +57,66 @@ SAFARI_APP_NAME = 'BeetsGUI'
 # ── Flask app ────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 
+
+@app.before_request
+def _reject_foreign_host():
+    """Block DNS-rebinding: only serve requests addressed to this loopback
+    origin. Without this, a page on any hostname that resolves to
+    127.0.0.1 is same-origin from the browser's perspective and can hit
+    every endpoint here, CORS preflight or not."""
+    if request.host not in (f'localhost:{PORT}', f'127.0.0.1:{PORT}'):
+        return jsonify({'ok': False, 'error': 'bad host'}), 403
+
+
+@app.errorhandler(UserError)
+def _bad_query(e):
+    """A malformed beets query is the caller's mistake, not a server fault.
+    Endpoints that catch UserError themselves still do; this catches the ones
+    that don't, so an unbalanced quote is a 400 instead of a 500."""
+    return jsonify({'ok': False, 'error': str(e)}), 400
+
+
 # ── Helper functions ──────────────────────────────────────────────────────────
+def _busy_response():
+    """409 if a background job is running, else None.
+
+    beets' `config` and `Library` are process-global (see jobs.py), and Flask
+    is threaded, so a mutating request served while a job's worker thread is
+    mid-run touches the same singletons. The job registry only serialises
+    jobs against each other — this extends that to the mutating endpoints.
+    Read-only endpoints are deliberately not gated.
+    """
+    job = jobs.current()
+    if not job:
+        return None
+    return jsonify({'ok': False,
+                    'error': f'a {job.kind} job is running — wait for it to finish'}), 409
+
+
+# Writing a list to a caller-supplied path: refuse anything that isn't
+# obviously one of this app's own outputs. Same-user localhost is still the
+# trust model, but "empty match set silently truncates ~/.zshrc" is not a
+# capability this app needs to have.
+LIST_SUFFIXES = {'.txt', '.m3u', '.m3u8'}
+
+
+def _write_list(dest, lines):
+    """Write `lines` to `dest`. Returns (path, None) or (None, error)."""
+    path = Path(os.path.expanduser(dest))
+    if path.suffix.lower() not in LIST_SUFFIXES:
+        return None, f'dest must end in one of {sorted(LIST_SUFFIXES)}'
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Filenames can hold bytes that aren't valid UTF-8; they arrive here
+        # surrogate-escaped, so write them back the same way rather than
+        # raising UnicodeEncodeError halfway through.
+        path.write_text('\n'.join(lines) + ('\n' if lines else ''),
+                        errors='surrogateescape')
+    except OSError as e:
+        return None, str(e)
+    return path, None
+
+
 def find_beet() -> str:
     """Find the beet executable. Checks Homebrew paths first."""
     candidates = [
@@ -139,9 +198,13 @@ def open_app_when_ready():
 @app.route('/library')
 def library():
     """Read albums directly from the beets library.db (read-only)."""
-    q      = request.args.get('q', '').strip()
-    limit  = min(int(request.args.get('limit', 200)), 1000)
-    offset = int(request.args.get('offset', 0))
+    q = request.args.get('q', '').strip()
+    try:
+        limit  = min(int(request.args.get('limit', 200)), 1000)
+        offset = max(int(request.args.get('offset', 0)), 0)
+    except ValueError:
+        return jsonify({'ok': False,
+                        'error': 'limit and offset must be integers'}), 400
     db_path = get_library_db_path()
 
     if not Path(db_path).exists():
@@ -189,6 +252,8 @@ def list_duplicates():
 def delete_duplicate():
     """Remove one album (by id) from the library. Body: {"id": 1,
     "delete_files": true}. Always a single explicit target."""
+    if busy := _busy_response():
+        return busy
     data = request.get_json(silent=True) or {}
     album_id = data.get('id')
     if not isinstance(album_id, int):
@@ -227,6 +292,8 @@ def library_modify_preview():
 
 @app.route('/library/modify', methods=['POST'])
 def library_modify():
+    if busy := _busy_response():
+        return busy
     data = request.get_json(silent=True) or {}
     field, value = data.get('field'), data.get('value')
     if not field or value is None:
@@ -237,10 +304,14 @@ def library_modify():
 
 @app.route('/library/update', methods=['POST'])
 def library_update():
-    """Body: {"query": "...", "pretend": true}."""
+    """Body: {"query": "...", "pretend": true}. `pretend` defaults to true:
+    this rewrites library rows, so an omitted flag must not mean "do it"."""
+    if busy := _busy_response():
+        return busy
     data = request.get_json(silent=True) or {}
     try:
-        output = libops.update(data.get('query', ''), bool(data.get('pretend')))
+        output = libops.update(data.get('query', ''),
+                               bool(data.get('pretend', True)))
     except UserError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True, 'output': output})
@@ -248,10 +319,14 @@ def library_update():
 
 @app.route('/library/write', methods=['POST'])
 def library_write():
-    """Body: {"query": "...", "pretend": true}."""
+    """Body: {"query": "...", "pretend": true}. `pretend` defaults to true:
+    this writes tags into files, so an omitted flag must not mean "do it"."""
+    if busy := _busy_response():
+        return busy
     data = request.get_json(silent=True) or {}
     try:
-        output = libops.write(data.get('query', ''), bool(data.get('pretend')))
+        output = libops.write(data.get('query', ''),
+                              bool(data.get('pretend', True)))
     except UserError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True, 'output': output})
@@ -266,26 +341,51 @@ def library_missing():
 def library_remove_preview():
     """Body: {"query": "..."}."""
     data = request.get_json(silent=True) or {}
+    query = data.get('query', '')
+    # Parse first, so a malformed query is a 400 (via the UserError handler)
+    # rather than being swallowed below and reported as "nothing matches" —
+    # this preview is what gates the destructive remove, so the two cases
+    # must not look identical.
+    libops.split_query(query)
     try:
-        items = libops.preview_remove(data.get('query', ''))
+        items = libops.preview_remove(query)
     except UserError:
-        items = []
+        items = []          # beets raises this when nothing matches
     return jsonify({'ok': True, 'items': items})
 
 
 @app.route('/library/remove', methods=['POST'])
 def library_remove():
-    """Body: {"query": "...", "delete_files": false}. "Remove short files"
-    is the same call with query=length:..N, built client-side."""
+    """Body: {"query": "...", "expect": 12, "delete_files": false}.
+    "Remove short files" is the same call with query=length:..N, built
+    client-side.
+
+    `expect` is the item count the caller previewed and is required, because
+    libops.remove() passes force=True to beets — the preview *is* the
+    confirmation, so this endpoint has to verify one actually happened and
+    still describes the same set. Mismatch means the library changed under
+    the caller, and the answer is to preview again rather than to guess.
+    """
+    if busy := _busy_response():
+        return busy
     data = request.get_json(silent=True) or {}
     query = data.get('query', '')
+    expect = data.get('expect')
     if not query.strip():
         return jsonify({'ok': False, 'error': 'query is required'}), 400
+    if not isinstance(expect, int) or isinstance(expect, bool):
+        return jsonify({'ok': False,
+                        'error': 'expect (the previewed item count) is required'}), 400
     try:
+        actual = len(libops.preview_remove(query))
+        if actual != expect:
+            return jsonify({'ok': False, 'error': (
+                f'the library changed since the preview — {actual} items match '
+                f'now, not {expect}. Preview again.')}), 409
         libops.remove(query, bool(data.get('delete_files')))
     except UserError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'removed': actual})
 
 
 def _known_track_keys(con):
@@ -369,6 +469,20 @@ def _scan_files(dir_path, exclude, exts=None):
         yield f
 
 
+def _walk_roots(dir_path):
+    """Immediate subdirectories of dir_path, sorted, symlinks excluded.
+
+    `rglob` doesn't follow symlinks inside a tree, but it does walk whatever
+    root it is handed — and `is_dir()` follows symlinks, so a symlinked
+    subfolder pointing at `/` used to become a walk root and take the whole
+    filesystem with it (confirmed live in issue #30: the request never
+    returned). Walking the `dir` the caller explicitly named is intended;
+    silently following a symlink found inside it is not.
+    """
+    return sorted(p for p in Path(dir_path).iterdir()
+                  if p.is_dir() and not p.is_symlink())
+
+
 def _parse_exts(raw):
     """'wav,aiff' -> {'.wav', '.aiff'}, or None (meaning AUDIO_EXTENSIONS)
     if empty."""
@@ -414,12 +528,9 @@ def scan_save_list():
     exclude = _parse_exclude(data.get('exclude', ''))
     dest = (data.get('dest') or '~/Desktop/music_list.txt').strip()
     files = sorted(str(f) for f in _scan_files(dir_path, exclude))
-    path = Path(os.path.expanduser(dest))
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('\n'.join(files) + ('\n' if files else ''))
-    except OSError as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+    path, error = _write_list(dest, files)
+    if error:
+        return jsonify({'ok': False, 'error': error}), 400
     return jsonify({'ok': True, 'count': len(files), 'path': str(path)})
 
 
@@ -431,7 +542,7 @@ def scan_sizes():
     if not dir_path or not os.path.isdir(dir_path):
         return jsonify({'ok': False, 'error': 'no such directory'}), 400
     folders = []
-    for sub in sorted(p for p in Path(dir_path).iterdir() if p.is_dir()):
+    for sub in _walk_roots(dir_path):
         size = sum(f.stat().st_size for f in sub.rglob('*') if f.is_file())
         folders.append({'path': str(sub), 'size_bytes': size})
     return jsonify({'ok': True, 'folders': folders})
@@ -479,13 +590,9 @@ def export_m3u():
         return jsonify({'ok': False, 'error': 'dest is required'}), 400
     lib = importsession.get_library()
     items = list(lib.items(libops.split_query(data.get('query', ''))))
-    path = Path(os.path.expanduser(dest))
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        lines = [displayable_path(i.path) for i in items]
-        path.write_text('\n'.join(lines) + ('\n' if lines else ''))
-    except OSError as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+    path, error = _write_list(dest, [displayable_path(i.path) for i in items])
+    if error:
+        return jsonify({'ok': False, 'error': error}), 400
     return jsonify({'ok': True, 'count': len(items), 'path': str(path)})
 
 
@@ -504,7 +611,7 @@ def export_playlists():
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     written = []
-    for sub in sorted(p for p in Path(src).iterdir() if p.is_dir()):
+    for sub in _walk_roots(src):
         files = sorted(
             f for f in sub.rglob('*')
             if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
@@ -512,7 +619,8 @@ def export_playlists():
         if not files:
             continue
         out = dest_dir / f'{sub.name}.m3u'
-        out.write_text('\n'.join(str(f) for f in files) + '\n')
+        out.write_text('\n'.join(str(f) for f in files) + '\n',
+                       errors='surrogateescape')
         written.append(out.name)
 
     return jsonify({'ok': True, 'playlists': written, 'dest': str(dest_dir)})

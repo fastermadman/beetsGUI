@@ -18,6 +18,7 @@ from platform import python_version
 
 import beets
 from beets import library, plugins
+from beets.ui import UserError
 from beets.ui.commands.remove import remove_items as _remove_items
 from beets.ui.commands.update import update_items as _update_items
 from beets.ui.commands.utils import do_query
@@ -35,8 +36,29 @@ from importsession import get_library
 _console_lock = threading.Lock()
 
 
+# Fields that aren't metadata. `path` is the sharpest: setting it redirects
+# try_sync's tag write to whatever file the new path names, and then store()
+# persists it, so the real file is orphaned and an unrelated media file gets
+# this item's tags. `id`/`album_id` collide database rows. beets' own `beet
+# modify` allows all three, but there the user typed the field name; here it
+# arrives in a JSON body behind a free-text input.
+PROTECTED_FIELDS = {'path', 'id', 'album_id'}
+
+
 def split_query(query):
-    return shlex.split(query) if query else []
+    """Split a beets query string. Raises UserError on unbalanced quotes,
+    which the endpoints turn into a 400 rather than a 500."""
+    if not query:
+        return []
+    try:
+        return shlex.split(query)
+    except ValueError as e:
+        raise UserError(f'could not parse query: {e}')
+
+
+def _check_field(field):
+    if field in PROTECTED_FIELDS:
+        raise UserError(f'{field} is not an editable metadata field')
 
 
 def _capture(fn, *args, **kwargs):
@@ -50,6 +72,7 @@ def _capture(fn, *args, **kwargs):
 
 def preview_modify(field, value, query):
     """Items the query matches, with their current and would-be new value."""
+    _check_field(field)
     lib = get_library()
     items = list(lib.items(split_query(query)))
     template = functemplate.template(value)
@@ -65,6 +88,7 @@ def preview_modify(field, value, query):
 
 def apply_modify(field, value, query):
     """Apply the change previewed by preview_modify(). Returns count changed."""
+    _check_field(field)
     lib = get_library()
     items = list(lib.items(split_query(query)))
     template = functemplate.template(value)
