@@ -14,12 +14,16 @@ import shlex
 import threading
 from contextlib import redirect_stdout
 
-from beets import library
+from platform import python_version
+
+import beets
+from beets import library, plugins
 from beets.ui.commands.remove import remove_items as _remove_items
 from beets.ui.commands.update import update_items as _update_items
 from beets.ui.commands.utils import do_query
 from beets.ui.commands.write import write_items as _write_items
 from beets.util import displayable_path, functemplate
+from beets.util.units import human_bytes, human_seconds
 
 from importsession import get_library
 
@@ -90,6 +94,49 @@ def write(query, pretend):
     """Returns the printed diff lines (tags that would be/were written)."""
     lib = get_library()
     return _capture(_write_items, lib, split_query(query), pretend, False)
+
+
+# ── info ─────────────────────────────────────────────────────────────────
+# Same math as beets' own `stats`/`fields`/`version` commands
+# (beets/ui/commands/stats.py, fields.py) — returned as data instead of
+# printed text, since these are display-only, nothing to preview or apply.
+
+def stats():
+    lib = get_library()
+    items = lib.items()
+    total_size = total_time = total_items = 0
+    artists, albums, album_artists = set(), set(), set()
+    for item in items:
+        total_size += int(item.length * item.bitrate / 8)
+        total_time += item.length
+        total_items += 1
+        artists.add(item.artist)
+        album_artists.add(item.albumartist)
+        if item.album_id:
+            albums.add(item.album_id)
+    return {
+        'tracks': total_items,
+        'total_time': human_seconds(total_time),
+        'total_size': human_bytes(total_size),
+        'artists': len(artists),
+        'albums': len(albums),
+        'album_artists': len(album_artists),
+    }
+
+
+def fields():
+    return {
+        'item_fields': sorted(library.Item.all_keys()),
+        'album_fields': sorted(library.Album.all_keys()),
+    }
+
+
+def version():
+    return {
+        'beets': beets.__version__,
+        'python': python_version(),
+        'plugins': sorted(p.name for p in plugins.find_plugins()),
+    }
 
 
 # ── missing ──────────────────────────────────────────────────────────────

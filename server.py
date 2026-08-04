@@ -198,6 +198,21 @@ def delete_duplicate():
     return jsonify({'ok': True})
 
 
+@app.route('/info/stats')
+def info_stats():
+    return jsonify({'ok': True, **libops.stats()})
+
+
+@app.route('/info/fields')
+def info_fields():
+    return jsonify({'ok': True, **libops.fields()})
+
+
+@app.route('/info/version')
+def info_version():
+    return jsonify({'ok': True, **libops.version()})
+
+
 @app.route('/library/modify/preview', methods=['POST'])
 def library_modify_preview():
     """Body: {"field": "artist", "value": "Burial", "query": "album:Untrue"}."""

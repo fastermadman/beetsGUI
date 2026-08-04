@@ -352,11 +352,11 @@
       <hr class="divider">
       <div class="section-title" style="margin-bottom:0.5rem;">Quick commands</div>
       <div class="btn-row">
-        <button class="btn" onclick="setCmd('beet stats')">beet stats</button>
-        <button class="btn" onclick="setCmd('beet fields')">beet fields</button>
-        <button class="btn" onclick="setCmd('beet version')">beet version</button>
-        <button class="btn" onclick="setCmd('while true; do beet list -a | wc -l; sleep 2; done')" title="Monitor the library (replaces watch on macOS)">monitor (loop)</button>
+        <button class="btn" onclick="showStats()">Stats</button>
+        <button class="btn" onclick="showFields()">Fields</button>
+        <button class="btn" onclick="showVersion()">Version</button>
       </div>
+      <div id="info-results"></div>
 
       <hr class="divider">
       <div class="section">
@@ -464,9 +464,10 @@
           <hr class="divider">
           <div style="font-size:10px; color:var(--text3); margin-bottom:0.5rem;">Delete originals from the database AFTER verifying (files stay on disk):</div>
           <div class="btn-row">
-            <button class="btn btn-warn" onclick="setCmd('beet remove format:AIFF')">⚠ Remove AIFF from DB</button>
-            <button class="btn btn-warn" onclick="setCmd('beet remove format:WAV')">⚠ Remove WAV from DB</button>
+            <button class="btn btn-warn" onclick="removeFormat('AIFF')">⚠ Remove AIFF from DB</button>
+            <button class="btn btn-warn" onclick="removeFormat('WAV')">⚠ Remove WAV from DB</button>
           </div>
+          <div id="remove-format-results"></div>
         </div>
 
         <div style="margin-top:1rem;">
@@ -723,8 +724,9 @@
       <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;"><b>beet version</b> (not --plugins) shows active plugins.<br>Plugins only activate when listed under <span class="mono">plugins:</span> in config.yaml.<br>⚠ Never run <span class="mono">beet config -e</span> while the GUI is editing.</div>
       <div class="btn-row">
         <button class="btn btn-primary" onclick="buildConfig(); document.getElementById('config-out').scrollIntoView({behavior:'smooth'})"><span>Generate</span></button>
-        <button class="btn" onclick="setCmd('beet version')">beet version</button>
+        <button class="btn" onclick="showVersion('prefs-version-results')">beet version</button>
       </div>
+      <div id="prefs-version-results"></div>
     </div>
   </dialog>
 
@@ -1258,6 +1260,57 @@ function showMissing(){
         '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(a.artist||'Unknown artist')+' — '+escapeHtml(a.album||'Untitled')+'</div>'+
         '<div class="lib-row-meta">'+a.have+' / '+a.total+' tracks</div></div>'
       ).join('')+'</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+
+// ── Quick info ────────────────────────────────────────────────────────────────
+function showStats(){
+  const el=document.getElementById('info-results');
+  el.innerHTML='<div class="lib-empty">Loading…</div>';
+  fetch('/info/stats').then(r=>r.json()).then(data=>{
+    if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
+    el.innerHTML='<div class="lib-results"><div class="lib-row"><div class="lib-row-title">Tracks</div><div class="lib-row-meta">'+data.tracks+'</div></div>'+
+      '<div class="lib-row"><div class="lib-row-title">Total time</div><div class="lib-row-meta">'+escapeHtml(data.total_time)+'</div></div>'+
+      '<div class="lib-row"><div class="lib-row-title">Total size</div><div class="lib-row-meta">'+escapeHtml(data.total_size)+'</div></div>'+
+      '<div class="lib-row"><div class="lib-row-title">Artists</div><div class="lib-row-meta">'+data.artists+'</div></div>'+
+      '<div class="lib-row"><div class="lib-row-title">Albums</div><div class="lib-row-meta">'+data.albums+'</div></div>'+
+      '<div class="lib-row"><div class="lib-row-title">Album artists</div><div class="lib-row-meta">'+data.album_artists+'</div></div></div>';
+  }).catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function showFields(){
+  const el=document.getElementById('info-results');
+  el.innerHTML='<div class="lib-empty">Loading…</div>';
+  fetch('/info/fields').then(r=>r.json()).then(data=>{
+    if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
+    el.innerHTML='<div class="lib-count">Item fields</div><div class="path-preview">'+escapeHtml(data.item_fields.join(', '))+'</div>'+
+      '<div class="lib-count" style="margin-top:0.5rem;">Album fields</div><div class="path-preview">'+escapeHtml(data.album_fields.join(', '))+'</div>';
+  }).catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function showVersion(resultsId){
+  const el=document.getElementById(resultsId||'info-results');
+  el.innerHTML='<div class="lib-empty">Loading…</div>';
+  fetch('/info/version').then(r=>r.json()).then(data=>{
+    if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
+    el.innerHTML='<div class="path-preview">beets '+escapeHtml(data.beets)+' · Python '+escapeHtml(data.python)+'<br>'+
+      (data.plugins.length?'plugins: '+escapeHtml(data.plugins.join(', ')):'no plugins loaded')+'</div>';
+  }).catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function removeFormat(fmt){
+  const el=document.getElementById('remove-format-results');
+  const query='format:'+fmt;
+  el.innerHTML='<div class="lib-empty">Checking…</div>';
+  fetch('/library/remove/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.items.length){el.innerHTML='<div class="lib-empty">No '+fmt+' tracks in the library.</div>';return;}
+      if(!confirm('Remove '+data.items.length+' '+fmt+' track'+(data.items.length===1?'':'s')+' from the database? Files stay on disk.'))return;
+      fetch('/library/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,delete_files:false})})
+        .then(r=>r.json())
+        .then(d=>{el.innerHTML=d.ok
+          ?'<div class="alert alert-green">Removed '+data.items.length+' track'+(data.items.length===1?'':'s')+' from the database.</div>'
+          :'<div class="lib-empty">'+escapeHtml(d.error||'Failed.')+'</div>';})
+        .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
