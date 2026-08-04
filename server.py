@@ -30,6 +30,7 @@ try:
     import importsession
     import jobs
     import libops
+    import sync
     import transcode
     from beets.ui import UserError
     from beets.util import displayable_path
@@ -594,6 +595,20 @@ def convert_start():
                               fmt=data.get('format'),
                               pretend=data.get('pretend', True),
                               dest=data.get('dest'))
+    except RuntimeError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 409
+    return jsonify({'ok': True, **job.summary()})
+
+
+@app.route('/sync/start', methods=['POST'])
+def sync_start():
+    """Body: {"kind": "mbsync"|"bpsync", "query": ""}. Progress streams
+    on /jobs/<id>/events."""
+    data = request.get_json(silent=True) or {}
+    try:
+        job = sync.start(data.get('kind', ''), query=data.get('query', ''))
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
     except RuntimeError as e:
         return jsonify({'ok': False, 'error': str(e)}), 409
     return jsonify({'ok': True, **job.summary()})
