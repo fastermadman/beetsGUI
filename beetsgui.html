@@ -417,12 +417,13 @@
           <div class="section-title">Find audio files (fd)</div>
           <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">Uses <span class="mono">fd</span> — ignores .Spotlight-V100, .Trashes and other hidden system folders automatically.</div>
           <div class="drop-zone" id="find-drop2"><span class="drop-icon">📁</span><span>Drag folder here</span><div class="drop-hint">Or type the path</div></div>
-          <div class="field"><label>Path</label><input type="text" id="conv-src" placeholder="/Volumes/Harddisk" oninput="buildConvFindCmd()"></div>
+          <div class="field"><label>Path</label><input type="text" id="conv-src" placeholder="/Volumes/Harddisk"></div>
           <div class="btn-row">
-            <button class="btn" onclick="buildConvFindCmd('wav')"><span>Find WAV</span></button>
-            <button class="btn" onclick="buildConvFindCmd('aiff')"><span>Find AIFF</span></button>
-            <button class="btn" onclick="buildConvFindCmd('count')"><span>Count WAV+AIFF</span></button>
+            <button class="btn" onclick="findFormat('wav')"><span>Find WAV</span></button>
+            <button class="btn" onclick="findFormat('aiff')"><span>Find AIFF</span></button>
+            <button class="btn" onclick="countFormats('wav,aiff')"><span>Count WAV+AIFF</span></button>
           </div>
+          <div id="find-format-results"></div>
         </div>
 
         <div style="margin-top:1rem;">
@@ -791,7 +792,7 @@ function setupDrop(zoneId,targetId,onDrop){
 }
 setupDrop('import-drop','import-path',p=>checkiCloud(p));
 setupDrop('scan-drop','scan-path');
-setupDrop('find-drop2','conv-src',()=>buildConvFindCmd());
+setupDrop('find-drop2','conv-src');
 setupDrop('xld-drop','xld-src',()=>buildXldCmd());
 document.body.addEventListener('dragover',e=>e.preventDefault());
 document.body.addEventListener('drop',e=>e.preventDefault());
@@ -1376,13 +1377,32 @@ function exportPlaylists(){
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
-function buildConvFindCmd(type){
-  const src=document.getElementById('conv-src').value.trim()||'/Volumes/Harddisk';
-  const excl='--exclude Samples --exclude Stems';
-  if(type==='wav')setCmd('fd -e wav . "'+src+'" '+excl);
-  else if(type==='aiff')setCmd('fd -e aiff . "'+src+'" '+excl);
-  else if(type==='count')setCmd('fd -e wav -e aiff . "'+src+'" | wc -l');
-  else setCmd('fd -e wav . "'+src+'" '+excl);
+function findFormat(ext){
+  const src=document.getElementById('conv-src').value.trim();
+  const el=document.getElementById('find-format-results');
+  if(!src){el.innerHTML='<div class="lib-empty">Enter a path above first.</div>';return;}
+  el.innerHTML='<div class="lib-empty">Searching…</div>';
+  fetch('/scan/list?dir='+encodeURIComponent(src)+'&ext='+ext+'&exclude=Samples,Stems')
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
+      if(!data.files.length){el.innerHTML='<div class="lib-empty">No '+ext.toUpperCase()+' files found.</div>';return;}
+      el.innerHTML='<div class="lib-count">'+data.files.length+' file'+(data.files.length===1?'':'s')+'</div>'+
+        '<div class="lib-results">'+data.files.map(f=>'<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f)+'</div></div>').join('')+'</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function countFormats(exts){
+  const src=document.getElementById('conv-src').value.trim();
+  const el=document.getElementById('find-format-results');
+  if(!src){el.innerHTML='<div class="lib-empty">Enter a path above first.</div>';return;}
+  el.innerHTML='<div class="lib-empty">Counting…</div>';
+  fetch('/scan/count?dir='+encodeURIComponent(src)+'&ext='+exts+'&exclude=Samples,Stems')
+    .then(r=>r.json())
+    .then(data=>{
+      el.innerHTML=data.ok?'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
 function startConvert(){
   const fmt=document.getElementById('beet-conv-fmt').value;

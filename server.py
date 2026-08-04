@@ -348,34 +348,58 @@ def _parse_exclude(raw):
     return [e.strip().lower() for e in (raw or '').split(',') if e.strip()]
 
 
-def _scan_files(dir_path, exclude):
-    """Audio files under dir_path, matching AUDIO_EXTENSIONS and not
-    matching any exclude substring — same filter /unimported already uses.
+def _scan_files(dir_path, exclude, exts=None):
+    """Audio files under dir_path, matching `exts` (default:
+    AUDIO_EXTENSIONS) and not matching any exclude substring — same
+    filter /unimported already uses.
 
     ponytail: Path.rglob has no documented guarantee against FIFOs or
     symlink loops on a user-supplied tree. /unimported's use of the same
     call was spot-checked against both during the issue #11 audit and
     returned promptly, but that was an observation, not a contract.
     """
+    exts = exts or AUDIO_EXTENSIONS
     root = Path(dir_path)
     for f in root.rglob('*'):
-        if not f.is_file() or f.suffix.lower() not in AUDIO_EXTENSIONS:
+        if not f.is_file() or f.suffix.lower() not in exts:
             continue
         if exclude and any(e in str(f).lower() for e in exclude):
             continue
         yield f
 
 
+def _parse_exts(raw):
+    """'wav,aiff' -> {'.wav', '.aiff'}, or None (meaning AUDIO_EXTENSIONS)
+    if empty."""
+    exts = {('.' + e.strip().lstrip('.').lower()) for e in (raw or '').split(',') if e.strip()}
+    return exts or None
+
+
 @app.route('/scan/count')
 def scan_count():
     """Count audio files under `dir` — same result as
-    `fd -e mp3 ... . dir | wc -l`."""
+    `fd -e mp3 ... . dir | wc -l`. Optional `ext=wav,aiff` narrows the
+    match, same as `fd -e wav -e aiff`."""
     dir_path = os.path.expanduser(request.args.get('dir', '').strip())
     if not dir_path or not os.path.isdir(dir_path):
         return jsonify({'ok': False, 'error': 'no such directory'}), 400
     exclude = _parse_exclude(request.args.get('exclude', ''))
-    total = sum(1 for _ in _scan_files(dir_path, exclude))
+    exts = _parse_exts(request.args.get('ext', ''))
+    total = sum(1 for _ in _scan_files(dir_path, exclude, exts))
     return jsonify({'ok': True, 'total_files': total})
+
+
+@app.route('/scan/list')
+def scan_list():
+    """List matching audio files under `dir`, optionally filtered to
+    `ext=wav,aiff` — same result as `fd -e wav -e aiff . dir`."""
+    dir_path = os.path.expanduser(request.args.get('dir', '').strip())
+    if not dir_path or not os.path.isdir(dir_path):
+        return jsonify({'ok': False, 'error': 'no such directory'}), 400
+    exclude = _parse_exclude(request.args.get('exclude', ''))
+    exts = _parse_exts(request.args.get('ext', ''))
+    files = sorted(str(f) for f in _scan_files(dir_path, exclude, exts))
+    return jsonify({'ok': True, 'files': files})
 
 
 @app.route('/scan/save-list', methods=['POST'])
