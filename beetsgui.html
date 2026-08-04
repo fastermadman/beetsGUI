@@ -831,7 +831,7 @@ function startImport(){
 }
 
 function checkCurrentImport(){
-  fetch('/import/current').then(r=>r.json()).then(data=>{
+  fetch('/jobs/current').then(r=>r.json()).then(data=>{
     if(!data.id)return;
     attachImport(data.id);
     if(data.decision){importState.decision=data.decision;importState.selected=0;renderDecision();}
@@ -843,7 +843,7 @@ function attachImport(jobId){
   importState.log=[];importState.decision=null;
   setImportUiRunning(true);renderImportProgress();
   if(importState.es)importState.es.close();
-  const es=new EventSource('/import/'+jobId+'/events');
+  const es=new EventSource('/jobs/'+jobId+'/events');
   importState.es=es;
   es.onmessage=e=>handleImportEvent(JSON.parse(e.data));
 }
@@ -869,7 +869,7 @@ function setImportUiRunning(running){
 
 function abortImport(){
   if(!importState.jobId)return;
-  fetch('/import/'+importState.jobId+'/abort',{method:'POST'});
+  fetch('/jobs/'+importState.jobId+'/abort',{method:'POST'});
 }
 
 function importLog(msg){

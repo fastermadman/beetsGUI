@@ -3,7 +3,7 @@
 End-to-end check for the in-process importer.
 
 Boots server.py against a throwaway beets config (BEETSDIR in a temp dir,
-never the real library), then drives /import/* over HTTP exactly as curl
+never the real library), then drives /import/* and /jobs/* over HTTP as curl
 would: start → read the decision off the SSE stream → answer → assert the
 result landed in library.db.
 
@@ -39,7 +39,7 @@ def post(path, payload):
 
 def events(job_id):
     """Yield decoded SSE events until 'done'."""
-    stream = urllib.request.urlopen(f'{BASE}/import/{job_id}/events', timeout=180)
+    stream = urllib.request.urlopen(f'{BASE}/jobs/{job_id}/events', timeout=180)
     for raw in stream:
         line = raw.decode().rstrip('\n')
         if not line.startswith('data: '):
@@ -266,7 +266,7 @@ def main():
         stream = run(src / 'three')
         for event in stream:
             if event['type'] == 'decision':
-                code, reply = post(f'/import/{job[0]}/abort', {})
+                code, reply = post(f'/jobs/{job[0]}/abort', {})
                 assert code == 200 and reply['finished'], reply
                 break
         tail = list(stream)
@@ -298,7 +298,7 @@ def main():
             if len(seen) == 1:
                 decide(event, choice='asis')     # finishes 'Multi A'
             else:
-                post(f'/import/{job[0]}/abort', {})
+                post(f'/jobs/{job[0]}/abort', {})
                 break
         list(stream)
         assert seen == ['Multi A', 'Multi B'], seen
@@ -334,7 +334,7 @@ def main():
         assert code == 400, (code, reply)
         code, reply = post('/import/start', {'path': str(src), 'mode': 'wat'})
         assert code == 400, (code, reply)
-        code, reply = post('/import/does-not-exist/abort', {})
+        code, reply = post('/jobs/does-not-exist/abort', {})
         assert code == 404, (code, reply)
 
         # 10. Quality-aware duplicates. `duplicate_keys` defaults to plain
@@ -421,7 +421,7 @@ def main():
         assert albums_in(beetsdir) == before, 'a timed-out import must not import'
         code, body = post('/import/start', {'path': str(src / 'three')})
         assert code == 200, (code, body)       # the slot is free again
-        post(f'/import/{body["id"]}/abort', {})
+        post(f'/jobs/{body["id"]}/abort', {})
         print('ok')
     finally:
         stop_server(proc)

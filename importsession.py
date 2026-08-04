@@ -11,7 +11,9 @@ from the Flask request thread. The handshake is a `queue.Queue` per decision:
 the importer thread waits on it, the request thread puts the answer in it.
 
 Only one import runs at a time — the beets `config` object and the resume
-state in `~/.config/beets/state.pickle` are process-global.
+state in `~/.config/beets/state.pickle` are process-global. That limit is
+enforced in `jobs.py`, and it is shared with the other background jobs
+(cover art, convert), which mutate those same globals.
 """
 import os
 import queue
@@ -22,6 +24,8 @@ from beets import config, context, plugins, ui
 from beets.autotag.hooks import AlbumMatch
 from beets.importer import Action, ImportAbortError, ImportSession
 from beets.util import displayable_path
+
+import jobs
 
 # A blocked decision gives up after this long, so a closed browser tab
 # cannot pin an importer thread forever.
@@ -172,28 +176,27 @@ def _summarize(obj, is_album):
 
 # ── The job: thread, event stream and decision handshake ──────────────────────
 
-class ImportJob:
-    """One import run. Owns the worker thread and the pending decision."""
+class ImportJob(jobs.Job):
+    """One import run. Adds the decision handshake to the base job: the
+    importer thread blocks in `ask()` until a request thread `answer()`s."""
 
     def __init__(self, paths, mode, handling='copy', incremental=False,
                  singleton=False, log_path=None):
-        self.id = uuid.uuid4().hex
+        super().__init__('import')
         self.paths = paths
         self.mode = mode
         self.handling = handling
         self.incremental = incremental
         self.singleton = singleton
         self.log_path = log_path
-        self.events = queue.Queue()
-        self.done = threading.Event()
-        self.aborted = threading.Event()
-        self.decided = 0
+        self.result['decided'] = 0
         self._lock = threading.Lock()
         self._pending = None
-        self.thread = None
 
-    def emit(self, type, **payload):
-        self.events.put({'type': type, **payload})
+    def summary(self):
+        return {'id': self.id, 'kind': self.kind, 'paths': self.paths,
+                'mode': self.mode, 'handling': self.handling,
+                'incremental': self.incremental, 'singleton': self.singleton}
 
     # -- called from importer threads --
 
@@ -228,7 +231,7 @@ class ImportJob:
                 self._pending = None
         if reply is _ABORT:
             raise ImportAbortError()
-        self.decided += 1
+        self.result['decided'] += 1
         return reply
 
     # -- called from Flask request threads --
@@ -240,6 +243,10 @@ class ImportJob:
                 return None
             p = {k: v for k, v in self._pending.items() if k != 'answer'}
         return {'type': 'decision', **p}
+
+    def replay(self):
+        p = self.pending()
+        return [p] if p else []
 
     def answer(self, decision_id, reply):
         """Release a blocked decision. Returns an error string, or None on success."""
@@ -426,40 +433,17 @@ def _apply_options(job):
         config['import']['log'] = job.log_path
 
 
-# ── Job registry ──────────────────────────────────────────────────────────────
-
-_jobs = {}
-_jobs_lock = threading.Lock()
-
-
-def get_job(job_id):
-    return _jobs.get(job_id)
-
-
-def current_job():
-    """The running job, if any — lets a reloaded page rejoin its import."""
-    with _jobs_lock:
-        for job in _jobs.values():
-            if not job.done.is_set():
-                return job
-    return None
-
-
 def _run(job):
-    try:
-        lib = get_library()
-        _apply_options(job)
-        paths = [os.fsencode(p) for p in job.paths]
-        label = job.paths[0] if len(job.paths) == 1 else f'{len(job.paths)} folders'
-        job.emit('status', message=f'Importing {label} ({job.mode})')
-        session = WebImportSession(job, lib, None, paths, None)
-        session.run()
-        plugins.send('import', lib=lib, paths=paths)
-    except Exception as e:
-        job.emit('error', message=f'{type(e).__name__}: {e}')
-    finally:
-        job.emit('done', aborted=job.aborted.is_set(), decided=job.decided)
-        job.done.set()
+    """The import itself. jobs.start() owns the thread, the error handling
+    and the final 'done' event."""
+    lib = get_library()
+    _apply_options(job)
+    paths = [os.fsencode(p) for p in job.paths]
+    label = job.paths[0] if len(job.paths) == 1 else f'{len(job.paths)} folders'
+    job.emit('status', message=f'Importing {label} ({job.mode})')
+    session = WebImportSession(job, lib, None, paths, None)
+    session.run()
+    plugins.send('import', lib=lib, paths=paths)
 
 
 def _resolve_path(path):
@@ -478,7 +462,7 @@ def start(path=None, mode='interactive', paths=None, handling='copy',
     through; beets does its own directory/album grouping on whatever paths
     it receives, same as `beet import path1 path2 ...`.
 
-    Raises ValueError on bad input, RuntimeError if an import is running.
+    Raises ValueError on bad input, RuntimeError if a job is running.
     """
     if mode not in MODES:
         raise ValueError(f'mode must be one of {list(MODES)}')
@@ -492,15 +476,5 @@ def start(path=None, mode='interactive', paths=None, handling='copy',
     if log_path:
         log_path = os.path.abspath(os.path.expanduser(log_path))
 
-    with _jobs_lock:
-        for job in list(_jobs.values()):
-            if job.done.is_set():
-                del _jobs[job.id]
-            else:
-                raise RuntimeError('an import is already running')
-        job = ImportJob(resolved, mode, handling, incremental, singleton, log_path)
-        _jobs[job.id] = job
-
-    job.thread = threading.Thread(target=_run, args=(job,), daemon=True)
-    job.thread.start()
-    return job
+    job = ImportJob(resolved, mode, handling, incremental, singleton, log_path)
+    return jobs.start(job, _run)

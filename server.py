@@ -27,6 +27,7 @@ except ImportError:
 try:
     import duplicates
     import importsession
+    import jobs
     import libops
     from beets.ui import UserError
     from beets.util import displayable_path
@@ -525,33 +526,32 @@ def import_start():
                     'singleton': job.singleton})
 
 
-@app.route('/import/current')
-def import_current():
-    """The running import, if any — lets a reloaded page rejoin its stream."""
-    job = importsession.current_job()
+@app.route('/jobs/current')
+def jobs_current():
+    """The running job, if any — lets a reloaded page rejoin its stream."""
+    job = jobs.current()
     if not job:
         return jsonify({'ok': True, 'id': None})
-    return jsonify({'ok': True, 'id': job.id, 'paths': job.paths, 'mode': job.mode,
-                    'handling': job.handling, 'incremental': job.incremental,
-                    'singleton': job.singleton, 'decision': job.pending()})
+    decision = job.pending() if hasattr(job, 'pending') else None
+    return jsonify({'ok': True, **job.summary(), 'decision': decision})
 
 
-@app.route('/import/<job_id>/events')
-def import_events(job_id):
+@app.route('/jobs/<job_id>/events')
+def job_events(job_id):
     """SSE stream of status, decision and done events. One consumer at a time."""
-    job = importsession.get_job(job_id)
+    job = jobs.get(job_id)
     if not job:
-        return jsonify({'ok': False, 'error': 'unknown import id'}), 404
+        return jsonify({'ok': False, 'error': 'unknown job id'}), 404
 
     def generate():
         # A reconnecting client must not have to wait out the decision timeout,
-        # so replay the waiting decision — but send each one only once, since
-        # the queue may still hold the copy this replaces.
+        # so replay whatever the job says it owes a fresh listener (only
+        # import has anything) — but send each decision only once, since the
+        # queue may still hold the copy this replaces.
         sent = set()
-        pending = job.pending()
-        if pending:
-            sent.add(pending['decision_id'])
-            yield f"data: {json.dumps(pending)}\n\n"
+        for event in job.replay():
+            sent.add(event['decision_id'])
+            yield f"data: {json.dumps(event)}\n\n"
         while True:
             try:
                 event = job.events.get(timeout=15)
@@ -573,29 +573,30 @@ def import_events(job_id):
     })
 
 
+@app.route('/jobs/<job_id>/abort', methods=['POST'])
+def job_abort(job_id):
+    """Cancel the job. Abort is cooperative — the worker stops at its next
+    checkpoint, so this waits for the job to actually finish."""
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({'ok': False, 'error': 'unknown job id'}), 404
+    job.abort()
+    job.done.wait(timeout=30)
+    return jsonify({'ok': True, 'finished': job.done.is_set()})
+
+
 @app.route('/import/<job_id>/decide', methods=['POST'])
 def import_decide(job_id):
     """Answer the waiting decision. Body: {"decision_id": "...", "choice": "...",
     "candidate": 0}."""
-    job = importsession.get_job(job_id)
-    if not job:
+    job = jobs.get(job_id)
+    if not job or not hasattr(job, 'answer'):
         return jsonify({'ok': False, 'error': 'unknown import id'}), 404
     data = request.get_json(silent=True) or {}
     error = job.answer(data.get('decision_id'), data)
     if error:
         return jsonify({'ok': False, 'error': error}), 409
     return jsonify({'ok': True})
-
-
-@app.route('/import/<job_id>/abort', methods=['POST'])
-def import_abort(job_id):
-    """Cancel the import and release any blocked decision."""
-    job = importsession.get_job(job_id)
-    if not job:
-        return jsonify({'ok': False, 'error': 'unknown import id'}), 404
-    job.abort()
-    job.done.wait(timeout=30)
-    return jsonify({'ok': True, 'finished': job.done.is_set()})
 
 
 # ── Start ───────────────────────────────────────────────────────────────────────
