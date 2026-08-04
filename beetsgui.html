@@ -362,17 +362,15 @@
       <div class="section">
         <div class="section-title">
           <span>Duplicates</span>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">During import: beets ranks quality automatically and asks only when it can't tell. After import: the duplicates plugin compares on MusicBrainz ID, not filenames.</span></span>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">During import: beets ranks quality automatically and asks only when it can't tell. This scan uses the same rule after the fact — grouping by artist+album, lossless never counted worse than lossy.</span></span>
         </div>
         <div class="alert alert-yellow">Always preview first — delete buttons are red and secondary.</div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="setCmd(&quot;beet duplicates -f '$path $format $bitrate'&quot;)"><span>Preview duplicates (details)</span></button>
+          <button class="btn btn-primary" onclick="scanDuplicates()"><span>Scan for duplicates</span></button>
         </div>
-        <div class="btn-row">
-          <button class="btn btn-danger" onclick="confirmDangerousCmd('beet duplicates -k bitrate -d', 'This permanently deletes all duplicates with the lowest bitrate. Run preview FIRST. Continue?')">⚠ <span>Delete lowest bitrate</span></button>
-          <button class="btn btn-danger" onclick="confirmDangerousCmd('beet duplicates -k format -d', 'This permanently deletes all duplicates with the lowest format. Run preview FIRST. Continue?')">⚠ <span>Delete lowest format</span></button>
-        </div>
-        <div class="alert alert-red" style="font-size:10px;">Delete commands remove files permanently. Always run preview first.</div>
+        <div class="lib-count" id="dup-count"></div>
+        <div id="dup-results"></div>
+        <div class="alert alert-red" style="font-size:10px;">Deleting with "also remove files" removes them permanently. Preview each group before deleting.</div>
       </div>
       <div class="section">
         <div class="section-title">Cover art</div>
@@ -1066,6 +1064,58 @@ function renderLibrary(data,q){
     '</div>'
   ).join('');
 }
+
+// ── Duplicates ────────────────────────────────────────────────────────────────
+let dupGroups=[];
+function scanDuplicates(){
+  const results=document.getElementById('dup-results'),count=document.getElementById('dup-count');
+  results.innerHTML='<div class="lib-empty">Scanning…</div>';count.textContent='';
+  fetch('/duplicates')
+    .then(r=>r.json())
+    .then(data=>renderDuplicates(data))
+    .catch(()=>{results.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function renderDuplicates(data){
+  const results=document.getElementById('dup-results'),count=document.getElementById('dup-count');
+  if(!data.ok){count.textContent='';results.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Scan failed.')+'</div>';return;}
+  dupGroups=data.groups;
+  if(!dupGroups.length){count.textContent='';results.innerHTML='<div class="lib-empty">No duplicate albums found.</div>';return;}
+  count.textContent=dupGroups.length+' duplicate group'+(dupGroups.length===1?'':'s');
+  results.innerHTML=dupGroups.map((g,gi)=>renderDupGroup(g,gi)).join('');
+}
+function renderDupGroup(albums,gi){
+  const tie=albums.every(a=>a.is_best);
+  let html='<div class="candidate-list" style="margin-bottom:1rem;">'+
+    '<div class="lib-row-meta" style="margin-bottom:0.3rem;">'+escapeHtml(albums[0].artist||'Unknown artist')+' — '+escapeHtml(albums[0].album||'Untitled')+'</div>';
+  html+=albums.map((a,ai)=>
+    '<div class="candidate-card">'+
+      '<div class="candidate-head">'+
+        '<div class="candidate-title">'+(a.year?'('+a.year+') ':'')+escapeHtml(qualityLabel(a))+'</div>'+
+        (a.is_best&&!tie?'<span class="rec-badge">keep</span>':'')+
+      '</div>'+
+      '<div class="lib-row-meta">'+a.tracks+' track'+(a.tracks===1?'':'s')+'</div>'+
+      '<div class="btn-row" style="margin-top:0.4rem;margin-bottom:0;">'+
+        '<button class="btn btn-warn btn-sm" onclick="deleteDupAlbum('+gi+','+ai+',false)">Remove from library</button>'+
+        '<button class="btn btn-danger btn-sm" onclick="deleteDupAlbum('+gi+','+ai+',true)">⚠ Remove + delete files</button>'+
+      '</div>'+
+    '</div>'
+  ).join('');
+  return html+'</div>';
+}
+function deleteDupAlbum(gi,ai,deleteFiles){
+  const album=dupGroups[gi][ai];
+  const msg=(deleteFiles?'Permanently delete files for ':'Remove from library (files stay on disk) for ')+
+    (album.artist||'Unknown artist')+' — '+(album.album||'Untitled')+'?';
+  if(!confirm(msg))return;
+  fetch('/duplicates/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:album.id,delete_files:deleteFiles})})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){alert('Could not delete: '+data.error);return;}
+      scanDuplicates();
+    })
+    .catch(()=>alert('Could not reach the server.'));
+}
+
 function buildModifyCmd(){
   const f=document.getElementById('mod-field').value.trim();
   const v=document.getElementById('mod-value').value.trim();

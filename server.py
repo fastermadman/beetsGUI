@@ -25,6 +25,7 @@ except ImportError:
     sys.exit(1)
 
 try:
+    import duplicates
     import importsession
     from mediafile import MediaFile, UnreadableFileError
 except ImportError as e:
@@ -165,6 +166,30 @@ def library():
         return jsonify({'ok': True, 'albums': albums, 'total': total})
     except sqlite3.Error as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/duplicates')
+def list_duplicates():
+    """Existing albums grouped by (albumartist, album), best copy first."""
+    try:
+        groups = duplicates.find_duplicate_groups()
+        return jsonify({'ok': True, 'groups': groups})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/duplicates/delete', methods=['POST'])
+def delete_duplicate():
+    """Remove one album (by id) from the library. Body: {"id": 1,
+    "delete_files": true}. Always a single explicit target."""
+    data = request.get_json(silent=True) or {}
+    album_id = data.get('id')
+    if not isinstance(album_id, int):
+        return jsonify({'ok': False, 'error': 'id must be an album id'}), 400
+    found = duplicates.delete_album(album_id, bool(data.get('delete_files')))
+    if not found:
+        return jsonify({'ok': False, 'error': 'no such album'}), 404
+    return jsonify({'ok': True})
 
 
 def _known_track_keys(con):
