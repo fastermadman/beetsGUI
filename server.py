@@ -27,6 +27,8 @@ except ImportError:
 try:
     import duplicates
     import importsession
+    import libops
+    from beets.ui import UserError
     from mediafile import MediaFile, UnreadableFileError
 except ImportError as e:
     print(f"beets not importable: {e}")
@@ -189,6 +191,80 @@ def delete_duplicate():
     found = duplicates.delete_album(album_id, bool(data.get('delete_files')))
     if not found:
         return jsonify({'ok': False, 'error': 'no such album'}), 404
+    return jsonify({'ok': True})
+
+
+@app.route('/library/modify/preview', methods=['POST'])
+def library_modify_preview():
+    """Body: {"field": "artist", "value": "Burial", "query": "album:Untrue"}."""
+    data = request.get_json(silent=True) or {}
+    field, value = data.get('field'), data.get('value')
+    if not field or value is None:
+        return jsonify({'ok': False, 'error': 'field and value are required'}), 400
+    changes = libops.preview_modify(field, value, data.get('query', ''))
+    return jsonify({'ok': True, 'changes': changes})
+
+
+@app.route('/library/modify', methods=['POST'])
+def library_modify():
+    data = request.get_json(silent=True) or {}
+    field, value = data.get('field'), data.get('value')
+    if not field or value is None:
+        return jsonify({'ok': False, 'error': 'field and value are required'}), 400
+    changed = libops.apply_modify(field, value, data.get('query', ''))
+    return jsonify({'ok': True, 'changed': changed})
+
+
+@app.route('/library/update', methods=['POST'])
+def library_update():
+    """Body: {"query": "...", "pretend": true}."""
+    data = request.get_json(silent=True) or {}
+    try:
+        output = libops.update(data.get('query', ''), bool(data.get('pretend')))
+    except UserError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    return jsonify({'ok': True, 'output': output})
+
+
+@app.route('/library/write', methods=['POST'])
+def library_write():
+    """Body: {"query": "...", "pretend": true}."""
+    data = request.get_json(silent=True) or {}
+    try:
+        output = libops.write(data.get('query', ''), bool(data.get('pretend')))
+    except UserError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    return jsonify({'ok': True, 'output': output})
+
+
+@app.route('/library/missing')
+def library_missing():
+    return jsonify({'ok': True, 'albums': libops.missing_albums()})
+
+
+@app.route('/library/remove/preview', methods=['POST'])
+def library_remove_preview():
+    """Body: {"query": "..."}."""
+    data = request.get_json(silent=True) or {}
+    try:
+        items = libops.preview_remove(data.get('query', ''))
+    except UserError:
+        items = []
+    return jsonify({'ok': True, 'items': items})
+
+
+@app.route('/library/remove', methods=['POST'])
+def library_remove():
+    """Body: {"query": "...", "delete_files": false}. "Remove short files"
+    is the same call with query=length:..N, built client-side."""
+    data = request.get_json(silent=True) or {}
+    query = data.get('query', '')
+    if not query.strip():
+        return jsonify({'ok': False, 'error': 'query is required'}), 400
+    try:
+        libops.remove(query, bool(data.get('delete_files')))
+    except UserError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True})
 
 

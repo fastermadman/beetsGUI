@@ -382,19 +382,30 @@
       <div class="section">
         <div class="section-title">Metadata</div>
         <div class="field-row">
-          <div class="field"><label>Field</label><input type="text" id="mod-field" placeholder="artist" oninput="buildModifyCmd()"></div>
-          <div class="field"><label>New value</label><input type="text" id="mod-value" placeholder="Burial" oninput="buildModifyCmd()"></div>
-          <div class="field"><label>Query</label><input type="text" id="mod-query" placeholder="album:Untrue" oninput="buildModifyCmd()"></div>
+          <div class="field"><label>Field</label><input type="text" id="mod-field" placeholder="artist"></div>
+          <div class="field"><label>New value</label><input type="text" id="mod-value" placeholder="Burial"></div>
+          <div class="field"><label>Query</label><input type="text" id="mod-query" placeholder="album:Untrue"></div>
         </div>
-        <div class="btn-row"><button class="btn btn-primary" onclick="buildModifyCmd()"><span>Build modify command</span></button></div>
-        <hr class="divider">
         <div class="btn-row">
-          <button class="btn" onclick="setCmd('beet update')">update</button>
-          <button class="btn" onclick="setCmd('beet write')">write</button>
-          <button class="btn" onclick="setCmd('beet mbsync')">mbsync</button>
-          <button class="btn" onclick="setCmd('beet bpsync')">bpsync</button>
-          <button class="btn" onclick="setCmd('beet missing')">missing</button>
+          <button class="btn btn-primary" onclick="previewModify()"><span>Preview changes</span></button>
         </div>
+        <div id="mod-results"></div>
+        <hr class="divider">
+        <div class="field"><label>Query (all fields if empty)</label><input type="text" id="maint-query" placeholder="album:Untrue"></div>
+        <div class="btn-row">
+          <button class="btn" onclick="runUpdate(true)">Preview update</button>
+          <button class="btn btn-primary" onclick="runUpdate(false)">Apply update</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="runWrite(true)">Preview write</button>
+          <button class="btn btn-primary" onclick="runWrite(false)">Apply write</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="setCmd('beet mbsync')">mbsync <span class="badge">copy-paste — network per track</span></button>
+          <button class="btn" onclick="setCmd('beet bpsync')">bpsync <span class="badge">copy-paste — network per track</span></button>
+          <button class="btn" onclick="showMissing()">missing</button>
+        </div>
+        <div id="maint-results"></div>
       </div>
 
       <details class="section">
@@ -479,22 +490,27 @@
         <div style="margin-top:0.6rem;">
           <div class="field"><label>Query</label><input type="text" id="rm-query" placeholder="artist:Burial album:Untrue"></div>
           <div class="btn-row">
-            <button class="btn btn-warn" onclick="buildRemoveCmd(false)">⚠ <span>Remove from database</span></button>
-            <button class="btn btn-danger" onclick="confirmDangerousCmd(buildRemoveCmdStr(true), 'This permanently deletes the file from disk. Run preview FIRST. Continue?')">⚠ <span>Also delete file from disk</span></button>
+            <button class="btn btn-sm" onclick="previewRemove('rm-query')">Preview</button>
           </div>
-          <div class="alert alert-yellow" style="font-size:10px;"><b>beet remove</b> only removes from database, not disk. <b>beet remove -d</b> deletes the file permanently.</div>
+          <div id="rm-results"></div>
+          <div class="btn-row">
+            <button class="btn btn-warn" onclick="doRemove('rm-query',false)">⚠ <span>Remove from database</span></button>
+            <button class="btn btn-danger" onclick="doRemove('rm-query',true)">⚠ <span>Also delete file from disk</span></button>
+          </div>
+          <div class="alert alert-yellow" style="font-size:10px;"><b>Remove from database</b> only removes from database, not disk. <b>Also delete file from disk</b> deletes the file permanently.</div>
           <hr class="divider">
           <div class="section-title" style="margin-bottom:0.4rem;">Remove short files (one shots) from database</div>
           <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Removes tracks under X seconds from the database (files stay on disk). Beets has no duration import filter — use this after importing.</div>
           <div class="field-row">
-            <div class="field" style="max-width:120px;"><label>Max seconds</label><input type="number" id="short-secs" value="10" min="1" max="60" oninput="buildShortRemoveCmd()"></div>
+            <div class="field" style="max-width:120px;"><label>Max seconds</label><input type="number" id="short-secs" value="10" min="1" max="60"></div>
             <div class="field" style="align-self:flex-end;">
-              <button class="btn btn-sm" onclick="buildShortRemovePreview()">Preview short files</button>
+              <button class="btn btn-sm" onclick="previewRemove('short-query')">Preview short files</button>
             </div>
             <div class="field" style="align-self:flex-end;">
-              <button class="btn btn-warn btn-sm" onclick="buildShortRemoveCmd()">⚠ Remove from DB</button>
+              <button class="btn btn-warn btn-sm" onclick="doRemove('short-query',false)">⚠ Remove from DB</button>
             </div>
           </div>
+          <div id="short-results"></div>
         </div>
       </details>
     </div>
@@ -742,11 +758,6 @@ function copyCmd(){
     b.textContent='Copied!';b.classList.add('copied');
     setTimeout(()=>{b.textContent='Copy';b.classList.remove('copied');},1800);
   });
-}
-
-// Confirm dialog for dangerous (destructive) commands
-function confirmDangerousCmd(cmd, msg) {
-  if (confirm(msg)) { setCmd(cmd); }
 }
 
 function setupDrop(zoneId,targetId,onDrop){
@@ -1116,25 +1127,104 @@ function deleteDupAlbum(gi,ai,deleteFiles){
     .catch(()=>alert('Could not reach the server.'));
 }
 
-function buildModifyCmd(){
-  const f=document.getElementById('mod-field').value.trim();
-  const v=document.getElementById('mod-value').value.trim();
-  const q=document.getElementById('mod-query').value.trim();
-  if(!f||!v){setCmd('beet modify <field>="<value>" <query>');return;}
-  let cmd='beet modify '+f+'="'+v+'"';if(q)cmd+=' '+q;setCmd(cmd);
+// ── Metadata: modify / update / write / missing ─────────────────────────────
+function previewModify(){
+  const field=document.getElementById('mod-field').value.trim();
+  const value=document.getElementById('mod-value').value.trim();
+  const query=document.getElementById('mod-query').value.trim();
+  const el=document.getElementById('mod-results');
+  if(!field||!value){el.innerHTML='<div class="lib-empty">Field and new value are required.</div>';return;}
+  el.innerHTML='<div class="lib-empty">Checking…</div>';
+  fetch('/library/modify/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({field,value,query})})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>';return;}
+      if(!data.changes.length){el.innerHTML='<div class="lib-empty">No changes — nothing matches, or values are already set.</div>';return;}
+      el.innerHTML='<div class="lib-results">'+data.changes.map(c=>
+        '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(c.label)+'</div>'+
+        '<div class="lib-row-meta">'+escapeHtml(String(c.old??'—'))+' → <span class="diff">'+escapeHtml(String(c.new))+'</span></div></div>'
+      ).join('')+'</div>'+
+      '<div class="btn-row"><button class="btn btn-primary btn-sm" onclick="applyModify()">Apply to '+data.changes.length+' item'+(data.changes.length===1?'':'s')+'</button></div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
-function buildRemoveCmdStr(del){
-  const q=document.getElementById('rm-query').value.trim()||'<query>';
-  return del?'beet remove -d '+q:'beet remove '+q;
+function applyModify(){
+  const field=document.getElementById('mod-field').value.trim();
+  const value=document.getElementById('mod-value').value.trim();
+  const query=document.getElementById('mod-query').value.trim();
+  if(!confirm('Apply this change and write tags to file?'))return;
+  fetch('/library/modify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({field,value,query})})
+    .then(r=>r.json())
+    .then(data=>{
+      const el=document.getElementById('mod-results');
+      el.innerHTML=data.ok?'<div class="alert alert-green">Changed '+data.changed+' item'+(data.changed===1?'':'s')+'.</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+    })
+    .catch(()=>alert('Could not reach the server.'));
 }
-function buildRemoveCmd(del){setCmd(buildRemoveCmdStr(del));}
-function buildShortRemovePreview(){
-  const secs=document.getElementById('short-secs').value||10;
-  setCmd('beet list length:..'+secs);
+function runMaint(kind,pretend){
+  const query=document.getElementById('maint-query').value.trim();
+  const el=document.getElementById('maint-results');
+  el.innerHTML='<div class="lib-empty">Working…</div>';
+  fetch('/library/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,pretend})})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
+      el.innerHTML=data.output.length
+        ?'<pre class="pre-out">'+escapeHtml(data.output.join('\n'))+'</pre>'
+        :'<div class="lib-empty">No changes'+(pretend?' — nothing would happen':'')+'.</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
-function buildShortRemoveCmd(){
-  const secs=document.getElementById('short-secs').value||10;
-  setCmd('beet remove length:..'+secs);
+function runUpdate(pretend){runMaint('update',pretend);}
+function runWrite(pretend){runMaint('write',pretend);}
+function showMissing(){
+  const el=document.getElementById('maint-results');
+  el.innerHTML='<div class="lib-empty">Loading…</div>';
+  fetch('/library/missing')
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.albums.length){el.innerHTML='<div class="lib-empty">No albums with missing tracks.</div>';return;}
+      el.innerHTML='<div class="lib-results">'+data.albums.map(a=>
+        '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(a.artist||'Unknown artist')+' — '+escapeHtml(a.album||'Untitled')+'</div>'+
+        '<div class="lib-row-meta">'+a.have+' / '+a.total+' tracks</div></div>'
+      ).join('')+'</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+
+// ── Remove from library ──────────────────────────────────────────────────────
+function removeQuery(which){
+  return which==='short-query'
+    ?'length:..'+(document.getElementById('short-secs').value||10)
+    :document.getElementById(which).value.trim();
+}
+function removeResultsEl(which){return document.getElementById(which==='short-query'?'short-results':'rm-results');}
+function previewRemove(which){
+  const query=removeQuery(which),el=removeResultsEl(which);
+  if(!query){el.innerHTML='<div class="lib-empty">Enter a query.</div>';return;}
+  el.innerHTML='<div class="lib-empty">Checking…</div>';
+  fetch('/library/remove/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.items.length){el.innerHTML='<div class="lib-empty">No matching tracks.</div>';return;}
+      el.innerHTML='<div class="lib-count">'+data.items.length+' track'+(data.items.length===1?'':'s')+' match</div>'+
+        '<div class="lib-results">'+data.items.map(i=>
+          '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(i.label)+'</div></div>'
+        ).join('')+'</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function doRemove(which,deleteFiles){
+  const query=removeQuery(which),el=removeResultsEl(which);
+  if(!query){alert('Enter a query first.');return;}
+  const msg=(deleteFiles?'Permanently delete files matching "':'Remove from database (files stay on disk) matching "')+query+'"? Preview first to check what matches.';
+  if(!confirm(msg))return;
+  fetch('/library/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,delete_files:deleteFiles})})
+    .then(r=>r.json())
+    .then(data=>{
+      el.innerHTML=data.ok?'<div class="alert alert-green">Done.</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+    })
+    .catch(()=>alert('Could not reach the server.'));
 }
 function buildPlaylistExportCmd(){
   const src=document.getElementById('pl-path').value.trim()||'/Volumes/Harddisk/OldPlaylists';

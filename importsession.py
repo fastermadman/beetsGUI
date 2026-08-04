@@ -18,7 +18,7 @@ import queue
 import threading
 import uuid
 
-from beets import config, plugins, ui
+from beets import config, context, plugins, ui
 from beets.autotag.hooks import AlbumMatch
 from beets.importer import Action, ImportAbortError, ImportSession
 from beets.util import displayable_path
@@ -385,13 +385,24 @@ _lib_lock = threading.Lock()
 
 
 def get_library():
-    """Open the beets library once, from the config beets itself would use."""
+    """Open the beets library once, from the config beets itself would use.
+
+    beets binds its "music directory" (used to resolve an item's path,
+    which is stored relative to it) via a contextvars.ContextVar, set once
+    in Library.__init__ — on whichever thread happens to trigger that first
+    call. Flask's threaded dev server hands each request a new thread, so
+    every request on a *different* thread than the one that opened the
+    library would see item.path resolve to the bare relative bytes instead
+    of an absolute path. Re-binding it here, on every call, fixes that for
+    the calling thread regardless of which thread did the actual open.
+    """
     global _lib
     with _lib_lock:
         if _lib is None:
             plugins.load_plugins()
             _lib = ui._open_library(config)
             plugins.send('library_opened', lib=_lib)
+    context.set_music_dir(_lib.directory)
     return _lib
 
 
