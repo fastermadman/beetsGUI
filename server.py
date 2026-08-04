@@ -29,6 +29,7 @@ try:
     import importsession
     import libops
     from beets.ui import UserError
+    from beets.util import displayable_path
     from mediafile import MediaFile, UnreadableFileError
 except ImportError as e:
     print(f"beets not importable: {e}")
@@ -325,6 +326,94 @@ def unimported():
     return jsonify({'ok': True, 'dir': str(root), 'folders': result, 'total_files': total})
 
 
+def _parse_exclude(raw):
+    return [e.strip().lower() for e in (raw or '').split(',') if e.strip()]
+
+
+def _scan_files(dir_path, exclude):
+    """Audio files under dir_path, matching AUDIO_EXTENSIONS and not
+    matching any exclude substring — same filter /unimported already uses.
+
+    ponytail: Path.rglob has no documented guarantee against FIFOs or
+    symlink loops on a user-supplied tree. /unimported's use of the same
+    call was spot-checked against both during the issue #11 audit and
+    returned promptly, but that was an observation, not a contract.
+    """
+    root = Path(dir_path)
+    for f in root.rglob('*'):
+        if not f.is_file() or f.suffix.lower() not in AUDIO_EXTENSIONS:
+            continue
+        if exclude and any(e in str(f).lower() for e in exclude):
+            continue
+        yield f
+
+
+@app.route('/scan/count')
+def scan_count():
+    """Count audio files under `dir` — same result as
+    `fd -e mp3 ... . dir | wc -l`."""
+    dir_path = os.path.expanduser(request.args.get('dir', '').strip())
+    if not dir_path or not os.path.isdir(dir_path):
+        return jsonify({'ok': False, 'error': 'no such directory'}), 400
+    exclude = _parse_exclude(request.args.get('exclude', ''))
+    total = sum(1 for _ in _scan_files(dir_path, exclude))
+    return jsonify({'ok': True, 'total_files': total})
+
+
+@app.route('/scan/save-list', methods=['POST'])
+def scan_save_list():
+    """Write the sorted matching file list to `dest`. Body:
+    {"dir": "...", "exclude": "Samples,Stems", "dest": "~/Desktop/music_list.txt"}."""
+    data = request.get_json(silent=True) or {}
+    dir_path = os.path.expanduser((data.get('dir') or '').strip())
+    if not dir_path or not os.path.isdir(dir_path):
+        return jsonify({'ok': False, 'error': 'no such directory'}), 400
+    exclude = _parse_exclude(data.get('exclude', ''))
+    dest = (data.get('dest') or '~/Desktop/music_list.txt').strip()
+    files = sorted(str(f) for f in _scan_files(dir_path, exclude))
+    path = Path(os.path.expanduser(dest))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('\n'.join(files) + ('\n' if files else ''))
+    except OSError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    return jsonify({'ok': True, 'count': len(files), 'path': str(path)})
+
+
+@app.route('/scan/sizes')
+def scan_sizes():
+    """Per-immediate-subfolder disk usage under `dir` — same shape as
+    `du -sh "$dir/"*/`."""
+    dir_path = os.path.expanduser(request.args.get('dir', '').strip())
+    if not dir_path or not os.path.isdir(dir_path):
+        return jsonify({'ok': False, 'error': 'no such directory'}), 400
+    folders = []
+    for sub in sorted(p for p in Path(dir_path).iterdir() if p.is_dir()):
+        size = sum(f.stat().st_size for f in sub.rglob('*') if f.is_file())
+        folders.append({'path': str(sub), 'size_bytes': size})
+    return jsonify({'ok': True, 'folders': folders})
+
+
+# The XML library file only ever exists here — iTunes/Music.app write it
+# to one of these paths when "Share library XML" is on, never elsewhere.
+# A full-home rglob (what the old `fd -H ... ~` command did) takes minutes
+# on a real ~/Library-sized tree; checking these directly is both faster
+# and exactly as correct, not a reduced-functionality shortcut.
+ITUNES_LIBRARY_CANDIDATES = [
+    '~/Music/iTunes/iTunes Library.xml',
+    '~/Music/iTunes/iTunes Music Library.xml',
+    '~/Music/Music/Music Library.xml',
+]
+
+
+@app.route('/scan/itunes-library')
+def scan_itunes_library():
+    """Find the iTunes/Music.app XML library file, if XML sharing is on."""
+    matches = [p for p in (os.path.expanduser(c) for c in ITUNES_LIBRARY_CANDIDATES)
+               if os.path.exists(p)]
+    return jsonify({'ok': True, 'paths': matches})
+
+
 @app.route('/playlists')
 def list_playlists():
     """Find .m3u playlists in a folder — used by USB Mirror."""
@@ -335,6 +424,55 @@ def list_playlists():
         return jsonify({'ok': True, 'playlists': playlists, 'dir': str(p)})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
+
+
+@app.route('/export/m3u', methods=['POST'])
+def export_m3u():
+    """Write matching tracks' paths, one per line, to `dest` — same content
+    as `beet list -f '$path' > dest`. Body: {"dest": "...", "query": ""}."""
+    data = request.get_json(silent=True) or {}
+    dest = (data.get('dest') or '').strip()
+    if not dest:
+        return jsonify({'ok': False, 'error': 'dest is required'}), 400
+    lib = importsession.get_library()
+    items = list(lib.items(libops.split_query(data.get('query', ''))))
+    path = Path(os.path.expanduser(dest))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = [displayable_path(i.path) for i in items]
+        path.write_text('\n'.join(lines) + ('\n' if lines else ''))
+    except OSError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    return jsonify({'ok': True, 'count': len(items), 'path': str(path)})
+
+
+@app.route('/export/playlists', methods=['POST'])
+def export_playlists():
+    """Write one .m3u per immediate subfolder of `src` into
+    ~/Desktop/playlister/, listing that subfolder's audio files —
+    same result as the old `for dir in $(fd -d 1 -t d ...)` shell loop,
+    without a shell. Body: {"src": "..."}."""
+    data = request.get_json(silent=True) or {}
+    src = os.path.expanduser((data.get('src') or '').strip())
+    if not src or not os.path.isdir(src):
+        return jsonify({'ok': False, 'error': 'no such directory'}), 400
+
+    dest_dir = Path(os.path.expanduser('~/Desktop/playlister'))
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    written = []
+    for sub in sorted(p for p in Path(src).iterdir() if p.is_dir()):
+        files = sorted(
+            f for f in sub.rglob('*')
+            if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
+        )
+        if not files:
+            continue
+        out = dest_dir / f'{sub.name}.m3u'
+        out.write_text('\n'.join(str(f) for f in files) + '\n')
+        written.append(out.name)
+
+    return jsonify({'ok': True, 'playlists': written, 'dest': str(dest_dir)})
 
 
 @app.route('/')

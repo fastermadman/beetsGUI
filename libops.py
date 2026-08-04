@@ -31,7 +31,7 @@ from importsession import get_library
 _console_lock = threading.Lock()
 
 
-def _split_query(query):
+def split_query(query):
     return shlex.split(query) if query else []
 
 
@@ -47,7 +47,7 @@ def _capture(fn, *args, **kwargs):
 def preview_modify(field, value, query):
     """Items the query matches, with their current and would-be new value."""
     lib = get_library()
-    items = list(lib.items(_split_query(query)))
+    items = list(lib.items(split_query(query)))
     template = functemplate.template(value)
     changes = []
     for item in items:
@@ -62,7 +62,7 @@ def preview_modify(field, value, query):
 def apply_modify(field, value, query):
     """Apply the change previewed by preview_modify(). Returns count changed."""
     lib = get_library()
-    items = list(lib.items(_split_query(query)))
+    items = list(lib.items(split_query(query)))
     template = functemplate.template(value)
     changed = []
     for item in items:
@@ -82,14 +82,14 @@ def apply_modify(field, value, query):
 def update(query, pretend):
     """Returns the printed diff lines (deleted files, changed fields)."""
     lib = get_library()
-    return _capture(_update_items, lib, _split_query(query), False, False,
+    return _capture(_update_items, lib, split_query(query), False, False,
                      pretend, None)
 
 
 def write(query, pretend):
     """Returns the printed diff lines (tags that would be/were written)."""
     lib = get_library()
-    return _capture(_write_items, lib, _split_query(query), pretend, False)
+    return _capture(_write_items, lib, split_query(query), pretend, False)
 
 
 # ── missing ──────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ def missing_albums():
 def preview_remove(query):
     """Items the query matches — the preview step before a real remove call."""
     lib = get_library()
-    items, _ = do_query(lib, _split_query(query), False)
+    items, _ = do_query(lib, split_query(query), False)
     return [{'id': i.id, 'label': str(i), 'path': displayable_path(i.path)} for i in items]
 
 
@@ -133,4 +133,4 @@ def remove(query, delete_files):
     query=f'length:..{seconds}' — no separate endpoint needed, beets'
     query language already expresses it exactly."""
     lib = get_library()
-    _remove_items(lib, _split_query(query), False, delete_files, True)
+    _remove_items(lib, split_query(query), False, delete_files, True)

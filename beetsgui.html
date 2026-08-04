@@ -200,13 +200,13 @@
 
       <details class="section">
         <summary class="section-title">Utilities</summary>
-        <div class="alert alert-green" style="font-size:10px; margin:0.6rem 0;">Uses <span class="mono">fd</span> — 5-10× faster than find, ignores hidden system folders automatically. Requires: <span class="mono">brew install fd</span></div>
         <div class="btn-row">
-          <button class="btn" onclick="buildFindCmd('count')"><span>Count files</span></button>
-          <button class="btn" onclick="buildFindCmd('save')"><span>Save list to file</span></button>
-          <button class="btn" onclick="buildFindCmd('du')"><span>Folder sizes (du)</span></button>
-          <button class="btn" onclick="buildFindCmd('itunes')"><span>Find iTunes lib.</span></button>
+          <button class="btn" onclick="scanCount()"><span>Count files</span></button>
+          <button class="btn" onclick="scanSaveList()"><span>Save list to file</span></button>
+          <button class="btn" onclick="scanSizes()"><span>Folder sizes</span></button>
+          <button class="btn" onclick="scanItunesLibrary()"><span>Find iTunes lib.</span></button>
         </div>
+        <div id="scan-util-results"></div>
       </details>
 
       <hr class="divider">
@@ -520,18 +520,21 @@
       <div class="section">
         <div class="section-title">Export .m3u for Lexicon</div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="setCmd('beet list -f \'$path\' > ~/Desktop/beets_export.m3u')"><span>Export .m3u for Lexicon</span></button>
-          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Saves all tracks as .m3u on the desktop. In Lexicon: File → Import → M3U playlist. Go to Library and search first to export a subset.</span></span>
+          <button class="btn btn-primary" onclick="exportM3u('~/Desktop/beets_export.m3u','export-m3u-results')"><span>Export .m3u for Lexicon</span></button>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Saves all tracks as .m3u on the desktop. In Lexicon: File → Import → M3U playlist.</span></span>
         </div>
+        <div id="export-m3u-results"></div>
       </div>
       <div class="section">
         <div class="section-title">Playlists → Lexicon / Traktor</div>
         <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Run this <b>before</b> importing with move — exports your folders as .m3u files so Lexicon and Traktor can relocate them.</div>
         <div class="field"><label>Path to playlist folders</label><input type="text" id="pl-path" placeholder="/Volumes/Harddisk/OldPlaylists"></div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="buildPlaylistExportCmd()"><span>Export folders → .m3u</span></button>
-          <button class="btn" onclick="setCmd('beet list -f \'$path\' > ~/Desktop/beets_alle_tracks.txt')"><span>Save tracklist (for Traktor relocation)</span></button>
+          <button class="btn btn-primary" onclick="exportPlaylists()"><span>Export folders → .m3u</span></button>
+          <button class="btn" onclick="exportM3u('~/Desktop/beets_alle_tracks.txt','export-tracklist-results')"><span>Save tracklist (for Traktor relocation)</span></button>
         </div>
+        <div id="pl-results"></div>
+        <div id="export-tracklist-results"></div>
         <hr class="divider">
         <div class="section-title" style="margin-bottom:0.4rem;">Traktor: Relocate files after move</div>
         <div class="alert alert-yellow" style="font-size:10px;">1. In Traktor: Right-click <b>Track Collection</b> → <b>Check Consistency</b><br>2. Select ALL missing tracks (<b>Cmd+A</b>)<br>3. Click <b>Relocate</b> → navigate to your Beets library folder<br>4. ⚠ Select multiple files at a time — avoids Traktor 4.2 freeze<br>5. Cues and grids follow automatically</div>
@@ -1226,9 +1229,32 @@ function doRemove(which,deleteFiles){
     })
     .catch(()=>alert('Could not reach the server.'));
 }
-function buildPlaylistExportCmd(){
-  const src=document.getElementById('pl-path').value.trim()||'/Volumes/Harddisk/OldPlaylists';
-  setCmd(`for dir in $(fd -d 1 -t d . "${src}"); do name=$(basename "$dir"); fd -e mp3 -e flac -e aiff -e wav -e m4a -e alac . "$dir" > ~/Desktop/playlister/${name}.m3u; done`);
+function exportM3u(dest,resultsId){
+  const el=document.getElementById(resultsId);
+  el.innerHTML='<div class="lib-empty">Writing…</div>';
+  fetch('/export/m3u',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dest})})
+    .then(r=>r.json())
+    .then(data=>{
+      el.innerHTML=data.ok
+        ?'<div class="alert alert-green">Wrote '+data.count+' track'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>'
+        :'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function exportPlaylists(){
+  const src=document.getElementById('pl-path').value.trim();
+  const el=document.getElementById('pl-results');
+  if(!src){el.innerHTML='<div class="lib-empty">Enter a path to playlist folders.</div>';return;}
+  el.innerHTML='<div class="lib-empty">Working…</div>';
+  fetch('/export/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({src})})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
+      el.innerHTML=data.playlists.length
+        ?'<div class="alert alert-green">Wrote '+data.playlists.length+' playlist'+(data.playlists.length===1?'':'s')+' to '+escapeHtml(data.dest)+'</div>'
+        :'<div class="lib-empty">No audio files found in any subfolder.</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
 function buildConvFindCmd(type){
   const src=document.getElementById('conv-src').value.trim()||'/Volumes/Harddisk';
@@ -1252,14 +1278,62 @@ function buildXldCmd(){
   if(mode==='single')setCmd('xld -f '+fmt+' -o "'+out+'" "'+src+'"');
   else{const ext=fmt==='aiff'?'aiff':'wav';setCmd('fd -e '+ext+' . "'+src+'" --exclude Samples --exclude Stems | while read f; do xld -f '+fmt+' -o "'+out+'" "$f"; done');}
 }
-function buildFindCmd(type){
-  const src=document.getElementById('scan-path').value.trim()||'/Volumes/Harddisk/Music';
-  const exclFlags=Array.from(document.querySelectorAll('#scan-excl input:checked')).map(b=>'--exclude "'+b.value+'"').join(' ');
-  const exts='-e mp3 -e aiff -e wav -e flac -e m4a -e alac';
-  if(type==='count')setCmd('fd -e mp3 -e wav -e aiff -e flac -e m4a -e alac . "'+src+'"'+(exclFlags?' '+exclFlags:'')+' | wc -l');
-  else if(type==='save')setCmd('fd '+exts+' . "'+src+'"'+(exclFlags?' '+exclFlags:'')+' | sort > ~/Desktop/music_list.txt');
-  else if(type==='du')setCmd('du -sh "'+src+'/"*/');
-  else if(type==='itunes')setCmd('fd -H -e xml -g "iTunes Library.xml" ~');
+function scanDir(){return document.getElementById('scan-path').value.trim();}
+function scanExclude(){return Array.from(document.querySelectorAll('#scan-excl input:checked')).map(c=>c.value).join(',');}
+function fmtBytes(n){
+  if(n>=1e9)return(n/1e9).toFixed(1)+' GB';
+  if(n>=1e6)return(n/1e6).toFixed(1)+' MB';
+  if(n>=1e3)return(n/1e3).toFixed(1)+' KB';
+  return n+' B';
+}
+function scanCount(){
+  const dir=scanDir(),el=document.getElementById('scan-util-results');
+  if(!dir){el.innerHTML='<div class="lib-empty">Enter a path above first.</div>';return;}
+  el.innerHTML='<div class="lib-empty">Counting…</div>';
+  fetch('/scan/count?dir='+encodeURIComponent(dir)+'&exclude='+encodeURIComponent(scanExclude()))
+    .then(r=>r.json())
+    .then(data=>{
+      el.innerHTML=data.ok?'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function scanSaveList(){
+  const dir=scanDir(),el=document.getElementById('scan-util-results');
+  if(!dir){el.innerHTML='<div class="lib-empty">Enter a path above first.</div>';return;}
+  el.innerHTML='<div class="lib-empty">Saving…</div>';
+  fetch('/scan/save-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dir,exclude:scanExclude()})})
+    .then(r=>r.json())
+    .then(data=>{
+      el.innerHTML=data.ok?'<div class="alert alert-green">Saved '+data.count+' file'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function scanSizes(){
+  const dir=scanDir(),el=document.getElementById('scan-util-results');
+  if(!dir){el.innerHTML='<div class="lib-empty">Enter a path above first.</div>';return;}
+  el.innerHTML='<div class="lib-empty">Calculating…</div>';
+  fetch('/scan/sizes?dir='+encodeURIComponent(dir))
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
+      if(!data.folders.length){el.innerHTML='<div class="lib-empty">No subfolders found.</div>';return;}
+      el.innerHTML='<div class="lib-results">'+data.folders.map(f=>
+        '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f.path)+'</div><div class="lib-row-meta">'+fmtBytes(f.size_bytes)+'</div></div>'
+      ).join('')+'</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function scanItunesLibrary(){
+  const el=document.getElementById('scan-util-results');
+  el.innerHTML='<div class="lib-empty">Searching your home folder…</div>';
+  fetch('/scan/itunes-library')
+    .then(r=>r.json())
+    .then(data=>{
+      el.innerHTML=data.paths.length
+        ?'<div class="lib-results">'+data.paths.map(p=>'<div class="lib-row"><div class="lib-row-title">'+escapeHtml(p)+'</div></div>').join('')+'</div>'
+        :'<div class="lib-empty">No iTunes Library.xml found under your home folder.</div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
 
 function scanUnimported(){
