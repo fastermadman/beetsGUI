@@ -4,8 +4,7 @@ BeetsGUI Server — local Flask API
 Run: python3 server.py
 Stop: Ctrl+C
 
-Serves beetsgui.html on http://localhost:1312
-and offers /run?cmd=... to execute beet commands with live output.
+Serves beetsgui.html on http://localhost:1312.
 """
 import json
 import os
@@ -47,9 +46,6 @@ HTML_FILE  = 'beetsgui.html'
 # Change this if you gave the app a different name
 SAFARI_APP_NAME = 'BeetsGUI'
 
-# Commands allowed to execute (security)
-ALLOWED_PREFIXES = ('beet ', 'beet\t', 'fd ', 'du ', 'for ')
-
 # ── Flask app ────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 
@@ -84,11 +80,6 @@ def list_volumes() -> list:
             if v.name not in skip and not v.name.startswith('.'):
                 vols.append(v.name)
     return vols
-
-
-def strip_ansi(text: str) -> str:
-    """Remove ANSI escape sequences from text."""
-    return re.sub(r'\x1b\[[0-9;]*[mGKHABCDJM]', '', text)
 
 
 def get_config_path() -> str:
@@ -137,35 +128,6 @@ def open_app_when_ready():
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
-@app.route('/config', methods=['GET'])
-def read_config():
-    """Read beets config.yaml."""
-    path = get_config_path()
-    try:
-        content = Path(path).read_text() if Path(path).exists() else ''
-        return jsonify({'ok': True, 'content': content, 'path': path})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
-
-
-@app.route('/config', methods=['POST'])
-def write_config():
-    """Write beets config.yaml. Automatically makes a .bak backup first."""
-    import shutil
-    data    = request.get_json()
-    content = data.get('content', '')
-    path    = Path(get_config_path())
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.exists():
-            shutil.copy2(path, str(path) + '.bak')
-        path.write_text(content)
-        return jsonify({'ok': True, 'path': str(path)})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
-
-
-
 @app.route('/library')
 def library():
     """Read albums directly from the beets library.db (read-only)."""
@@ -286,7 +248,8 @@ def serve_assets(filename):
 
 @app.route('/status')
 def status():
-    """Server status, beet path and mounted volumes."""
+    """Server status, beet path and mounted volumes. Used by the test suite
+    to poll for server readiness; the UI itself never calls it."""
     return jsonify({
         'ok':      True,
         'beet':    find_beet(),
@@ -394,87 +357,6 @@ def import_abort(job_id):
     job.abort()
     job.done.wait(timeout=30)
     return jsonify({'ok': True, 'finished': job.done.is_set()})
-
-
-@app.route('/run')
-def run_cmd():
-    """
-    Execute a command and stream output as Server-Sent Events (SSE).
-
-    Parameter: ?cmd=beet import -A "/Volumes/Harddisk/Music"
-
-    SSE lines:
-      data: <output-line>\n\n
-      data: __END__\n\n     ← signals that the process has finished
-    """
-    cmd = request.args.get('cmd', '').strip()
-
-    def sse(text: str) -> str:
-        return f"data: {text}\n\n"
-
-    def generate(cmd: str):
-        # Validation
-        if not cmd:
-            yield sse("✗ No command given")
-            yield sse("__END__")
-            return
-
-        if not any(cmd.startswith(p) for p in ALLOWED_PREFIXES):
-            yield sse(f"✗ Not allowed: '{cmd}'")
-            yield sse("  Only beet, fd and du commands are allowed.")
-            yield sse("__END__")
-            return
-
-        # Replace 'beet ' with the full path
-        beet = find_beet()
-        if cmd.startswith('beet ') or cmd.startswith('beet\t'):
-            full_cmd = beet + cmd[4:]
-        else:
-            full_cmd = cmd
-
-        yield sse(f"$ {cmd}")
-        yield sse("")
-
-        env = os.environ.copy()
-        env['TERM']          = 'dumb'
-        env['NO_COLOR']      = '1'
-        env['BEETS_NO_COLOR'] = '1'
-
-        try:
-            proc = subprocess.Popen(
-                full_cmd,
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env=env,
-                cwd=os.path.expanduser('~'),
-            )
-
-            for line in iter(proc.stdout.readline, ''):
-                clean = strip_ansi(line.rstrip('\r\n'))
-                yield sse(clean)
-
-            proc.stdout.close()
-            rc = proc.wait()
-            yield sse("")
-            yield sse("✓ Done" if rc == 0 else f"✗ Exit {rc}")
-
-        except Exception as e:
-            yield sse(f"ERROR: {e}")
-
-        yield sse("__END__")
-
-    return Response(
-        generate(cmd),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control':     'no-cache',
-            'X-Accel-Buffering': 'no',
-            'Connection':        'keep-alive',
-        }
-    )
 
 
 # ── Start ───────────────────────────────────────────────────────────────────────
