@@ -30,6 +30,7 @@ try:
     import importsession
     import jobs
     import libops
+    import transcode
     from beets.ui import UserError
     from beets.util import displayable_path
     from mediafile import MediaFile, UnreadableFileError
@@ -538,6 +539,22 @@ def artwork_start():
                             force=data.get('force', False))
     except ValueError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 409
+    return jsonify({'ok': True, **job.summary()})
+
+
+@app.route('/convert/start', methods=['POST'])
+def convert_start():
+    """Convert tracks with beets' convert plugin. Body: {"query":
+    "format:AIFF", "format": "alac", "pretend": true, "dest": null}.
+    Progress streams on /jobs/<id>/events."""
+    data = request.get_json(silent=True) or {}
+    try:
+        job = transcode.start(query=data.get('query', ''),
+                              fmt=data.get('format'),
+                              pretend=data.get('pretend', True),
+                              dest=data.get('dest'))
     except RuntimeError as e:
         return jsonify({'ok': False, 'error': str(e)}), 409
     return jsonify({'ok': True, **job.summary()})

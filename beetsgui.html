@@ -446,19 +446,21 @@
           <div class="field-row">
             <div class="field">
               <label>Source format</label>
-              <select id="beet-conv-fmt" onchange="buildBeetsConvCmd()">
+              <select id="beet-conv-fmt">
                 <option value="AIFF">AIFF</option>
                 <option value="WAV">WAV</option>
                 <option value="FLAC">FLAC</option>
               </select>
             </div>
             <div class="field" style="align-self:flex-end;">
-              <label class="check-item"><input type="checkbox" id="beet-conv-pretend" checked onchange="buildBeetsConvCmd()"><span>Preview (--pretend)</span></label>
+              <label class="check-item"><input type="checkbox" id="beet-conv-pretend" checked><span>Preview only (--pretend)</span></label>
             </div>
           </div>
+          <div class="field"><label>Destination (blank = convert.dest from config)</label><input type="text" id="beet-conv-dest" placeholder="~/Music/Converted"></div>
           <div class="btn-row">
-            <button class="btn btn-primary" onclick="buildBeetsConvCmd()">Build beet convert command</button>
+            <button class="btn btn-primary" onclick="startConvert()">Run convert</button>
           </div>
+          <div id="convert-job"></div>
           <hr class="divider">
           <div style="font-size:10px; color:var(--text3); margin-bottom:0.5rem;">Delete originals from the database AFTER verifying (files stay on disk):</div>
           <div class="btn-row">
@@ -1053,14 +1055,16 @@ function abortJob(){
   if(jobRunner.id)fetch('/jobs/'+jobRunner.id+'/abort',{method:'POST'});
 }
 function jobSummary(ev){
-  if(ev.aborted)return'Aborted.';
   const parts=[];
   if(ev.found!=null)parts.push(ev.found+' fetched');
   if(ev.embedded!=null)parts.push(ev.embedded+' embedded');
-  if(ev.converted!=null)parts.push(ev.converted+' converted');
+  // 'sent', not 'converted': the server can't see how many actually
+  // encoded (beets skips existing targets silently), so don't claim it.
+  if(ev.sent!=null)parts.push(ev.sent+(ev.pretend?' previewed':' sent to the converter'));
   if(ev.skipped)parts.push(ev.skipped+' skipped');
-  return 'Done — '+(parts.length?parts.join(', '):'nothing to do')+
-    (ev.total!=null?' ('+ev.total+' total)':'');
+  return (ev.aborted?'Aborted — ':'Done — ')+
+    (parts.length?parts.join(', '):'nothing to do')+
+    (ev.total!=null?' of '+ev.total:'');
 }
 function handleJobEvent(ev){
   const el=jobRunner.el;
@@ -1327,11 +1331,12 @@ function buildConvFindCmd(type){
   else if(type==='count')setCmd('fd -e wav -e aiff . "'+src+'" | wc -l');
   else setCmd('fd -e wav . "'+src+'" '+excl);
 }
-function buildBeetsConvCmd(){
+function startConvert(){
   const fmt=document.getElementById('beet-conv-fmt').value;
   const pretend=document.getElementById('beet-conv-pretend').checked;
-  const flag=pretend?'--pretend ':'';
-  setCmd('beet convert '+flag+'format:'+fmt);
+  const dest=document.getElementById('beet-conv-dest').value.trim();
+  if(!pretend&&!confirm('This runs ffmpeg and writes converted files to disk. Originals are left untouched. Continue?'))return;
+  startJob('/convert/start',{query:'format:'+fmt,pretend:pretend,dest:dest||null},'convert-job');
 }
 function buildXldCmd(){
   const src=document.getElementById('xld-src').value.trim()||'/path/to/file.wav';
