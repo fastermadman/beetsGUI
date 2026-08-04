@@ -83,7 +83,8 @@ def start(job, work):
             if existing.done.is_set():
                 del _jobs[existing.id]
             else:
-                raise RuntimeError(f'a {existing.kind} job is already running')
+                raise RuntimeError(
+                    f'another job is already running ({existing.kind})')
         _jobs[job.id] = job
 
     def run():

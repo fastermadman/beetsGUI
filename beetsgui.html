@@ -374,10 +374,13 @@
       </div>
       <div class="section">
         <div class="section-title">Cover art</div>
+        <div class="field"><label>Query (whole library if empty)</label><input type="text" id="art-query" placeholder="albumartist:Burial"></div>
         <div class="btn-row">
-          <button class="btn" onclick="setCmd('beet fetchart')">fetchart <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Checks the folder first (cover.jpg, folder.jpg, front.jpg), then the internet.</span></span></button>
-          <button class="btn" onclick="setCmd('beet embedart')">embedart</button>
+          <button class="btn btn-primary" onclick="startArtwork('fetch')">Fetch art <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Checks the album folder first (cover.jpg, folder.jpg, front.jpg), then whichever web sources your config enables. Albums that already have art are skipped unless you tick Re-fetch.</span></span></button>
+          <button class="btn" onclick="startArtwork('embed')">Embed art</button>
+          <label class="check-item"><input type="checkbox" id="art-force"><span>Re-fetch albums that already have art</span></label>
         </div>
+        <div id="artwork-job"></div>
       </div>
       <div class="section">
         <div class="section-title">Metadata</div>
@@ -1022,6 +1025,66 @@ document.addEventListener('keydown',function(e){
     decideImport('asis');
   }
 });
+// ── Background jobs (cover art, convert) ─────────────────────────────────────
+// Import has its own UI because it answers decisions mid-run; these only need
+// a live status line and an abort button, so they share one small runner.
+// Only one job runs server-side at a time, so one runner here is enough.
+let jobRunner={es:null,id:null,el:null};
+
+function startJob(url,payload,elId){
+  const el=document.getElementById(elId);
+  el.innerHTML='<div class="lib-empty">Starting…</div>';
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){el.innerHTML='<div class="alert alert-red">'+escapeHtml(data.error)+'</div>';return;}
+      attachJob(data.id,el);
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function attachJob(id,el){
+  if(jobRunner.es)jobRunner.es.close();
+  jobRunner={es:new EventSource('/jobs/'+id+'/events'),id:id,el:el};
+  el.innerHTML='<div class="lib-count" id="job-status">Working…</div>'+
+    '<div class="btn-row"><button class="btn btn-danger btn-sm" onclick="abortJob()">Abort</button></div>';
+  jobRunner.es.onmessage=e=>handleJobEvent(JSON.parse(e.data));
+}
+function abortJob(){
+  if(jobRunner.id)fetch('/jobs/'+jobRunner.id+'/abort',{method:'POST'});
+}
+function jobSummary(ev){
+  if(ev.aborted)return'Aborted.';
+  const parts=[];
+  if(ev.found!=null)parts.push(ev.found+' fetched');
+  if(ev.embedded!=null)parts.push(ev.embedded+' embedded');
+  if(ev.converted!=null)parts.push(ev.converted+' converted');
+  if(ev.skipped)parts.push(ev.skipped+' skipped');
+  return 'Done — '+(parts.length?parts.join(', '):'nothing to do')+
+    (ev.total!=null?' ('+ev.total+' total)':'');
+}
+function handleJobEvent(ev){
+  const el=jobRunner.el;
+  if(!el)return;
+  if(ev.type==='status'){
+    const status=document.getElementById('job-status');
+    if(status)status.textContent=ev.message;
+  } else if(ev.type==='error'){
+    el.innerHTML='<div class="alert alert-red">'+escapeHtml(ev.message)+'</div>';
+  } else if(ev.type==='done'){
+    if(jobRunner.es){jobRunner.es.close();jobRunner.es=null;}
+    // An error already replaced the panel with its own message — keep it.
+    if(!el.querySelector('.alert-red'))
+      el.innerHTML='<div class="alert alert-green">'+escapeHtml(jobSummary(ev))+'</div>';
+  }
+}
+function startArtwork(action){
+  startJob('/artwork/start',{
+    action:action,
+    query:document.getElementById('art-query').value.trim(),
+    force:document.getElementById('art-force').checked,
+  },'artwork-job');
+}
+
 function buildLibCmd(){
   const q=document.getElementById('lib-query').value.trim();
   const field=document.getElementById('lib-field').value;

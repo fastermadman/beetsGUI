@@ -25,6 +25,7 @@ except ImportError:
     sys.exit(1)
 
 try:
+    import artwork
     import duplicates
     import importsession
     import jobs
@@ -524,6 +525,22 @@ def import_start():
     return jsonify({'ok': True, 'id': job.id, 'paths': job.paths, 'mode': job.mode,
                     'handling': job.handling, 'incremental': job.incremental,
                     'singleton': job.singleton})
+
+
+@app.route('/artwork/start', methods=['POST'])
+def artwork_start():
+    """Fetch or embed cover art. Body: {"action": "fetch"|"embed",
+    "query": "", "force": false}. Progress streams on /jobs/<id>/events."""
+    data = request.get_json(silent=True) or {}
+    try:
+        job = artwork.start(data.get('action', 'fetch'),
+                            query=data.get('query', ''),
+                            force=data.get('force', False))
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 409
+    return jsonify({'ok': True, **job.summary()})
 
 
 @app.route('/jobs/current')
