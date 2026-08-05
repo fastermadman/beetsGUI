@@ -172,6 +172,7 @@
 
     <!-- INBOX -->
     <div id="tab-inbox" class="tab-panel active">
+      <div id="first-run-banner" style="display:none;"></div>
       <div class="section">
         <div class="section-title">
           <span>Scan for new music</span>
@@ -1312,6 +1313,31 @@ const COMMON_FIELDS=['artist','albumartist','album','title','genres','year',
 // Not metadata: the server rejects these (libops.PROTECTED_FIELDS) because
 // `path` redirects the tag write and `id`/`album_id` collide DB rows.
 const NON_FIELDS=['path','id','album_id'];
+// First-run nudge: an empty library is the honest signal that setup hasn't
+// happened yet (beets always has *some* config — its own defaults — so
+// "no config file" isn't a distinguishable state from the server's side).
+// Dismissal is per-session, not permanent: reloading after importing
+// nothing shouldn't need to ask again, but a genuinely fresh install should
+// keep asking until there's something in the library.
+function checkFirstRun(){
+  if(sessionStorage.getItem('firstRunDismissed')==='1')return;
+  fetch('/info/stats').then(r=>r.json()).then(data=>{
+    if(!data.ok||data.tracks>0)return;
+    document.getElementById('first-run-banner').outerHTML=
+      '<div class="alert alert-yellow" id="first-run-banner" style="margin-bottom:0.75rem;">'+
+      '<b>Your library is empty.</b> Set your music folder and pick metadata sources in '+
+      '<a href="#" onclick="openPrefs();return false;">Preferences</a> (⌘,), then scan or '+
+      'import a folder below.'+
+      '<div class="btn-row" style="margin-top:0.5rem;">'+
+      '<button class="btn btn-primary btn-sm" onclick="openPrefs()">Open Preferences</button>'+
+      '<button class="btn btn-sm" onclick="dismissFirstRun()">Dismiss</button>'+
+      '</div></div>';
+  }).catch(()=>{});
+}
+function dismissFirstRun(){
+  sessionStorage.setItem('firstRunDismissed','1');
+  document.getElementById('first-run-banner').style.display='none';
+}
 function loadModFields(){
   const sel=document.getElementById('mod-field');
   fetch('/info/fields').then(r=>r.json()).then(data=>{
@@ -1654,7 +1680,7 @@ function toggleBp4Method(){
   if(localStorage.getItem('cmdBoxOpen')==='1')box.open=true;
   box.addEventListener('toggle',()=>localStorage.setItem('cmdBoxOpen',box.open?'1':'0'));
 })();
-updatePathPreview();checkCurrentImport();loadModFields();
+updatePathPreview();checkCurrentImport();loadModFields();checkFirstRun();
 </script>
 </body>
 </html>
