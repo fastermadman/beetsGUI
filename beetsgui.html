@@ -385,7 +385,7 @@
       <div class="section">
         <div class="section-title">Metadata</div>
         <div class="field-row">
-          <div class="field"><label>Field</label><input type="text" id="mod-field" placeholder="artist"></div>
+          <div class="field"><label>Field</label><select id="mod-field"><option value="">Loading fields…</option></select></div>
           <div class="field"><label>New value</label><input type="text" id="mod-value" placeholder="Burial"></div>
           <div class="field"><label>Query</label><input type="text" id="mod-query" placeholder="album:Untrue"></div>
         </div>
@@ -396,12 +396,8 @@
         <hr class="divider">
         <div class="field"><label>Query (all fields if empty)</label><input type="text" id="maint-query" placeholder="album:Untrue"></div>
         <div class="btn-row">
-          <button class="btn" onclick="runUpdate(true)">Preview update</button>
-          <button class="btn btn-primary" onclick="runUpdate(false)">Apply update</button>
-        </div>
-        <div class="btn-row">
-          <button class="btn" onclick="runWrite(true)">Preview write</button>
-          <button class="btn btn-primary" onclick="runWrite(false)">Apply write</button>
+          <button class="btn btn-primary" onclick="runUpdate()">Check for changes on disk</button>
+          <button class="btn btn-primary" onclick="runWrite()">Check tags to write</button>
         </div>
         <div class="btn-row">
           <button class="btn" onclick="startSync('mbsync')">mbsync <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Network call per track/album — can be slow on a real library.</span></span></button>
@@ -455,7 +451,7 @@
               </select>
             </div>
             <div class="field" style="align-self:flex-end;">
-              <label class="check-item"><input type="checkbox" id="beet-conv-pretend" checked><span>Preview only (--pretend)</span></label>
+              <label class="check-item"><input type="checkbox" id="beet-conv-pretend" checked><span>Preview only — don't write files yet</span></label>
             </div>
           </div>
           <div class="field"><label>Destination (blank = convert.dest from config)</label><input type="text" id="beet-conv-dest" placeholder="~/Music/Converted"></div>
@@ -1240,22 +1236,33 @@ function applyModify(){
     })
     .catch(()=>alert('Could not reach the server.'));
 }
-function runMaint(kind,pretend){
+// Both of these used to be two independent buttons — a "Preview" and an
+// "Apply" you could click without ever previewing. Now Apply only exists
+// once a preview has shown what it would do, the same shape as
+// previewModify()/applyModify() and as /library/remove's expect check.
+const MAINT_LABELS={update:{verb:'Update the library',noun:'change'},
+                    write:{verb:'Write these tags to files',noun:'file'}};
+function runMaint(kind,apply){
   const query=document.getElementById('maint-query').value.trim();
   const el=document.getElementById('maint-results');
   el.innerHTML='<div class="lib-empty">Working…</div>';
-  fetch('/library/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,pretend})})
+  fetch('/library/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,pretend:!apply})})
     .then(r=>r.json())
     .then(data=>{
       if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
-      el.innerHTML=data.output.length
-        ?'<pre class="pre-out">'+escapeHtml(data.output.join('\n'))+'</pre>'
-        :'<div class="lib-empty">No changes'+(pretend?' — nothing would happen':'')+'.</div>';
+      if(!data.output.length){
+        el.innerHTML='<div class="lib-empty">Nothing to do — nothing would change.</div>';return;
+      }
+      const out='<pre class="pre-out">'+escapeHtml(data.output.join('\n'))+'</pre>';
+      if(apply){el.innerHTML='<div class="alert alert-green">Done.</div>'+out;return;}
+      const l=MAINT_LABELS[kind];
+      el.innerHTML=out+'<div class="btn-row"><button class="btn btn-primary btn-sm" '+
+        'onclick="runMaint(\''+kind+'\',true)">'+l.verb+'</button></div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
-function runUpdate(pretend){runMaint('update',pretend);}
-function runWrite(pretend){runMaint('write',pretend);}
+function runUpdate(){runMaint('update',false);}
+function runWrite(){runMaint('write',false);}
 function showMissing(){
   const el=document.getElementById('maint-results');
   el.innerHTML='<div class="lib-empty">Loading…</div>';
@@ -1293,6 +1300,32 @@ function showFields(){
     el.innerHTML='<div class="lib-count">Item fields</div><div class="path-preview">'+escapeHtml(data.item_fields.join(', '))+'</div>'+
       '<div class="lib-count" style="margin-top:0.5rem;">Album fields</div><div class="path-preview">'+escapeHtml(data.album_fields.join(', '))+'</div>';
   }).catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+// The fields people actually retag, first in the list. The rest of beets'
+// item fields still follow, so nothing is hidden — but "which of these 80
+// do I want" isn't a question the common case should have to answer.
+// Plural forms are deliberate: beets 2.x renamed genre/composer to the list
+// fields genres/composers, and the singular names silently become flexible
+// attributes that never reach the files.
+const COMMON_FIELDS=['artist','albumartist','album','title','genres','year',
+                     'track','disc','composers','label','comments'];
+// Not metadata: the server rejects these (libops.PROTECTED_FIELDS) because
+// `path` redirects the tag write and `id`/`album_id` collide DB rows.
+const NON_FIELDS=['path','id','album_id'];
+function loadModFields(){
+  const sel=document.getElementById('mod-field');
+  fetch('/info/fields').then(r=>r.json()).then(data=>{
+    if(!data.ok)throw new Error(data.error);
+    const all=data.item_fields.filter(f=>!NON_FIELDS.includes(f));
+    const common=COMMON_FIELDS.filter(f=>all.includes(f));
+    const rest=all.filter(f=>!common.includes(f));
+    const opt=f=>'<option value="'+escapeHtml(f)+'">'+escapeHtml(f)+'</option>';
+    sel.innerHTML=common.map(opt).join('')+
+      (rest.length?'<optgroup label="other fields">'+rest.map(opt).join('')+'</optgroup>':'');
+  }).catch(()=>{
+    // Fall back to the common list so the section still works offline.
+    sel.innerHTML=COMMON_FIELDS.map(f=>'<option value="'+f+'">'+f+'</option>').join('');
+  });
 }
 function showVersion(resultsId){
   const el=document.getElementById(resultsId||'info-results');
@@ -1621,7 +1654,7 @@ function toggleBp4Method(){
   if(localStorage.getItem('cmdBoxOpen')==='1')box.open=true;
   box.addEventListener('toggle',()=>localStorage.setItem('cmdBoxOpen',box.open?'1':'0'));
 })();
-updatePathPreview();checkCurrentImport();
+updatePathPreview();checkCurrentImport();loadModFields();
 </script>
 </body>
 </html>

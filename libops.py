@@ -10,6 +10,7 @@ confirm), so remove gets its own preview step here instead; same for
 modify, which beets only exposes via its interactive `modify_items`.
 """
 import io
+import re
 import shlex
 import threading
 from contextlib import redirect_stdout
@@ -24,6 +25,7 @@ from beets.ui.commands.update import update_items as _update_items
 from beets.ui.commands.utils import do_query
 from beets.ui.commands.write import write_items as _write_items
 from beets.util import displayable_path, functemplate
+from beets.util.deprecation import maybe_replace_legacy_field
 from beets.util.units import human_bytes, human_seconds
 
 from importsession import get_library
@@ -34,6 +36,13 @@ from importsession import get_library
 # single-flight (see importsession.py's docstring); this lock extends that
 # same discipline to console-capturing calls.
 _console_lock = threading.Lock()
+
+# beets colourises its diff output for a terminal, so the captured text
+# carries ANSI escapes that a browser renders as literal "[1;31m deleted".
+# Issue #11 deleted the old strip_ansi along with /run, correctly — it was
+# dead at the time. Capturing beets' own console output (added in #14)
+# brought the need back.
+_ANSI = re.compile(r'\x1b\[[0-9;]*m')
 
 
 # Fields that aren't metadata. `path` is the sharpest: setting it redirects
@@ -56,23 +65,34 @@ def split_query(query):
         raise UserError(f'could not parse query: {e}')
 
 
-def _check_field(field):
+def _resolve_field(field):
+    """Reject non-metadata fields, and translate beets' renamed ones.
+
+    beets 2.x renamed `genre`/`composer` to the list fields
+    `genres`/`composers` and ships `maybe_replace_legacy_field` for the
+    translation — its own `modify` command calls it. Without it, `genre`
+    parses as an unknown field, lands as a *flexible attribute*, and is then
+    filtered out by `write()` (which only writes `_media_fields`), so the
+    caller is told N items changed while nothing reaches the files.
+    """
     if field in PROTECTED_FIELDS:
         raise UserError(f'{field} is not an editable metadata field')
+    return maybe_replace_legacy_field(field, False, modify=True)
 
 
 def _capture(fn, *args, **kwargs):
     buf = io.StringIO()
     with _console_lock, redirect_stdout(buf):
         fn(*args, **kwargs)
-    return [line for line in buf.getvalue().splitlines() if line]
+    return [_ANSI.sub('', line).rstrip()
+            for line in buf.getvalue().splitlines() if line.strip()]
 
 
 # ── modify ───────────────────────────────────────────────────────────────
 
 def preview_modify(field, value, query):
     """Items the query matches, with their current and would-be new value."""
-    _check_field(field)
+    field = _resolve_field(field)
     lib = get_library()
     items = list(lib.items(split_query(query)))
     template = functemplate.template(value)
@@ -88,7 +108,7 @@ def preview_modify(field, value, query):
 
 def apply_modify(field, value, query):
     """Apply the change previewed by preview_modify(). Returns count changed."""
-    _check_field(field)
+    field = _resolve_field(field)
     lib = get_library()
     items = list(lib.items(split_query(query)))
     template = functemplate.template(value)
