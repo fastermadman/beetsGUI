@@ -442,22 +442,17 @@
       command: ffmpeg -i $source -c:a alac -map_metadata 0 $dest
       extension: m4a</pre>
           </div>
-          <div class="field-row">
-            <div class="field">
-              <label>Source format</label>
-              <select id="beet-conv-fmt">
-                <option value="AIFF">AIFF</option>
-                <option value="WAV">WAV</option>
-                <option value="FLAC">FLAC</option>
-              </select>
-            </div>
-            <div class="field" style="align-self:flex-end;">
-              <label class="check-item"><input type="checkbox" id="beet-conv-pretend" checked><span>Preview only — don't write files yet</span></label>
-            </div>
+          <div class="field">
+            <label>Source format</label>
+            <select id="beet-conv-fmt">
+              <option value="AIFF">AIFF</option>
+              <option value="WAV">WAV</option>
+              <option value="FLAC">FLAC</option>
+            </select>
           </div>
           <div class="field"><label>Destination (blank = convert.dest from config)</label><input type="text" id="beet-conv-dest" placeholder="~/Music/Converted"></div>
           <div class="btn-row">
-            <button class="btn btn-primary" onclick="startConvert()">Run convert</button>
+            <button class="btn btn-primary" onclick="startConvert()">Check what would convert</button>
           </div>
           <div id="convert-job"></div>
           <hr class="divider">
@@ -1034,20 +1029,20 @@ document.addEventListener('keydown',function(e){
 // Only one job runs server-side at a time, so one runner here is enough.
 let jobRunner={es:null,id:null,el:null};
 
-function startJob(url,payload,elId){
+function startJob(url,payload,elId,onDone){
   const el=document.getElementById(elId);
   el.innerHTML='<div class="lib-empty">Starting…</div>';
   fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(r=>r.json())
     .then(data=>{
       if(!data.ok){el.innerHTML='<div class="alert alert-red">'+escapeHtml(data.error)+'</div>';return;}
-      attachJob(data.id,el);
+      attachJob(data.id,el,onDone);
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
-function attachJob(id,el){
+function attachJob(id,el,onDone){
   if(jobRunner.es)jobRunner.es.close();
-  jobRunner={es:new EventSource('/jobs/'+id+'/events'),id:id,el:el};
+  jobRunner={es:new EventSource('/jobs/'+id+'/events'),id:id,el:el,onDone:onDone};
   el.innerHTML='<div class="lib-count" id="job-status">Working…</div>'+
     '<div class="btn-row"><button class="btn btn-danger btn-sm" onclick="abortJob()">Abort</button></div>';
   jobRunner.es.onmessage=e=>handleJobEvent(JSON.parse(e.data));
@@ -1082,9 +1077,28 @@ function handleJobEvent(ev){
     // An error already replaced the panel with its own message — keep it.
     if(!el.querySelector('.alert-red'))
       el.innerHTML='<div class="alert alert-green">'+escapeHtml(jobSummary(ev))+'</div>';
+    if(jobRunner.onDone)jobRunner.onDone(ev,el);
   }
 }
+// Fetch/embed have no pretend mode of their own to preview with (unlike
+// convert), so the preview step here is a /library/count check instead of
+// a dry-run job — same principle as previewModify()/runMaint(): show what
+// it would touch before an empty query quietly means "the whole library."
 function startArtwork(action){
+  const query=document.getElementById('art-query').value.trim();
+  const el=document.getElementById('artwork-job');
+  el.innerHTML='<div class="lib-empty">Checking…</div>';
+  fetch('/library/count?query='+encodeURIComponent(query))
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Could not check that query.')+'</div>';return;}
+      if(!data.count){el.innerHTML='<div class="lib-empty">No albums match'+(query?' that query':'')+'.</div>';return;}
+      const label=(action==='fetch'?'Fetch art for ':'Embed art into ')+data.count+' album'+(data.count===1?'':'s');
+      el.innerHTML='<div class="btn-row"><button class="btn btn-primary btn-sm" onclick="runArtwork(\''+action+'\')">'+label+'</button></div>';
+    })
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function runArtwork(action){
   startJob('/artwork/start',{
     action:action,
     query:document.getElementById('art-query').value.trim(),
@@ -1482,12 +1496,24 @@ function countFormats(exts){
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
+// Always previews first — the old "Preview only" checkbox meant a stray
+// uncheck ran ffmpeg for real with no warning beyond a confirm() popup.
+// Same shape as startArtwork()/runArtwork(): check step reveals the real
+// button, sized to what it's actually about to do.
 function startConvert(){
   const fmt=document.getElementById('beet-conv-fmt').value;
-  const pretend=document.getElementById('beet-conv-pretend').checked;
   const dest=document.getElementById('beet-conv-dest').value.trim();
-  if(!pretend&&!confirm('This runs ffmpeg and writes converted files to disk. Originals are left untouched. Continue?'))return;
-  startJob('/convert/start',{query:'format:'+fmt,pretend:pretend,dest:dest||null},'convert-job');
+  startJob('/convert/start',{query:'format:'+fmt,pretend:true,dest:dest||null},'convert-job',
+    (ev,el)=>{
+      if(!ev.total)return;
+      el.innerHTML+='<div class="btn-row"><button class="btn btn-warn btn-sm" onclick="runConvert()">Convert '+
+        ev.total+' track'+(ev.total===1?'':'s')+' for real</button></div>';
+    });
+}
+function runConvert(){
+  const fmt=document.getElementById('beet-conv-fmt').value;
+  const dest=document.getElementById('beet-conv-dest').value.trim();
+  startJob('/convert/start',{query:'format:'+fmt,pretend:false,dest:dest||null},'convert-job');
 }
 function buildXldCmd(){
   const src=document.getElementById('xld-src').value.trim()||'/path/to/file.wav';

@@ -337,6 +337,16 @@ def library_missing():
     return jsonify({'ok': True, 'albums': libops.missing_albums()})
 
 
+@app.route('/library/count')
+def library_count():
+    """Albums a beets query matches — the preview step before artwork/sync
+    jobs, which have no pretend mode of their own to preview with."""
+    try:
+        return jsonify({'ok': True, 'count': libops.album_count(request.args.get('query', ''))})
+    except UserError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
 @app.route('/library/remove/preview', methods=['POST'])
 def library_remove_preview():
     """Body: {"query": "..."}."""

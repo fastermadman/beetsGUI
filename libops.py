@@ -168,6 +168,13 @@ def stats():
     }
 
 
+def album_count(query):
+    """How many albums a beets query matches — for a preview step before a
+    job that would otherwise run against the whole library unannounced."""
+    lib = get_library()
+    return len(list(lib.albums(split_query(query))))
+
+
 def fields():
     return {
         'item_fields': sorted(library.Item.all_keys()),
