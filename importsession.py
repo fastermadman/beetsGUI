@@ -267,7 +267,19 @@ class ImportJob(jobs.Job):
                 if not 0 <= index < p['n_candidates']:
                     return f"candidate must be 0..{p['n_candidates'] - 1}"
                 reply = {'choice': 'apply', 'candidate': index}
-            p['answer'].put(reply)
+            # A decision is single-use, and clearing it here rather than in
+            # ask()'s finally is what makes that true: a duplicate answer (a
+            # double-clicked button, a retried request) used to be accepted
+            # and then block in put() on the maxsize=1 queue *while holding
+            # this lock*, which wedges ask()'s own cleanup, pending() and
+            # abort() — permanently, since nothing else drains that queue.
+            # Rejected answers above must leave the decision open, so this
+            # only happens once the reply is known to be valid.
+            self._pending = None
+            try:
+                p['answer'].put_nowait(reply)
+            except queue.Full:
+                return 'decision already answered'
             return None
 
     def abort(self):

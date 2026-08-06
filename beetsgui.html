@@ -1312,7 +1312,7 @@ function removeFormat(fmt){
     .then(data=>{
       if(!data.items.length){el.innerHTML='<div class="lib-empty">No '+fmt+' tracks in the library.</div>';return;}
       if(!confirm('Remove '+data.items.length+' '+fmt+' track'+(data.items.length===1?'':'s')+' from the database? Files stay on disk.'))return;
-      fetch('/library/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,delete_files:false})})
+      fetch('/library/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,expect:data.items.length,delete_files:false})})
         .then(r=>r.json())
         .then(d=>{el.innerHTML=d.ok
           ?'<div class="alert alert-green">Removed '+data.items.length+' track'+(data.items.length===1?'':'s')+' from the database.</div>'
@@ -1347,14 +1347,27 @@ function previewRemove(which){
 function doRemove(which,deleteFiles){
   const query=removeQuery(which),el=removeResultsEl(which);
   if(!query){alert('Enter a query first.');return;}
-  const msg=(deleteFiles?'Permanently delete files matching "':'Remove from database (files stay on disk) matching "')+query+'"? Preview first to check what matches.';
-  if(!confirm(msg))return;
-  fetch('/library/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,delete_files:deleteFiles})})
+  // Preview before confirming, not just "you should preview": the count in the
+  // prompt is the real match count, and the server requires it back as `expect`
+  // (it removes with force=true, so this preview is the only confirmation).
+  el.innerHTML='<div class="lib-empty">Checking what matches…</div>';
+  fetch('/library/remove/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})})
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.ok?'<div class="alert alert-green">Done.</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>';return;}
+      const n=data.items.length;
+      if(!n){el.innerHTML='<div class="lib-empty">No matching tracks — nothing to remove.</div>';return;}
+      const msg=(deleteFiles?'Permanently delete files for ':'Remove from database (files stay on disk): ')+
+        n+' track'+(n===1?'':'s')+' matching "'+query+'"?';
+      if(!confirm(msg)){el.innerHTML='<div class="lib-empty">Cancelled.</div>';return;}
+      fetch('/library/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,expect:n,delete_files:deleteFiles})})
+        .then(r=>r.json())
+        .then(d=>{
+          el.innerHTML=d.ok?'<div class="alert alert-green">Removed '+d.removed+' track'+(d.removed===1?'':'s')+'.</div>':'<div class="lib-empty">'+escapeHtml(d.error||'Failed.')+'</div>';
+        })
+        .catch(()=>alert('Could not reach the server.'));
     })
-    .catch(()=>alert('Could not reach the server.'));
+    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
 function exportM3u(dest,resultsId){
   const el=document.getElementById(resultsId);

@@ -262,6 +262,20 @@ def main():
                 decide(event, choice='skip')
         assert albums_in(beetsdir) == before, 'skip should not add an album'
 
+        # 3b. Answering the same decision twice: the duplicate is rejected and
+        #     the server stays responsive. A duplicate answer used to be
+        #     accepted and then block in put() on the maxsize=1 reply queue
+        #     while holding the job lock, which wedged the importer's own
+        #     cleanup, /jobs/current and abort for the life of the process.
+        for event in run(src / 'three'):
+            if event['type'] == 'decision':
+                decide(event, choice='skip')
+                code, reply = decide(event, expect=409, choice='skip')
+                assert 'decision' in reply['error'], reply
+                with urllib.request.urlopen(f'{BASE}/jobs/current', timeout=5) as r:
+                    assert json.load(r)['ok'], 'jobs/current must not hang'
+        assert albums_in(beetsdir) == before, 'skip should not add an album'
+
         # 4. Abort while a decision is blocked: the job finishes, nothing added.
         stream = run(src / 'three')
         for event in stream:
