@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "beetsGUI server",
+      "runtimeExecutable": "/Users/valdefar/.local/pipx/venvs/beets/bin/python",
+      "runtimeArgs": ["server.py"],
+      "port": 1612
+    }
+  ]
+}

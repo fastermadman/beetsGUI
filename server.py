@@ -4,7 +4,7 @@ BeetsGUI Server — local Flask API
 Run: python3 server.py
 Stop: Ctrl+C
 
-Serves beetsgui.html on http://localhost:1312.
+Serves beetsgui.html on http://localhost:1612.
 """
 import json
 import os
@@ -45,7 +45,7 @@ except ImportError as e:
 AUDIO_EXTENSIONS = {'.mp3', '.aiff', '.aif', '.wav', '.flac', '.m4a', '.aac', '.ogg'}
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-PORT       = int(os.environ.get('BEETSGUI_PORT', 1312))
+PORT       = int(os.environ.get('BEETSGUI_PORT', 1612))
 OPEN_APP   = os.environ.get('BEETSGUI_NO_OPEN') != '1'
 SCRIPT_DIR = Path(__file__).parent.resolve()
 HTML_FILE  = 'beetsgui.html'
@@ -335,6 +335,16 @@ def library_write():
 @app.route('/library/missing')
 def library_missing():
     return jsonify({'ok': True, 'albums': libops.missing_albums()})
+
+
+@app.route('/library/count')
+def library_count():
+    """Albums a beets query matches — the preview step before artwork/sync
+    jobs, which have no pretend mode of their own to preview with."""
+    try:
+        return jsonify({'ok': True, 'count': libops.album_count(request.args.get('query', ''))})
+    except UserError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
 
 
 @app.route('/library/remove/preview', methods=['POST'])

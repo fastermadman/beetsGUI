@@ -52,11 +52,11 @@ cd beetsgui
 python3 server.py
 ```
 
-Open http://localhost:1312 in Safari.
+Open http://localhost:1612 in Safari.
 
 ### 3. Create a Safari Web App (macOS standalone)
 
-With http://localhost:1312 open in Safari:
+With http://localhost:1612 open in Safari:
 **File → Add to Dock → name it "beetsGUI"**
 
 The server will now open the standalone app automatically on next launch.
@@ -95,24 +95,24 @@ debugging:
 ```bash
 # Start: mode is interactive | fast | quiet | timid
 # handling is copy | move | keep; incremental and singleton are booleans
-curl -s -X POST localhost:1312/import/start -H 'Content-Type: application/json' \
+curl -s -X POST localhost:1612/import/start -H 'Content-Type: application/json' \
      -d '{"path":"~/Downloads/some album","mode":"interactive","handling":"copy"}'
 
 # Or a curated set of folders (e.g. found while scanning in Inbox, or via an fd search) —
 # beets groups them itself, same as `beet import path1 path2`
-curl -s -X POST localhost:1312/import/start -H 'Content-Type: application/json' \
+curl -s -X POST localhost:1612/import/start -H 'Content-Type: application/json' \
      -d '{"paths":["~/Downloads/album1","~/Downloads/album2"],"mode":"interactive"}'
 ```
 
 ```bash
 # Watch: status lines, decisions and a final done event, as SSE
-curl -sN localhost:1312/import/<id>/events
+curl -sN localhost:1612/import/<id>/events
 ```
 
 ```bash
 # Answer a decision. choice is apply|skip|asis|tracks|albums for a match,
 # skip|keep|remove|merge for a duplicate, or resume|restart to resume.
-curl -s -X POST localhost:1312/import/<id>/decide -H 'Content-Type: application/json' \
+curl -s -X POST localhost:1612/import/<id>/decide -H 'Content-Type: application/json' \
      -d '{"decision_id":"<from the event>","choice":"apply","candidate":0}'
 ```
 
