@@ -1428,7 +1428,7 @@ function findFormat(ext){
     .then(data=>{
       if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
       if(!data.files.length){el.innerHTML='<div class="lib-empty">No '+ext.toUpperCase()+' files found.</div>';return;}
-      el.innerHTML='<div class="lib-count">'+data.files.length+' file'+(data.files.length===1?'':'s')+'</div>'+
+      el.innerHTML=truncNote(data)+'<div class="lib-count">'+data.files.length+' file'+(data.files.length===1?'':'s')+'</div>'+
         '<div class="lib-results">'+data.files.map(f=>'<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f)+'</div></div>').join('')+'</div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
@@ -1441,7 +1441,7 @@ function countFormats(exts){
   fetch('/scan/count?dir='+encodeURIComponent(src)+'&ext='+exts+'&exclude=Samples,Stems')
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.ok?'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+      el.innerHTML=data.ok?truncNote(data)+'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
@@ -1460,6 +1460,12 @@ function buildXldCmd(){
   if(mode==='single')setCmd('xld -f '+fmt+' -o "'+out+'" "'+src+'"');
   else{const ext=fmt==='aiff'?'aiff':'wav';setCmd('fd -e '+ext+' . "'+src+'" --exclude Samples --exclude Stems | while read f; do xld -f '+fmt+' -o "'+out+'" "$f"; done');}
 }
+// Server gives up on a scan after a wall-clock budget (#35) rather than
+// running forever on a huge dir — say so, or a partial count/list quietly
+// looks like the whole truth.
+function truncNote(data){
+  return data.truncated?'<div class="alert alert-yellow" style="font-size:10px;">Stopped early — this folder is large enough that the count/list above is incomplete.</div>':'';
+}
 function scanDir(){return document.getElementById('scan-path').value.trim();}
 function scanExclude(){return Array.from(document.querySelectorAll('#scan-excl input:checked')).map(c=>c.value).join(',');}
 function fmtBytes(n){
@@ -1475,7 +1481,7 @@ function scanCount(){
   fetch('/scan/count?dir='+encodeURIComponent(dir)+'&exclude='+encodeURIComponent(scanExclude()))
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.ok?'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+      el.innerHTML=data.ok?truncNote(data)+'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
@@ -1486,7 +1492,7 @@ function scanSaveList(){
   fetch('/scan/save-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dir,exclude:scanExclude()})})
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.ok?'<div class="alert alert-green">Saved '+data.count+' file'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+      el.innerHTML=data.ok?truncNote(data)+'<div class="alert alert-green">Saved '+data.count+' file'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
@@ -1499,7 +1505,7 @@ function scanSizes(){
     .then(data=>{
       if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
       if(!data.folders.length){el.innerHTML='<div class="lib-empty">No subfolders found.</div>';return;}
-      el.innerHTML='<div class="lib-results">'+data.folders.map(f=>
+      el.innerHTML=truncNote(data)+'<div class="lib-results">'+data.folders.map(f=>
         '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f.path)+'</div><div class="lib-row-meta">'+fmtBytes(f.size_bytes)+'</div></div>'
       ).join('')+'</div>';
     })
