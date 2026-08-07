@@ -19,7 +19,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Install dependencies
-        run: pip install beets flask
+        # Pinned to the version this app is actually developed/run against
+        # (~/.local/pipx/venvs/beets locally) — a red run here should mean
+        # "this PR broke something," not "beets shipped a new release."
+        # See .github/workflows/beets-canary.yml for the latter.
+        run: pip install beets==2.11.0 flask
 
       - name: Run test_importsession.py
         run: python test_importsession.py
