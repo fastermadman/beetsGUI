@@ -29,3 +29,6 @@ jobs:
 
       - name: Run test_importsession.py
         run: python test_importsession.py
+
+      - name: Run test_transcode.py
+        run: python test_transcode.py

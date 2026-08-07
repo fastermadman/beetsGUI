@@ -6,8 +6,14 @@ driven without its CLI wrapper.
 optparse namespace and has an interactive "Convert? (Y/n)" prompt baked
 in. The plugin's own auto-convert-on-import path (`auto_convert_keep`)
 shows the level below that — build a default opts namespace from the
-subcommand's parser, resolve it with `_get_opts_and_config`, and call
-`_parallel_convert` directly — so that's what this does.
+subcommand's parser and call `_parallel_convert` directly — so that's
+what this does.
+
+`_get_opts_and_config`/`convert_item`'s parameter list (beets < 2.13) vs.
+`self.config.set(vars(opts))` + `convert_item(keep_new)` reading
+dest/pretend/etc. off cached_property (beets >= 2.13) is a hard API
+break between the two — see #50. Detected by API shape, same as
+`importsession.py`'s AlbumMatch/DuplicateAction handling.
 
 Progress and abort come from a trick rather than a reimplementation:
 `_parallel_convert` builds `Pipeline([iter(items), ...])`, so passing a
@@ -54,20 +60,54 @@ def _feed(items, job):
         yield item
 
 
+# cached_property names convert_item's beets>=2.13 config reads pull from —
+# cleared before each job so a *previous* job's opts (format/dest/pretend)
+# don't leak into this one. The plugin instance is a module-level
+# singleton (`plugins._instances`), long-lived across jobs in this process,
+# unlike beets' own `beet convert` CLI which is a fresh process every time.
+_CACHED_CONFIG_ATTRS = (
+    'dest', 'threads', 'path_formats', 'fmt', 'playlist',
+    'pretend', 'force', 'refresh', 'hardlink', 'link', 'command',
+)
+
+
 def _run(job):
     lib = get_library()
     plugin = _plugin()
 
     opts = plugin.commands()[0].parser.get_default_values()
-    opts.format = job.meta.get('format') or None
+    # Leave format/dest at the parser default (already the config value)
+    # when not requested — beets >= 2.13 pushes `opts` straight into the
+    # plugin's config (see below), so an explicit None here would
+    # overwrite a real config value instead of falling back to it.
+    if job.meta.get('format'):
+        opts.format = job.meta['format']
     opts.pretend = bool(job.meta.get('pretend'))
     opts.album = False
     opts.yes = True                       # the UI's own confirm stands in
     if job.meta.get('dest'):
         opts.dest = job.meta['dest']
 
-    (dest, threads, path_formats, fmt, pretend, hardlink, link, _playlist,
-     force) = plugin._get_opts_and_config(opts)
+    if hasattr(plugin, '_get_opts_and_config'):
+        # beets < 2.13: opts resolved explicitly, passed to convert_item
+        # as positional pipeline-stage arguments.
+        (dest, threads, path_formats, fmt, pretend, hardlink, link,
+         _playlist, force) = plugin._get_opts_and_config(opts)
+        keep_new = opts.keep_new
+        make_stage = lambda: plugin.convert_item(         # noqa: E731
+            dest, keep_new, path_formats, fmt, pretend, link, hardlink, force)
+    else:
+        # beets >= 2.13 (#50): convert_item takes only (keep_new, item) and
+        # reads dest/pretend/etc. off the plugin's own config — the same
+        # mechanism beets' own convert_func uses.
+        for attr in _CACHED_CONFIG_ATTRS:
+            plugin.__dict__.pop(attr, None)
+        plugin.config.set(vars(opts))
+        dest, threads, path_formats, fmt, pretend = (
+            plugin.dest, plugin.threads, plugin.path_formats,
+            plugin.fmt, plugin.pretend)
+        keep_new = opts.keep_new
+        make_stage = lambda: plugin.convert_item(keep_new)  # noqa: E731
 
     items = list(lib.items(split_query(job.meta.get('query', ''))))
     if not items:
@@ -91,9 +131,7 @@ def _run(job):
     # Abort stops the source feeding, so anything already buffered still
     # gets encoded — with 16 in flight that made abort take minutes on
     # real audio (measured). At 1 it is bounded by the worker count.
-    stages = [plugin.convert_item(dest, opts.keep_new, path_formats, fmt,
-                                  pretend, link, hardlink, force)
-              for _ in range(threads)]
+    stages = [make_stage() for _ in range(threads)]
     pipeline.Pipeline([_feed(items, job), stages]).run_parallel(queue_size=1)
 
 
