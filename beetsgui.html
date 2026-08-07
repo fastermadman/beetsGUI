@@ -488,21 +488,6 @@
         </div>
 
         <div style="margin-top:1rem;">
-          <div class="section-title">Convert with XLD</div>
-          <div class="drop-zone" id="xld-drop"><span class="drop-icon">🎵</span><span>Drag source file or folder here</span></div>
-          <div class="field"><label>Source file/folder</label><input type="text" id="xld-src" placeholder="/Volumes/Harddisk/album.wav" oninput="buildXldCmd()"></div>
-          <div class="field-row">
-            <div class="field"><label>Output format</label><select id="xld-fmt" onchange="buildXldCmd()"><option value="alac">ALAC</option><option value="flac">FLAC</option><option value="aiff">AIFF</option><option value="mp3">MP3 320</option></select></div>
-            <div class="field"><label>Output folder</label><input type="text" id="xld-out" placeholder="~/Music/Converted" oninput="buildXldCmd()"></div>
-          </div>
-          <div class="check-group" style="margin-bottom:0.5rem;">
-            <label class="radio-item"><input type="radio" name="xld-mode" value="single" checked onchange="buildXldCmd()"><span>Single file</span></label>
-            <label class="radio-item"><input type="radio" name="xld-mode" value="batch" onchange="buildXldCmd()"><span>All WAV in folder (loop)</span></label>
-          </div>
-          <div class="btn-row"><button class="btn btn-primary" onclick="buildXldCmd()"><span>Build XLD command</span></button></div>
-        </div>
-
-        <div style="margin-top:1rem;">
           <div class="section-title">WAV tags from filename</div>
           <div class="alert alert-yellow" style="font-size:10px;">Use "Import with fromfilename" in the Inbox tab after converting.<br>Beets guesses metadata from the filename (Artist - Title.wav) and searches MusicBrainz.</div>
         </div>
@@ -809,7 +794,6 @@ function setupDrop(zoneId,targetId,onDrop){
 setupDrop('import-drop','import-path',p=>checkiCloud(p));
 setupDrop('scan-drop','scan-path');
 setupDrop('find-drop2','conv-src');
-setupDrop('xld-drop','xld-src',()=>buildXldCmd());
 document.body.addEventListener('dragover',e=>e.preventDefault());
 document.body.addEventListener('drop',e=>e.preventDefault());
 
@@ -1554,14 +1538,6 @@ function runConvert(){
   const fmt=document.getElementById('beet-conv-fmt').value;
   const dest=document.getElementById('beet-conv-dest').value.trim();
   startJob('/convert/start',{query:'format:'+fmt,pretend:false,dest:dest||null},'convert-job');
-}
-function buildXldCmd(){
-  const src=document.getElementById('xld-src').value.trim()||'/path/to/file.wav';
-  const fmt=document.getElementById('xld-fmt').value;
-  const out=document.getElementById('xld-out').value.trim()||'~/Music/Converted';
-  const mode=document.querySelector('input[name="xld-mode"]:checked').value;
-  if(mode==='single')setCmd('xld -f '+fmt+' -o "'+out+'" "'+src+'"');
-  else{const ext=fmt==='aiff'?'aiff':'wav';setCmd('fd -e '+ext+' . "'+src+'" --exclude Samples --exclude Stems | while read f; do xld -f '+fmt+' -o "'+out+'" "$f"; done');}
 }
 // Server gives up on a scan after a wall-clock budget (#35) rather than
 // running forever on a huge dir — say so, or a partial count/list quietly
