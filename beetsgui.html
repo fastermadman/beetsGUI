@@ -667,7 +667,7 @@
       <div class="auth-card open" id="card-discogs">
         <div class="auth-card-hd" onclick="toggleCard('card-discogs')">
           <span><span class="auth-status" id="status-discogs"></span><span class="auth-card-title">Discogs</span></span>
-          <span class="auth-card-chevron">▲</span>
+          <span class="auth-card-chevron">▼</span>
         </div>
         <div class="auth-card-body">
           <div class="check-group" style="margin-bottom:0.75rem;">
@@ -1623,10 +1623,13 @@ function copyConfig(){
     setTimeout(()=>{if(span)span.textContent='Copy config.yaml';},1800);
   });
 }
+// #41: the chevron's direction is CSS's job alone (.auth-card.open rotates
+// it 180deg) — this used to also swap the glyph itself between ▼/▲, which
+// fought the rotation and made both states render identically. One
+// mechanism, not two.
 function toggleCard(id){
   const card=document.getElementById(id),isOpen=card.classList.contains('open');
   card.classList.toggle('open',!isOpen);
-  card.querySelector('.auth-card-chevron').textContent=isOpen?'▼':'▲';
   card.querySelector('.auth-card-body').style.display=isOpen?'none':'block';
 }
 document.querySelectorAll('.auth-card').forEach(card=>{
