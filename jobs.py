@@ -10,10 +10,11 @@ registry here is deliberately global and single-flight: the invariant is
 "one beets job at a time", not "one import at a time", which is why
 import doesn't get a registry of its own.
 
-A job owns a thread, an event queue drained by an SSE endpoint, and an
-abort flag. Abort is cooperative: the worker checks `job.aborted` between
-units of work. Only import can also be blocked mid-unit waiting on a
-human, so only `ImportJob` overrides `abort()` to unblock that wait.
+A job owns a thread, a fan-out set of per-listener event queues (one per
+connected SSE stream — see subscribe()/unsubscribe()), and an abort flag.
+Abort is cooperative: the worker checks `job.aborted` between units of
+work. Only import can also be blocked mid-unit waiting on a human, so
+only `ImportJob` overrides `abort()` to unblock that wait.
 """
 import queue
 import threading
@@ -23,18 +24,60 @@ import uuid
 class Job:
     """A background operation with an SSE event stream."""
 
+    # Bounds memory to a constant regardless of library size when nobody's
+    # listening (tab closed, SSE dropped) — status events are progress, not
+    # state, so losing the oldest ones is fine. A reconnecting client
+    # re-syncs via /jobs/current and replay() rather than the queue's
+    # contents, so this holds even for ImportJob's decisions (see
+    # importsession.py: the pending decision's source of truth is
+    # self._pending, not this queue — replay() never reads from here).
+    _MAX_BUFFERED_EVENTS = 200
+
     def __init__(self, kind, **meta):
         self.id = uuid.uuid4().hex
         self.kind = kind
         self.meta = meta
-        self.events = queue.Queue()
+        # One queue per connected SSE stream, not one shared queue — two
+        # tabs open on the same job each got a *subset* of events before
+        # (both calling .get() on one queue splits the stream between them)
+        # rather than each seeing the full thing. See subscribe()/unsubscribe().
+        self._listeners = []
+        self._listeners_lock = threading.Lock()
         self.done = threading.Event()
         self.aborted = threading.Event()
         self.result = {}      # merged into the final 'done' event
         self.thread = None
 
+    def subscribe(self):
+        """Register a new listener queue for this job. Call unsubscribe()
+        with the returned queue when the connection ends."""
+        q = queue.Queue(maxsize=self._MAX_BUFFERED_EVENTS)
+        with self._listeners_lock:
+            self._listeners.append(q)
+        return q
+
+    def unsubscribe(self, q):
+        with self._listeners_lock:
+            if q in self._listeners:
+                self._listeners.remove(q)
+
     def emit(self, type, **payload):
-        self.events.put({'type': type, **payload})
+        """Fan out to every connected listener. Never blocks the worker
+        thread: if a listener's buffer is full (a slow or gone consumer),
+        drop that listener's oldest event to make room rather than waiting
+        for a consumer that may never show up."""
+        event = {'type': type, **payload}
+        with self._listeners_lock:
+            listeners = list(self._listeners)
+        for q in listeners:
+            try:
+                q.put_nowait(event)
+            except queue.Full:
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    pass
+                q.put_nowait(event)
 
     def replay(self):
         """Events a reconnecting client must be given immediately.
@@ -49,7 +92,8 @@ class Job:
         self.aborted.set()
 
     def summary(self):
-        return {'id': self.id, 'kind': self.kind, **self.meta}
+        return {'id': self.id, 'kind': self.kind, 'aborting': self.aborted.is_set(),
+                **self.meta}
 
 
 # ── Registry ──────────────────────────────────────────────────────────────

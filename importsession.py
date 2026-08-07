@@ -21,7 +21,10 @@ import threading
 import uuid
 
 from beets import config, context, plugins, ui
-from beets.autotag.hooks import AlbumMatch
+try:
+    from beets.autotag.match import AlbumMatch   # beets >= 2.13
+except ImportError:
+    from beets.autotag.hooks import AlbumMatch    # beets < 2.13
 from beets.importer import Action, ImportAbortError, ImportSession
 from beets.util import displayable_path
 
@@ -194,8 +197,8 @@ class ImportJob(jobs.Job):
         self._pending = None
 
     def summary(self):
-        return {'id': self.id, 'kind': self.kind, 'paths': self.paths,
-                'mode': self.mode, 'handling': self.handling,
+        return {'id': self.id, 'kind': self.kind, 'aborting': self.aborted.is_set(),
+                'paths': self.paths, 'mode': self.mode, 'handling': self.handling,
                 'incremental': self.incremental, 'singleton': self.singleton}
 
     # -- called from importer threads --

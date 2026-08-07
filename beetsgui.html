@@ -121,6 +121,11 @@
   .lib-row-meta { color:var(--text3); font-size:10px; letter-spacing:0.04em; white-space:nowrap; }
   .lib-empty { color:var(--text3); font-size:12px; padding:1.5rem; text-align:center; }
   .lib-count { color:var(--text3); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.5rem; }
+  /* Indeterminate progress cue for a running background job — the app can't
+     show a real percentage (mbsync/bpsync don't report counts at all), so
+     this signals "still alive" rather than "how far along." */
+  @keyframes job-pulse { 0%,100% { opacity:1; } 50% { opacity:0.45; } }
+  .job-pulse { animation:job-pulse 1.6s ease-in-out infinite; }
   details.section summary.section-title { cursor:pointer; user-select:none; }
   details.section summary.section-title::-webkit-details-marker { color:var(--text3); }
   .kbd { background:var(--bg3); border:1px solid var(--border2); border-radius:3px; color:var(--text3); font-size:9px; padding:0.05rem 0.3rem; margin-right:0.35rem; }
@@ -672,7 +677,7 @@
       <div class="auth-card open" id="card-discogs">
         <div class="auth-card-hd" onclick="toggleCard('card-discogs')">
           <span><span class="auth-status" id="status-discogs"></span><span class="auth-card-title">Discogs</span></span>
-          <span class="auth-card-chevron">▲</span>
+          <span class="auth-card-chevron">▼</span>
         </div>
         <div class="auth-card-body">
           <div class="check-group" style="margin-bottom:0.75rem;">
@@ -1061,12 +1066,29 @@ function startJob(url,payload,elId,onDone){
 function attachJob(id,el,onDone){
   if(jobRunner.es)jobRunner.es.close();
   jobRunner={es:new EventSource('/jobs/'+id+'/events'),id:id,el:el,onDone:onDone};
-  el.innerHTML='<div class="lib-count" id="job-status">Working…</div>'+
-    '<div class="btn-row"><button class="btn btn-danger btn-sm" onclick="abortJob()">Abort</button></div>';
+  el.innerHTML='<div class="lib-count job-pulse" id="job-status">Working…</div>'+
+    '<div class="btn-row"><button class="btn btn-danger btn-sm" id="job-abort-btn" onclick="abortJob()">Abort</button></div>';
   jobRunner.es.onmessage=e=>handleJobEvent(JSON.parse(e.data));
 }
+// mbsync/bpsync only checkpoint between phases, not between items within a
+// phase (see server.py's /jobs/<id>/abort docstring) — a click here can
+// legitimately sit for minutes with no SSE event. Give feedback immediately
+// instead of leaving the last status line frozen with no sign anything
+// happened, and say so honestly if the wait times out rather than going
+// quiet again.
 function abortJob(){
-  if(jobRunner.id)fetch('/jobs/'+jobRunner.id+'/abort',{method:'POST'});
+  if(!jobRunner.id)return;
+  const status=document.getElementById('job-status');
+  const btn=document.getElementById('job-abort-btn');
+  if(btn)btn.disabled=true;
+  if(status)status.textContent='Aborting — waiting for the current step to finish…';
+  fetch('/jobs/'+jobRunner.id+'/abort',{method:'POST'})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.finished&&status)
+        status.textContent='Still finishing ('+data.kind+') — this can take a few more minutes; the page updates on its own once it does.';
+    })
+    .catch(()=>{});
 }
 function jobSummary(ev){
   const parts=[];
@@ -1497,7 +1519,7 @@ function findFormat(ext){
     .then(data=>{
       if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
       if(!data.files.length){el.innerHTML='<div class="lib-empty">No '+ext.toUpperCase()+' files found.</div>';return;}
-      el.innerHTML='<div class="lib-count">'+data.files.length+' file'+(data.files.length===1?'':'s')+'</div>'+
+      el.innerHTML=truncNote(data)+'<div class="lib-count">'+data.files.length+' file'+(data.files.length===1?'':'s')+'</div>'+
         '<div class="lib-results">'+data.files.map(f=>'<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f)+'</div></div>').join('')+'</div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
@@ -1510,7 +1532,7 @@ function countFormats(exts){
   fetch('/scan/count?dir='+encodeURIComponent(src)+'&ext='+exts+'&exclude=Samples,Stems')
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.ok?'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+      el.innerHTML=data.ok?truncNote(data)+'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
@@ -1541,6 +1563,12 @@ function buildXldCmd(){
   if(mode==='single')setCmd('xld -f '+fmt+' -o "'+out+'" "'+src+'"');
   else{const ext=fmt==='aiff'?'aiff':'wav';setCmd('fd -e '+ext+' . "'+src+'" --exclude Samples --exclude Stems | while read f; do xld -f '+fmt+' -o "'+out+'" "$f"; done');}
 }
+// Server gives up on a scan after a wall-clock budget (#35) rather than
+// running forever on a huge dir — say so, or a partial count/list quietly
+// looks like the whole truth.
+function truncNote(data){
+  return data.truncated?'<div class="alert alert-yellow" style="font-size:10px;">Stopped early — this folder is large enough that the count/list above is incomplete.</div>':'';
+}
 function scanDir(){return document.getElementById('scan-path').value.trim();}
 function scanExclude(){return Array.from(document.querySelectorAll('#scan-excl input:checked')).map(c=>c.value).join(',');}
 function fmtBytes(n){
@@ -1556,7 +1584,7 @@ function scanCount(){
   fetch('/scan/count?dir='+encodeURIComponent(dir)+'&exclude='+encodeURIComponent(scanExclude()))
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.ok?'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+      el.innerHTML=data.ok?truncNote(data)+'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
@@ -1567,7 +1595,7 @@ function scanSaveList(){
   fetch('/scan/save-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dir,exclude:scanExclude()})})
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.ok?'<div class="alert alert-green">Saved '+data.count+' file'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+      el.innerHTML=data.ok?truncNote(data)+'<div class="alert alert-green">Saved '+data.count+' file'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
@@ -1580,7 +1608,7 @@ function scanSizes(){
     .then(data=>{
       if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
       if(!data.folders.length){el.innerHTML='<div class="lib-empty">No subfolders found.</div>';return;}
-      el.innerHTML='<div class="lib-results">'+data.folders.map(f=>
+      el.innerHTML=truncNote(data)+'<div class="lib-results">'+data.folders.map(f=>
         '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f.path)+'</div><div class="lib-row-meta">'+fmtBytes(f.size_bytes)+'</div></div>'
       ).join('')+'</div>';
     })
@@ -1698,10 +1726,13 @@ function copyConfig(){
     setTimeout(()=>{if(span)span.textContent='Copy config.yaml';},1800);
   });
 }
+// #41: the chevron's direction is CSS's job alone (.auth-card.open rotates
+// it 180deg) — this used to also swap the glyph itself between ▼/▲, which
+// fought the rotation and made both states render identically. One
+// mechanism, not two.
 function toggleCard(id){
   const card=document.getElementById(id),isOpen=card.classList.contains('open');
   card.classList.toggle('open',!isOpen);
-  card.querySelector('.auth-card-chevron').textContent=isOpen?'▼':'▲';
   card.querySelector('.auth-card-body').style.display=isOpen?'none':'block';
 }
 document.querySelectorAll('.auth-card').forEach(card=>{
