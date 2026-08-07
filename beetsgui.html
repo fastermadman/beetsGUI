@@ -7,6 +7,18 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="BeetsGUI">
 <style>
+  /* Indestructible Type — self-hosted, OFL. Gnomon: logo only (its TOTD/DIST
+     variable axes draw the sundial-shadow logo, see initGnomonShadow()).
+     Jost: UI chrome (buttons, labels, section titles). Drafting Mono: the
+     one true monospace, for anything that's data/code, not interface. */
+  @font-face { font-family:'Jost'; src:url('assets/fonts/Jost-VariableFont.woff2') format('woff2'); font-weight:100 900; font-style:normal; font-display:swap; }
+  @font-face { font-family:'Jost'; src:url('assets/fonts/Jost-Italic-VariableFont.woff2') format('woff2'); font-weight:100 900; font-style:italic; font-display:swap; }
+  @font-face { font-family:'Drafting Mono'; src:url('assets/fonts/DraftingMono-Light.woff2') format('woff2'); font-weight:300; font-style:normal; font-display:swap; }
+  @font-face { font-family:'Drafting Mono'; src:url('assets/fonts/DraftingMono-Regular.woff2') format('woff2'); font-weight:400; font-style:normal; font-display:swap; }
+  @font-face { font-family:'Drafting Mono'; src:url('assets/fonts/DraftingMono-Italic.woff2') format('woff2'); font-weight:400; font-style:italic; font-display:swap; }
+  @font-face { font-family:'Drafting Mono'; src:url('assets/fonts/DraftingMono-Medium.woff2') format('woff2'); font-weight:500; font-style:normal; font-display:swap; }
+  @font-face { font-family:'Drafting Mono'; src:url('assets/fonts/DraftingMono-Bold.woff2') format('woff2'); font-weight:700; font-style:normal; font-display:swap; }
+  @font-face { font-family:'Gnomon'; src:url('assets/fonts/Gnomon-Web.ttf') format('truetype'); font-display:swap; }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg:#0f0f0f; --bg2:#1a1a1a; --bg3:#252525; --bg4:#2e2e2e;
@@ -17,7 +29,8 @@
     --yellow:#c8a040; --yellow-bg:#252010;
     --green:#5c9e6e; --green-bg:#152a1e;
     --radius:6px; --radius-lg:10px;
-    --font-mono:'Courier New',Courier,monospace;
+    --font-ui:'Jost',-apple-system,BlinkMacSystemFont,sans-serif;
+    --font-mono:'Drafting Mono','SF Mono','Menlo',monospace;
   }
   @media (prefers-color-scheme:light) {
     :root {
@@ -27,7 +40,7 @@
       --red-bg:#fce8e8; --yellow-bg:#fdf5e0; --green-bg:#e8f4ec;
     }
   }
-  html,body { height:100%; background:var(--bg); color:var(--text); font-family:'SF Mono','Menlo',var(--font-mono); font-size:13px; line-height:1.6; }
+  html,body { height:100%; background:var(--bg); color:var(--text); font-family:var(--font-ui); font-weight:400; font-size:13px; line-height:1.6; }
   .app { display:flex; flex-direction:column; height:100vh; max-width:860px; margin:0 auto; }
   .app-header { display:flex; align-items:baseline; gap:0.75rem; padding:1rem 1.25rem 0; border-bottom:1px solid var(--border); flex-shrink:0; }
   .prefs-btn { align-self:center; background:none; border:none; color:var(--text3); cursor:pointer; font-size:15px; margin-left:auto; padding:0.2rem 0.3rem; transition:color 0.1s; }
@@ -39,11 +52,16 @@
   .prefs-close { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; padding:0.2rem 0.4rem; }
   .prefs-close:hover { color:var(--text); }
   .prefs-body { max-height:calc(85vh - 54px); overflow-y:auto; padding:1.25rem; }
-  .app-title { font-size:15px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent); }
-  .app-sub { font-size:11px; color:var(--text3); letter-spacing:0.04em; }
+  /* .app-title is a stack of two same-position glyph layers: .shadow (behind,
+     DIST driven by time of day) and .face (front, DIST=0, flat). See
+     initGnomonShadow(). */
+  .app-title { position:relative; display:inline-block; font-family:'Gnomon'; font-size:22px; letter-spacing:0.02em; }
+  .app-title .shadow { position:absolute; top:0; left:0; color:var(--accent2); }
+  .app-title .face { position:relative; color:var(--accent); }
+  .app-sub { font-size:11px; font-weight:300; color:var(--text3); letter-spacing:0.04em; }
   .tabs { display:flex; padding:0 1.25rem; border-bottom:1px solid var(--border); flex-shrink:0; overflow-x:auto; scrollbar-width:none; }
   .tabs::-webkit-scrollbar { display:none; }
-  .tab-btn { background:none; border:none; border-bottom:2px solid transparent; color:var(--text3); cursor:pointer; font-family:inherit; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; padding:0.6rem 0.9rem; white-space:nowrap; transition:color 0.1s,border-color 0.1s; margin-bottom:-1px; }
+  .tab-btn { background:none; border:none; border-bottom:2px solid transparent; color:var(--text3); cursor:pointer; font-family:inherit; font-weight:500; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; padding:0.6rem 0.9rem; white-space:nowrap; transition:color 0.1s,border-color 0.1s; margin-bottom:-1px; }
   .tab-btn:hover { color:var(--text2); }
   .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
   .content { flex:1; overflow-y:auto; padding:1.25rem; padding-bottom:0; }
@@ -58,7 +76,7 @@
   .btn-copy { background:var(--accent); border:none; border-radius:var(--radius); color:var(--bg); cursor:pointer; font-family:inherit; font-size:11px; font-weight:700; letter-spacing:0.08em; padding:0.45rem 1rem; text-transform:uppercase; transition:opacity 0.1s; white-space:nowrap; }
   .btn-copy:hover { opacity:0.85; }
   .btn-copy.copied { background:var(--green); }
-  label { color:var(--text2); font-size:11px; letter-spacing:0.06em; text-transform:uppercase; }
+  label { color:var(--text2); font-weight:500; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; }
   input[type="text"],input[type="password"],input[type="number"],select,textarea { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); font-family:var(--font-mono); font-size:12px; padding:0.4rem 0.6rem; outline:none; width:100%; transition:border-color 0.1s; }
   input:focus,select:focus,textarea:focus { border-color:var(--accent2); }
   textarea { resize:vertical; }
@@ -71,12 +89,12 @@
   input[type="checkbox"],input[type="radio"] { width:auto; accent-color:var(--accent); cursor:pointer; }
   .check-row { display:flex; flex-wrap:wrap; gap:0.4rem 1rem; }
   .section { margin-bottom:1.25rem; }
-  .section-title { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text3); border-bottom:1px solid var(--border); padding-bottom:0.3rem; margin-bottom:0.75rem; }
+  .section-title { font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--text2); border-bottom:1px solid var(--border); padding-bottom:0.3rem; margin-bottom:0.75rem; }
   .drop-zone { border:1.5px dashed var(--border2); border-radius:var(--radius-lg); padding:1.25rem; text-align:center; color:var(--text3); cursor:default; transition:background 0.15s,border-color 0.15s; margin-bottom:0.75rem; font-size:12px; }
   .drop-zone.drag-over { background:var(--bg3); border-color:var(--accent2); color:var(--text2); }
   .drop-zone .drop-icon { font-size:20px; margin-bottom:0.25rem; display:block; }
   .drop-zone .drop-hint { font-size:10px; color:var(--text3); margin-top:0.3rem; }
-  .btn { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); cursor:pointer; font-family:inherit; font-size:11px; letter-spacing:0.06em; padding:0.4rem 0.75rem; text-transform:uppercase; transition:background 0.1s,border-color 0.1s; white-space:nowrap; }
+  .btn { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); cursor:pointer; font-family:inherit; font-weight:500; font-size:11px; letter-spacing:0.06em; padding:0.4rem 0.75rem; text-transform:uppercase; transition:background 0.1s,border-color 0.1s; white-space:nowrap; }
   .btn:hover { background:var(--bg4); border-color:var(--accent2); }
   .btn-primary { background:var(--accent2); border-color:var(--accent); color:var(--text); }
   .btn-primary:hover { background:var(--accent); color:var(--bg); }
@@ -157,7 +175,7 @@
 <div class="app">
 
   <div class="app-header">
-    <span class="app-title">BeetsGUI</span>
+    <span class="app-title" id="app-title"><span class="shadow" aria-hidden="true">BeetsGUI</span><span class="face">BeetsGUI</span></span>
     <span class="app-sub">beets music library assistant</span>
     <button class="prefs-btn" onclick="openPrefs()" title="Preferences (⌘,)">⚙</button>
   </div>
@@ -1706,7 +1724,27 @@ function toggleBp4Method(){
   if(localStorage.getItem('cmdBoxOpen')==='1')box.open=true;
   box.addEventListener('toggle',()=>localStorage.setItem('cmdBoxOpen',box.open?'1':'0'));
 })();
-updatePathPreview();checkCurrentImport();loadModFields();checkFirstRun();
+// Gnomon's TOTD/DIST are real OpenType variable axes the font itself draws
+// a sundial shadow with — not a CSS trick. .face stays at DIST=0 (the plain
+// letterform) at the same TOTD as .shadow, so both layers share identical
+// proportions and only the shadow layer's extension differs; that's what
+// keeps them pixel-aligned across the whole word (see #36 font research).
+// ponytail: computed once at load, no live tick — a decorative touch on a
+// page that's opened fresh, not a running clock. Add setInterval if that
+// stops being true.
+function initGnomonShadow(){
+  const now=new Date();
+  const hour=now.getHours()+now.getMinutes()/60;
+  const totd=(hour/24)*1000;
+  const distFromNoon=Math.abs(hour-12);            // 0..12
+  const dist=120+(distFromNoon/12)*330;            // ~120 at noon, ~450 at midnight
+  const shadow=document.querySelector('#app-title .shadow');
+  const face=document.querySelector('#app-title .face');
+  if(!shadow||!face)return;
+  shadow.style.fontVariationSettings=`'TOTD' ${totd.toFixed(1)}, 'DIST' ${dist.toFixed(1)}`;
+  face.style.fontVariationSettings=`'TOTD' ${totd.toFixed(1)}, 'DIST' 0`;
+}
+updatePathPreview();checkCurrentImport();loadModFields();checkFirstRun();initGnomonShadow();
 </script>
 </body>
 </html>
