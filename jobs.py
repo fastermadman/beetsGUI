@@ -10,10 +10,11 @@ registry here is deliberately global and single-flight: the invariant is
 "one beets job at a time", not "one import at a time", which is why
 import doesn't get a registry of its own.
 
-A job owns a thread, an event queue drained by an SSE endpoint, and an
-abort flag. Abort is cooperative: the worker checks `job.aborted` between
-units of work. Only import can also be blocked mid-unit waiting on a
-human, so only `ImportJob` overrides `abort()` to unblock that wait.
+A job owns a thread, a fan-out set of per-listener event queues (one per
+connected SSE stream — see subscribe()/unsubscribe()), and an abort flag.
+Abort is cooperative: the worker checks `job.aborted` between units of
+work. Only import can also be blocked mid-unit waiting on a human, so
+only `ImportJob` overrides `abort()` to unblock that wait.
 """
 import queue
 import threading
@@ -36,25 +37,47 @@ class Job:
         self.id = uuid.uuid4().hex
         self.kind = kind
         self.meta = meta
-        self.events = queue.Queue(maxsize=self._MAX_BUFFERED_EVENTS)
+        # One queue per connected SSE stream, not one shared queue — two
+        # tabs open on the same job each got a *subset* of events before
+        # (both calling .get() on one queue splits the stream between them)
+        # rather than each seeing the full thing. See subscribe()/unsubscribe().
+        self._listeners = []
+        self._listeners_lock = threading.Lock()
         self.done = threading.Event()
         self.aborted = threading.Event()
         self.result = {}      # merged into the final 'done' event
         self.thread = None
 
+    def subscribe(self):
+        """Register a new listener queue for this job. Call unsubscribe()
+        with the returned queue when the connection ends."""
+        q = queue.Queue(maxsize=self._MAX_BUFFERED_EVENTS)
+        with self._listeners_lock:
+            self._listeners.append(q)
+        return q
+
+    def unsubscribe(self, q):
+        with self._listeners_lock:
+            if q in self._listeners:
+                self._listeners.remove(q)
+
     def emit(self, type, **payload):
-        """Never blocks the worker thread: if the buffer is full (nobody's
-        draining it), drop the oldest event to make room instead of
-        waiting for a consumer that may never show up."""
+        """Fan out to every connected listener. Never blocks the worker
+        thread: if a listener's buffer is full (a slow or gone consumer),
+        drop that listener's oldest event to make room rather than waiting
+        for a consumer that may never show up."""
         event = {'type': type, **payload}
-        try:
-            self.events.put_nowait(event)
-        except queue.Full:
+        with self._listeners_lock:
+            listeners = list(self._listeners)
+        for q in listeners:
             try:
-                self.events.get_nowait()
-            except queue.Empty:
-                pass
-            self.events.put_nowait(event)
+                q.put_nowait(event)
+            except queue.Full:
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    pass
+                q.put_nowait(event)
 
     def replay(self):
         """Events a reconnecting client must be given immediately.

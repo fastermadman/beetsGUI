@@ -734,33 +734,39 @@ def jobs_current():
 
 @app.route('/jobs/<job_id>/events')
 def job_events(job_id):
-    """SSE stream of status, decision and done events. One consumer at a time."""
+    """SSE stream of status, decision and done events. Each connection gets
+    its own fan-out queue (jobs.py), so multiple tabs each see the complete
+    stream instead of splitting one shared queue between them."""
     job = jobs.get(job_id)
     if not job:
         return jsonify({'ok': False, 'error': 'unknown job id'}), 404
 
     def generate():
-        # A reconnecting client must not have to wait out the decision timeout,
-        # so replay whatever the job says it owes a fresh listener (only
-        # import has anything) — but send each decision only once, since the
-        # queue may still hold the copy this replaces.
-        sent = set()
-        for event in job.replay():
-            sent.add(event['decision_id'])
-            yield f"data: {json.dumps(event)}\n\n"
-        while True:
-            try:
-                event = job.events.get(timeout=15)
-            except queue.Empty:
-                yield ": keepalive\n\n"
-                continue
-            if event['type'] == 'decision':
-                if event['decision_id'] in sent:
-                    continue
+        q = job.subscribe()
+        try:
+            # A reconnecting client must not have to wait out the decision
+            # timeout, so replay whatever the job says it owes a fresh
+            # listener (only import has anything) — but send each decision
+            # only once, since the queue may still hold the copy this replaces.
+            sent = set()
+            for event in job.replay():
                 sent.add(event['decision_id'])
-            yield f"data: {json.dumps(event)}\n\n"
-            if event['type'] == 'done':
-                return
+                yield f"data: {json.dumps(event)}\n\n"
+            while True:
+                try:
+                    event = q.get(timeout=15)
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+                    continue
+                if event['type'] == 'decision':
+                    if event['decision_id'] in sent:
+                        continue
+                    sent.add(event['decision_id'])
+                yield f"data: {json.dumps(event)}\n\n"
+                if event['type'] == 'done':
+                    return
+        finally:
+            job.unsubscribe(q)
 
     return Response(generate(), mimetype='text/event-stream', headers={
         'Cache-Control':     'no-cache',
