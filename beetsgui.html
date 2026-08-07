@@ -103,6 +103,11 @@
   .lib-row-meta { color:var(--text3); font-size:10px; letter-spacing:0.04em; white-space:nowrap; }
   .lib-empty { color:var(--text3); font-size:12px; padding:1.5rem; text-align:center; }
   .lib-count { color:var(--text3); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.5rem; }
+  /* Indeterminate progress cue for a running background job — the app can't
+     show a real percentage (mbsync/bpsync don't report counts at all), so
+     this signals "still alive" rather than "how far along." */
+  @keyframes job-pulse { 0%,100% { opacity:1; } 50% { opacity:0.45; } }
+  .job-pulse { animation:job-pulse 1.6s ease-in-out infinite; }
   details.section summary.section-title { cursor:pointer; user-select:none; }
   details.section summary.section-title::-webkit-details-marker { color:var(--text3); }
   .kbd { background:var(--bg3); border:1px solid var(--border2); border-radius:3px; color:var(--text3); font-size:9px; padding:0.05rem 0.3rem; margin-right:0.35rem; }
@@ -1051,12 +1056,29 @@ function startJob(url,payload,elId){
 function attachJob(id,el){
   if(jobRunner.es)jobRunner.es.close();
   jobRunner={es:new EventSource('/jobs/'+id+'/events'),id:id,el:el};
-  el.innerHTML='<div class="lib-count" id="job-status">Working…</div>'+
-    '<div class="btn-row"><button class="btn btn-danger btn-sm" onclick="abortJob()">Abort</button></div>';
+  el.innerHTML='<div class="lib-count job-pulse" id="job-status">Working…</div>'+
+    '<div class="btn-row"><button class="btn btn-danger btn-sm" id="job-abort-btn" onclick="abortJob()">Abort</button></div>';
   jobRunner.es.onmessage=e=>handleJobEvent(JSON.parse(e.data));
 }
+// mbsync/bpsync only checkpoint between phases, not between items within a
+// phase (see server.py's /jobs/<id>/abort docstring) — a click here can
+// legitimately sit for minutes with no SSE event. Give feedback immediately
+// instead of leaving the last status line frozen with no sign anything
+// happened, and say so honestly if the wait times out rather than going
+// quiet again.
 function abortJob(){
-  if(jobRunner.id)fetch('/jobs/'+jobRunner.id+'/abort',{method:'POST'});
+  if(!jobRunner.id)return;
+  const status=document.getElementById('job-status');
+  const btn=document.getElementById('job-abort-btn');
+  if(btn)btn.disabled=true;
+  if(status)status.textContent='Aborting — waiting for the current step to finish…';
+  fetch('/jobs/'+jobRunner.id+'/abort',{method:'POST'})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.finished&&status)
+        status.textContent='Still finishing ('+data.kind+') — this can take a few more minutes; the page updates on its own once it does.';
+    })
+    .catch(()=>{});
 }
 function jobSummary(ev){
   const parts=[];

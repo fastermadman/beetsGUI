@@ -49,7 +49,8 @@ class Job:
         self.aborted.set()
 
     def summary(self):
-        return {'id': self.id, 'kind': self.kind, **self.meta}
+        return {'id': self.id, 'kind': self.kind, 'aborting': self.aborted.is_set(),
+                **self.meta}
 
 
 # ── Registry ──────────────────────────────────────────────────────────────

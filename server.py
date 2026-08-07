@@ -772,13 +772,20 @@ def job_events(job_id):
 @app.route('/jobs/<job_id>/abort', methods=['POST'])
 def job_abort(job_id):
     """Cancel the job. Abort is cooperative — the worker stops at its next
-    checkpoint, so this waits for the job to actually finish."""
+    checkpoint, so this waits for the job to actually finish.
+
+    mbsync/bpsync (sync.py) checkpoint only between their two phases, not
+    between items within a phase — each phase is one plain `for` loop inside
+    the beets plugin itself, with no hook to interrupt mid-loop without
+    duplicating its matching logic. So this can legitimately time out with
+    the job still running; `finished: false` is a true answer, not a bug,
+    and the caller is expected to say so rather than imply it's stuck."""
     job = jobs.get(job_id)
     if not job:
         return jsonify({'ok': False, 'error': 'unknown job id'}), 404
     job.abort()
     job.done.wait(timeout=30)
-    return jsonify({'ok': True, 'finished': job.done.is_set()})
+    return jsonify({'ok': True, 'finished': job.done.is_set(), **job.summary()})
 
 
 @app.route('/import/<job_id>/decide', methods=['POST'])
