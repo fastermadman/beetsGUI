@@ -4,7 +4,7 @@ BeetsGUI Server — local Flask API
 Run: python3 server.py
 Stop: Ctrl+C
 
-Serves beetsgui.html on http://localhost:1312.
+Serves beetsgui.html on http://localhost:1612.
 """
 import json
 import os
@@ -45,7 +45,7 @@ except ImportError as e:
 AUDIO_EXTENSIONS = {'.mp3', '.aiff', '.aif', '.wav', '.flac', '.m4a', '.aac', '.ogg'}
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-PORT       = int(os.environ.get('BEETSGUI_PORT', 1312))
+PORT       = int(os.environ.get('BEETSGUI_PORT', 1612))
 OPEN_APP   = os.environ.get('BEETSGUI_NO_OPEN') != '1'
 SCRIPT_DIR = Path(__file__).parent.resolve()
 HTML_FILE  = 'beetsgui.html'
