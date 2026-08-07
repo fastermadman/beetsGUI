@@ -449,10 +449,22 @@ def _parse_exclude(raw):
     return [e.strip().lower() for e in (raw or '').split(',') if e.strip()]
 
 
-def _scan_files(dir_path, exclude, exts=None):
+# A caller-named huge root (or one huge immediate subfolder under it) is
+# intended use, not a bug — but a request that never returns, with no way
+# to cancel, is a real usability failure regardless of intent (#35). A
+# wall-clock budget shared across the whole request turns "forever" into
+# "a few seconds with a truncated flag," which is all this needs to be.
+_SCAN_BUDGET_SECONDS = 10
+
+
+def _scan_files(dir_path, exclude, exts=None, deadline=None, truncated=None):
     """Audio files under dir_path, matching `exts` (default:
     AUDIO_EXTENSIONS) and not matching any exclude substring — same
     filter /unimported already uses.
+
+    `deadline` (a time.monotonic() timestamp) stops the walk once passed;
+    `truncated`, if given a list, gets `True` appended so the caller can
+    tell "found everything" apart from "gave up".
 
     ponytail: Path.rglob has no documented guarantee against FIFOs or
     symlink loops on a user-supplied tree. /unimported's use of the same
@@ -462,11 +474,27 @@ def _scan_files(dir_path, exclude, exts=None):
     exts = exts or AUDIO_EXTENSIONS
     root = Path(dir_path)
     for f in root.rglob('*'):
+        if deadline and time.monotonic() > deadline:
+            if truncated is not None:
+                truncated.append(True)
+            return
         if not f.is_file() or f.suffix.lower() not in exts:
             continue
         if exclude and any(e in str(f).lower() for e in exclude):
             continue
         yield f
+
+
+def _sized_or_truncated(paths, deadline):
+    """Sum file sizes under `paths`, stopping early past `deadline`.
+    Returns (total_bytes, hit_deadline)."""
+    total = 0
+    for f in paths:
+        if time.monotonic() > deadline:
+            return total, True
+        if f.is_file():
+            total += f.stat().st_size
+    return total, False
 
 
 def _walk_roots(dir_path):
@@ -500,8 +528,10 @@ def scan_count():
         return jsonify({'ok': False, 'error': 'no such directory'}), 400
     exclude = _parse_exclude(request.args.get('exclude', ''))
     exts = _parse_exts(request.args.get('ext', ''))
-    total = sum(1 for _ in _scan_files(dir_path, exclude, exts))
-    return jsonify({'ok': True, 'total_files': total})
+    truncated = []
+    deadline = time.monotonic() + _SCAN_BUDGET_SECONDS
+    total = sum(1 for _ in _scan_files(dir_path, exclude, exts, deadline, truncated))
+    return jsonify({'ok': True, 'total_files': total, 'truncated': bool(truncated)})
 
 
 @app.route('/scan/list')
@@ -513,8 +543,10 @@ def scan_list():
         return jsonify({'ok': False, 'error': 'no such directory'}), 400
     exclude = _parse_exclude(request.args.get('exclude', ''))
     exts = _parse_exts(request.args.get('ext', ''))
-    files = sorted(str(f) for f in _scan_files(dir_path, exclude, exts))
-    return jsonify({'ok': True, 'files': files})
+    truncated = []
+    deadline = time.monotonic() + _SCAN_BUDGET_SECONDS
+    files = sorted(str(f) for f in _scan_files(dir_path, exclude, exts, deadline, truncated))
+    return jsonify({'ok': True, 'files': files, 'truncated': bool(truncated)})
 
 
 @app.route('/scan/save-list', methods=['POST'])
@@ -527,11 +559,13 @@ def scan_save_list():
         return jsonify({'ok': False, 'error': 'no such directory'}), 400
     exclude = _parse_exclude(data.get('exclude', ''))
     dest = (data.get('dest') or '~/Desktop/music_list.txt').strip()
-    files = sorted(str(f) for f in _scan_files(dir_path, exclude))
+    truncated = []
+    deadline = time.monotonic() + _SCAN_BUDGET_SECONDS
+    files = sorted(str(f) for f in _scan_files(dir_path, exclude, deadline=deadline, truncated=truncated))
     path, error = _write_list(dest, files)
     if error:
         return jsonify({'ok': False, 'error': error}), 400
-    return jsonify({'ok': True, 'count': len(files), 'path': str(path)})
+    return jsonify({'ok': True, 'count': len(files), 'path': str(path), 'truncated': bool(truncated)})
 
 
 @app.route('/scan/sizes')
@@ -541,11 +575,19 @@ def scan_sizes():
     dir_path = os.path.expanduser(request.args.get('dir', '').strip())
     if not dir_path or not os.path.isdir(dir_path):
         return jsonify({'ok': False, 'error': 'no such directory'}), 400
+    deadline = time.monotonic() + _SCAN_BUDGET_SECONDS
     folders = []
+    truncated = False
     for sub in _walk_roots(dir_path):
-        size = sum(f.stat().st_size for f in sub.rglob('*') if f.is_file())
+        if time.monotonic() > deadline:
+            truncated = True
+            break
+        size, hit_deadline = _sized_or_truncated(sub.rglob('*'), deadline)
         folders.append({'path': str(sub), 'size_bytes': size})
-    return jsonify({'ok': True, 'folders': folders})
+        if hit_deadline:
+            truncated = True
+            break
+    return jsonify({'ok': True, 'folders': folders, 'truncated': truncated})
 
 
 # The XML library file only ever exists here — iTunes/Music.app write it
@@ -734,33 +776,39 @@ def jobs_current():
 
 @app.route('/jobs/<job_id>/events')
 def job_events(job_id):
-    """SSE stream of status, decision and done events. One consumer at a time."""
+    """SSE stream of status, decision and done events. Each connection gets
+    its own fan-out queue (jobs.py), so multiple tabs each see the complete
+    stream instead of splitting one shared queue between them."""
     job = jobs.get(job_id)
     if not job:
         return jsonify({'ok': False, 'error': 'unknown job id'}), 404
 
     def generate():
-        # A reconnecting client must not have to wait out the decision timeout,
-        # so replay whatever the job says it owes a fresh listener (only
-        # import has anything) — but send each decision only once, since the
-        # queue may still hold the copy this replaces.
-        sent = set()
-        for event in job.replay():
-            sent.add(event['decision_id'])
-            yield f"data: {json.dumps(event)}\n\n"
-        while True:
-            try:
-                event = job.events.get(timeout=15)
-            except queue.Empty:
-                yield ": keepalive\n\n"
-                continue
-            if event['type'] == 'decision':
-                if event['decision_id'] in sent:
-                    continue
+        q = job.subscribe()
+        try:
+            # A reconnecting client must not have to wait out the decision
+            # timeout, so replay whatever the job says it owes a fresh
+            # listener (only import has anything) — but send each decision
+            # only once, since the queue may still hold the copy this replaces.
+            sent = set()
+            for event in job.replay():
                 sent.add(event['decision_id'])
-            yield f"data: {json.dumps(event)}\n\n"
-            if event['type'] == 'done':
-                return
+                yield f"data: {json.dumps(event)}\n\n"
+            while True:
+                try:
+                    event = q.get(timeout=15)
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+                    continue
+                if event['type'] == 'decision':
+                    if event['decision_id'] in sent:
+                        continue
+                    sent.add(event['decision_id'])
+                yield f"data: {json.dumps(event)}\n\n"
+                if event['type'] == 'done':
+                    return
+        finally:
+            job.unsubscribe(q)
 
     return Response(generate(), mimetype='text/event-stream', headers={
         'Cache-Control':     'no-cache',
@@ -772,13 +820,20 @@ def job_events(job_id):
 @app.route('/jobs/<job_id>/abort', methods=['POST'])
 def job_abort(job_id):
     """Cancel the job. Abort is cooperative — the worker stops at its next
-    checkpoint, so this waits for the job to actually finish."""
+    checkpoint, so this waits for the job to actually finish.
+
+    mbsync/bpsync (sync.py) checkpoint only between their two phases, not
+    between items within a phase — each phase is one plain `for` loop inside
+    the beets plugin itself, with no hook to interrupt mid-loop without
+    duplicating its matching logic. So this can legitimately time out with
+    the job still running; `finished: false` is a true answer, not a bug,
+    and the caller is expected to say so rather than imply it's stuck."""
     job = jobs.get(job_id)
     if not job:
         return jsonify({'ok': False, 'error': 'unknown job id'}), 404
     job.abort()
     job.done.wait(timeout=30)
-    return jsonify({'ok': True, 'finished': job.done.is_set()})
+    return jsonify({'ok': True, 'finished': job.done.is_set(), **job.summary()})
 
 
 @app.route('/import/<job_id>/decide', methods=['POST'])
