@@ -20,10 +20,14 @@ jobs:
 
       - name: Install dependencies
         # Pinned to the version this app is actually developed/run against
-        # (~/.local/pipx/venvs/beets locally) — a red run here should mean
-        # "this PR broke something," not "beets shipped a new release."
-        # See .github/workflows/beets-canary.yml for the latter.
-        run: pip install beets==2.11.0 flask
+        # (decided in #47: 2.13.1, the latest stable at the time) — a red
+        # run here should mean "this PR broke something," not "beets
+        # shipped a new release." See .github/workflows/beets-canary.yml
+        # for the latter.
+        run: pip install beets==2.13.1 flask
 
       - name: Run test_importsession.py
         run: python test_importsession.py
+
+      - name: Run test_transcode.py
+        run: python test_transcode.py

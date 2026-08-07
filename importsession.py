@@ -25,6 +25,10 @@ try:
     from beets.autotag.match import AlbumMatch   # beets >= 2.13
 except ImportError:
     from beets.autotag.hooks import AlbumMatch    # beets < 2.13
+try:
+    from beets.importer import DuplicateAction    # beets >= 2.13
+except ImportError:
+    DuplicateAction = None                        # beets < 2.13
 from beets.importer import Action, ImportAbortError, ImportSession
 from beets.util import displayable_path
 
@@ -354,7 +358,11 @@ class WebImportSession(ImportSession):
     # Singletons take the same payload shape; serialize_task handles both.
     choose_item = choose_match
 
-    def resolve_duplicate(self, task, found_duplicates):
+    def _decide_duplicate(self, task, found_duplicates):
+        """Shared logic behind both beets duplicate-resolution APIs below.
+
+        Returns 'skip', 'keep', 'remove' or 'merge'.
+        """
         items = task.imported_items()
         chosen = task.chosen_info()
 
@@ -372,8 +380,7 @@ class WebImportSession(ImportSession):
         if new_rank < existing_rank:
             self.job.emit('status', message=(
                 'Auto-skip: an existing copy is higher quality'))
-            task.set_choice(Action.SKIP)
-            return
+            return 'skip'
 
         payload = {
             'kind':      'duplicate',
@@ -390,14 +397,32 @@ class WebImportSession(ImportSession):
         if new_rank > existing_rank:
             payload['recommendation'] = 'remove'
         reply = self.job.ask(payload)
-        choice = reply['choice']
-        if choice == 'skip':
-            task.set_choice(Action.SKIP)
-        elif choice == 'remove':
-            task.should_remove_duplicates = True
-        elif choice == 'merge':
-            task.should_merge_duplicates = True
-        # 'keep': leave the choice intact.
+        return reply['choice']
+
+    if DuplicateAction is not None:
+        # beets >= 2.13: ImportSession.resolve_duplicate was replaced by
+        # get_duplicate_action, which returns the decision instead of
+        # mutating the task — beets' own pipeline now does the
+        # skip/remove/merge dispatch (see importer/stages.py).
+        def get_duplicate_action(self, task, found_duplicates):
+            choice = self._decide_duplicate(task, found_duplicates)
+            return {
+                'skip':   DuplicateAction.SKIP,
+                'keep':   DuplicateAction.KEEP,
+                'remove': DuplicateAction.REMOVE,
+                'merge':  DuplicateAction.MERGE,
+            }[choice]
+    else:
+        # beets < 2.13: resolve_duplicate mutates the task directly.
+        def resolve_duplicate(self, task, found_duplicates):
+            choice = self._decide_duplicate(task, found_duplicates)
+            if choice == 'skip':
+                task.set_choice(Action.SKIP)
+            elif choice == 'remove':
+                task.should_remove_duplicates = True
+            elif choice == 'merge':
+                task.should_merge_duplicates = True
+            # 'keep': leave the choice intact.
 
 
 # ── Library and config ────────────────────────────────────────────────────────
