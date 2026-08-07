@@ -23,18 +23,38 @@ import uuid
 class Job:
     """A background operation with an SSE event stream."""
 
+    # Bounds memory to a constant regardless of library size when nobody's
+    # listening (tab closed, SSE dropped) — status events are progress, not
+    # state, so losing the oldest ones is fine. A reconnecting client
+    # re-syncs via /jobs/current and replay() rather than the queue's
+    # contents, so this holds even for ImportJob's decisions (see
+    # importsession.py: the pending decision's source of truth is
+    # self._pending, not this queue — replay() never reads from here).
+    _MAX_BUFFERED_EVENTS = 200
+
     def __init__(self, kind, **meta):
         self.id = uuid.uuid4().hex
         self.kind = kind
         self.meta = meta
-        self.events = queue.Queue()
+        self.events = queue.Queue(maxsize=self._MAX_BUFFERED_EVENTS)
         self.done = threading.Event()
         self.aborted = threading.Event()
         self.result = {}      # merged into the final 'done' event
         self.thread = None
 
     def emit(self, type, **payload):
-        self.events.put({'type': type, **payload})
+        """Never blocks the worker thread: if the buffer is full (nobody's
+        draining it), drop the oldest event to make room instead of
+        waiting for a consumer that may never show up."""
+        event = {'type': type, **payload}
+        try:
+            self.events.put_nowait(event)
+        except queue.Full:
+            try:
+                self.events.get_nowait()
+            except queue.Empty:
+                pass
+            self.events.put_nowait(event)
 
     def replay(self):
         """Events a reconnecting client must be given immediately.
