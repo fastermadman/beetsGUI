@@ -21,7 +21,10 @@ import threading
 import uuid
 
 from beets import config, context, plugins, ui
-from beets.autotag.hooks import AlbumMatch
+try:
+    from beets.autotag.match import AlbumMatch   # beets >= 2.13
+except ImportError:
+    from beets.autotag.hooks import AlbumMatch    # beets < 2.13
 from beets.importer import Action, ImportAbortError, ImportSession
 from beets.util import displayable_path
 

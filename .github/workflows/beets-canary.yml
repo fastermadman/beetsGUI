@@ -1,0 +1,31 @@
+name: Beets compatibility canary
+
+# Runs against latest beets, independently of test.yml (which is pinned to
+# the version this app is actually developed against). A failure here means
+# "beets changed something," not "this PR is broken" — that's a different
+# signal and shouldn't block anyone's PR. Runs weekly so upstream breakage
+# is caught even when nobody's actively touching the repo, not just
+# whenever the next PR happens to come along.
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # every Monday, 06:00 UTC
+  workflow_dispatch:        # manual "run it now" from the Actions tab
+
+jobs:
+  test_importsession_latest_beets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies (latest beets, unpinned)
+        run: pip install beets flask
+
+      - name: Run test_importsession.py
+        run: python test_importsession.py
