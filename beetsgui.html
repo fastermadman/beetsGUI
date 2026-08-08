@@ -849,8 +849,12 @@ function startImport(){
 }
 
 function checkCurrentImport(){
+  // Only reattach the import UI to an actual import — /jobs/current
+  // returns whichever kind is currently running, and a reload while a
+  // sync/artwork/convert job happens to be active must not show a fake
+  // "Import running" panel that no import event will ever update.
   fetch('/jobs/current').then(r=>r.json()).then(data=>{
-    if(!data.id)return;
+    if(!data.id||data.kind!=='import')return;
     attachImport(data.id);
     if(data.decision){importState.decision=data.decision;importState.selected=0;renderDecision();}
   }).catch(()=>{});
