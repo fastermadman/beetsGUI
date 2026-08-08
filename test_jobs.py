@@ -163,6 +163,35 @@ def main():
     assert job_k.done.wait(timeout=5), 'the last-run job should finish last'
     assert run_order == ['J', 'L', 'K'], run_order
 
+    # 8. last_finished() (#65) — /jobs/current's answer for "what just
+    #    happened" once nothing is running any more, since current() itself
+    #    deliberately excludes done jobs. Only the most recent one, not a
+    #    history: a second job's completion replaces the first's, it
+    #    doesn't accumulate.
+    gate_m = threading.Event()
+
+    def work_m(job):
+        gate_m.wait(timeout=5)
+        job.result.update(found=3, total=5)
+
+    job_m = jobs.Job('artwork', action='fetch')
+    jobs.start(job_m, work_m)
+    gate_m.set()
+    assert job_m.done.wait(timeout=5)
+    assert jobs.last_finished() == {
+        'kind': 'artwork', 'result': {'found': 3, 'total': 5}, 'aborted': False
+    }, jobs.last_finished()
+
+    gate_n = threading.Event()
+    work_n, _ = make_slow_job(gate_n)
+    job_n = jobs.Job('mbsync')
+    jobs.start(job_n, work_n)
+    job_n.abort()
+    gate_n.set()
+    assert job_n.done.wait(timeout=5)
+    assert jobs.last_finished() == {'kind': 'mbsync', 'result': {}, 'aborted': True}, \
+        jobs.last_finished()
+
     print('ok')
 
 

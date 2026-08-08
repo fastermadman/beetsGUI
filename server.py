@@ -1098,10 +1098,14 @@ def jobs_current():
 
     Also reports the jobs queued behind it (#32), in run order, so a
     client can show the whole line instead of just whichever one it
-    happens to be subscribed to."""
+    happens to be subscribed to.
+
+    When nothing is running, reports the most recently finished job too
+    (#65) — current() itself deliberately excludes done jobs, so without
+    this a reload right after a job finished showed nothing."""
     job = jobs.current()
     if not job:
-        return jsonify({'ok': True, 'id': None})
+        return jsonify({'ok': True, 'id': None, 'last_finished': jobs.last_finished()})
     decision = job.pending() if hasattr(job, 'pending') else None
     return jsonify({'ok': True, **job.summary(), 'decision': decision,
                     'queued': [q.summary() for q in jobs.queued()]})

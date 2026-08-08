@@ -110,10 +110,20 @@ _lock = threading.Lock()
 # goes next, same as the queue a paused printer builds instead of rejecting
 # every job sent to it.
 _pending = []
+# Set by _launch()'s run(), read by /jobs/current when current() finds
+# nothing running — current() deliberately excludes done jobs (see below),
+# so without this a just-finished job's result was invisible the moment a
+# client reloaded (#65). Just the last one, not a history: the client panel
+# this feeds answers "what happened last", not a log.
+_last_finished = None
 
 
 def get(job_id):
     return _jobs.get(job_id)
+
+
+def last_finished():
+    return _last_finished
 
 
 def current():
@@ -191,6 +201,7 @@ def start(job, work):
 
 def _launch(job, work):
     def run():
+        global _last_finished
         try:
             if not job.aborted.is_set():
                 work(job)
@@ -199,6 +210,8 @@ def _launch(job, work):
         finally:
             job.emit('done', aborted=job.aborted.is_set(), **job.result)
             job.done.set()
+            _last_finished = {'kind': job.kind, 'result': dict(job.result),
+                               'aborted': job.aborted.is_set()}
             _start_pending()
 
     job.thread = threading.Thread(target=run, daemon=True)
