@@ -45,12 +45,15 @@
   .app-header { display:flex; align-items:baseline; gap:0.75rem; padding:1rem 1.25rem 0; border-bottom:1px solid var(--border); flex-shrink:0; }
   .job-queue-badge { align-self:center; margin-left:auto; font-size:11px; color:var(--text3); border:1px solid var(--border); border-radius:999px; padding:0.15rem 0.6rem; }
   .prefs-btn { align-self:center; background:none; border:none; color:var(--text3); cursor:pointer; font-size:15px; margin-left:0.5rem; padding:0.2rem 0.3rem; transition:color 0.1s; }
-  .job-queue-panel { padding:0.4rem 1.25rem; border-bottom:1px solid var(--border); font-size:11px; color:var(--text3); flex-shrink:0; }
+  .job-queue-panel { padding:0.4rem 1.25rem; border-top:1px solid var(--border); font-size:11px; color:var(--text3); flex-shrink:0; }
   .job-queue-row { display:flex; align-items:center; gap:0.4rem; padding:0.15rem 0; }
   .job-queue-row .kind { flex:1; }
   .job-queue-row button { background:none; border:1px solid var(--border); border-radius:4px; color:var(--text3); cursor:pointer; font-size:10px; line-height:1.4; padding:0 0.35rem; }
   .job-queue-row button:disabled { cursor:default; opacity:0.3; }
   .job-queue-row button:hover:not(:disabled) { color:var(--text2); }
+  #job-panel-result-wrap { position:relative; padding-right:1.6rem; }
+  .job-panel-dismiss { position:absolute; top:0; right:0; background:none; border:none; color:var(--text3); cursor:pointer; font-size:14px; line-height:1; padding:0.2rem 0.3rem; }
+  .job-panel-dismiss:hover { color:var(--text); }
   .prefs-btn:hover { color:var(--text2); }
   #prefs-dialog { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--text); margin:auto; max-height:85vh; padding:0; width:min(620px, 92vw); }
   #prefs-dialog::backdrop { background:rgba(0,0,0,0.55); }
@@ -235,8 +238,6 @@
     <button class="prefs-btn" onclick="openPrefs()" title="Preferences (⌘,)">⚙</button>
   </div>
 
-  <div class="job-queue-panel" id="job-queue-panel" style="display:none"></div>
-
   <div class="tabs" role="tablist">
     <button class="tab-btn active" onclick="switchTab('inbox',this)">Inbox</button>
     <button class="tab-btn" onclick="switchTab('library',this)">Library</button>
@@ -271,8 +272,6 @@
           <label class="check-item"><input type="checkbox" value="One Shots"> One Shots</label>
         </div>
         <div class="btn-row"><button class="btn btn-primary" onclick="scanUnimported()">Scan for unimported music</button></div>
-        <div class="lib-count" id="scan-count"></div>
-        <div class="lib-results" id="scan-results"></div>
       </div>
 
       <details class="section">
@@ -283,7 +282,6 @@
           <button class="btn" onclick="scanSizes()"><span>Folder sizes</span></button>
           <button class="btn" onclick="scanItunesLibrary()"><span>Find iTunes lib.</span></button>
         </div>
-        <div id="scan-util-results"></div>
       </details>
 
       <hr class="divider">
@@ -459,7 +457,6 @@
         <button class="btn" onclick="showFields()">Fields</button>
         <button class="btn" onclick="showVersion()">Version</button>
       </div>
-      <div id="info-results"></div>
 
       <hr class="divider">
       <details class="section">
@@ -472,8 +469,6 @@
           <div class="btn-row">
             <button class="btn btn-primary" onclick="scanDuplicates()"><span>Scan for duplicates</span></button>
           </div>
-          <div class="lib-count" id="dup-count"></div>
-          <div id="dup-results"></div>
           <div class="alert alert-red" style="font-size:10px;">Deleting with "also remove files" removes them permanently. Preview each group before deleting.</div>
         </div>
       </details>
@@ -486,7 +481,6 @@
             <button class="btn" onclick="startArtwork('embed')">Embed art</button>
             <label class="check-item"><input type="checkbox" id="art-force"><span>Re-fetch albums that already have art</span></label>
           </div>
-          <div id="artwork-job"></div>
         </div>
       </details>
       <details class="section" id="sec-meta">
@@ -500,7 +494,6 @@
           <div class="btn-row">
             <button class="btn btn-primary" onclick="previewModify()"><span>Preview changes</span></button>
           </div>
-          <div id="mod-results"></div>
           <hr class="divider">
           <div class="btn-row">
             <button class="btn btn-primary" onclick="runUpdate()">Check for changes on disk</button>
@@ -511,8 +504,6 @@
             <button class="btn" onclick="startSync('bpsync')">bpsync</button>
             <button class="btn" onclick="showMissing()">missing</button>
           </div>
-          <div id="sync-job"></div>
-          <div id="maint-results"></div>
         </div>
       </details>
 
@@ -528,7 +519,6 @@
             <button class="btn" onclick="findFormat('aiff')"><span>Find AIFF</span></button>
             <button class="btn" onclick="countFormats('wav,aiff')"><span>Count WAV+AIFF</span></button>
           </div>
-          <div id="find-format-results"></div>
         </div>
 
         <div style="margin-top:1rem;">
@@ -554,14 +544,12 @@
           <div class="btn-row">
             <button class="btn btn-primary" onclick="startConvert()">Check what would convert</button>
           </div>
-          <div id="convert-job"></div>
           <hr class="divider">
           <div style="font-size:10px; color:var(--text3); margin-bottom:0.5rem;">Delete originals from the database AFTER verifying (files stay on disk):</div>
           <div class="btn-row">
             <button class="btn btn-warn" onclick="removeFormat('AIFF')">⚠ Remove AIFF from DB</button>
             <button class="btn btn-warn" onclick="removeFormat('WAV')">⚠ Remove WAV from DB</button>
           </div>
-          <div id="remove-format-results"></div>
         </div>
 
         <div style="margin-top:1rem;">
@@ -577,7 +565,6 @@
           <div class="btn-row">
             <button class="btn btn-sm" onclick="previewRemove()">Preview</button>
           </div>
-          <div id="rm-results"></div>
           <div class="btn-row">
             <button class="btn btn-warn" onclick="doRemove(false)">⚠ <span>Remove from database</span></button>
             <button class="btn btn-danger" onclick="doRemove(true)">⚠ <span>Also delete file from disk</span></button>
@@ -592,10 +579,9 @@
       <div class="section">
         <div class="section-title">Export .m3u for Lexicon</div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="exportM3u('~/Desktop/beets_export.m3u','export-m3u-results')"><span>Export .m3u for Lexicon</span></button>
+          <button class="btn btn-primary" onclick="exportM3u('~/Desktop/beets_export.m3u')"><span>Export .m3u for Lexicon</span></button>
           <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Saves all tracks as .m3u on the desktop. In Lexicon: File → Import → M3U playlist.</span></span>
         </div>
-        <div id="export-m3u-results"></div>
       </div>
       <div class="section">
         <div class="section-title">Playlists → Lexicon / Traktor</div>
@@ -603,10 +589,8 @@
         <div class="field"><label>Path to playlist folders</label><input type="text" id="pl-path" placeholder="/Volumes/Harddisk/OldPlaylists"></div>
         <div class="btn-row">
           <button class="btn btn-primary" onclick="exportPlaylists()"><span>Export folders → .m3u</span></button>
-          <button class="btn" onclick="exportM3u('~/Desktop/beets_alle_tracks.txt','export-tracklist-results')"><span>Save tracklist (for Traktor relocation)</span></button>
+          <button class="btn" onclick="exportM3u('~/Desktop/beets_alle_tracks.txt')"><span>Save tracklist (for Traktor relocation)</span></button>
         </div>
-        <div id="pl-results"></div>
-        <div id="export-tracklist-results"></div>
         <hr class="divider">
         <div class="section-title" style="margin-bottom:0.4rem;">Traktor: Relocate files after move</div>
         <div class="alert alert-yellow" style="font-size:10px;">1. In Traktor: Right-click <b>Track Collection</b> → <b>Check Consistency</b><br>2. Select ALL missing tracks (<b>Cmd+A</b>)<br>3. Click <b>Relocate</b> → navigate to your Beets library folder<br>4. ⚠ Select multiple files at a time — avoids Traktor 4.2 freeze<br>5. Cues and grids follow automatically</div>
@@ -640,7 +624,6 @@
           <button class="btn btn-primary" onclick="startTraktorScan(false)"><span>Scan</span></button>
           <button class="btn" onclick="startTraktorScan(true)">Rebuild from scratch</button>
         </div>
-        <div id="traktor-job"></div>
       </div>
       <div class="section">
         <div class="section-title">
@@ -840,6 +823,17 @@
 
   </div>
 
+  <!-- Docked at the bottom, outside .content, like the player bar below it —
+       so it never pushes the tabs or the scroll area down when it opens (#65). -->
+  <div class="job-queue-panel" id="job-queue-panel" style="display:none">
+    <div id="job-panel-running" style="display:none"></div>
+    <div id="job-panel-queue" style="display:none"></div>
+    <div id="job-panel-result-wrap" style="display:none">
+      <button class="job-panel-dismiss" onclick="dismissResult()" title="Dismiss">×</button>
+      <div id="job-panel-result"></div>
+    </div>
+  </div>
+
   <div class="player-queue" id="player-queue" style="display:none"></div>
   <div class="player" id="player-bar" style="display:none">
     <div class="player-now">
@@ -880,7 +874,7 @@ function startTraktorScan(reset){
   const roots=document.getElementById('traktor-roots').value.split(',')
     .map(s=>s.trim()).filter(Boolean);
   if(reset&&!confirm('Discard the recovered list and rebuild it from the source files?'))return;
-  startJob('/traktor/scan/start',{roots:roots,reset:!!reset},'traktor-job',loadTraktor);
+  startJob('/traktor/scan/start',{roots:roots,reset:!!reset},loadTraktor);
 }
 function loadTraktor(){
   const results=document.getElementById('traktor-results');
@@ -1048,6 +1042,23 @@ function checkCurrentImport(){
   }).catch(()=>{});
 }
 
+// Reload/first-load rejoin for the 4 generic jobs, same /jobs/current call
+// as checkCurrentImport() above — import is filtered out here too, since
+// that has its own reattachment path and its own excluded UI (#65).
+const JOB_ON_DONE={traktor:loadTraktor}; // convert excluded — see startConvert()
+function checkCurrentJob(){
+  fetch('/jobs/current').then(r=>r.json()).then(data=>{
+    if(data.id){
+      if(data.kind==='import')return; // checkCurrentImport() owns this case
+      attachJob(data.id,JOB_ON_DONE[data.kind],data.queued_behind);
+      return;
+    }
+    if(data.last_finished&&data.last_finished.kind!=='import')
+      renderResult('<div class="alert alert-green">'+
+        escapeHtml(jobSummary({...data.last_finished.result,aborted:data.last_finished.aborted}))+'</div>');
+  }).catch(()=>{});
+}
+
 // A single "what's running" badge plus the full wait line (#32) — covers
 // import as well as the generic job runner (sync/artwork/convert), since
 // /jobs/current already reports whichever kind is active. Self-stopping:
@@ -1057,14 +1068,50 @@ function checkCurrentImport(){
 // so the badge appears immediately rather than waiting up to one poll
 // interval.
 let jobQueueTimer=null;
+// The one place every synchronous action's outcome — and, via
+// handleJobEvent's 'done' branch, a finished job's summary too — ends up.
+// Same HTML string shape every call site already built for its own private
+// div; this only changes where it lands. Shown the instant it happens (so
+// nothing needs hunting for), but not pinned open forever — that's what
+// dismissResult() is for. A *new* result replacing an old one re-shows the
+// wrap even if the user dismissed the previous one; only the previous
+// content is gone, not the willingness to show the next thing that happens.
+function renderResult(html){
+  const el=document.getElementById('job-panel-result');
+  if(!el)return;
+  el.innerHTML=html;
+  document.getElementById('job-panel-result-wrap').style.display='block';
+  document.getElementById('job-queue-panel').style.display='block';
+}
+// The one manual "I've seen it, stop showing it" control — no auto-timeout
+// guessing how long is "long enough to read". Doesn't touch #job-panel-running:
+// a job that's still going (with its Abort button) isn't the user's to hide.
+function dismissResult(){
+  document.getElementById('job-panel-result-wrap').style.display='none';
+  document.getElementById('job-panel-result').innerHTML='';
+  hideJobPanelIfEmpty();
+}
+// The outer panel itself only needs to stay visible while at least one of
+// its three regions has something to show — once running/queue/result are
+// all empty, there's nothing left to dock a header panel for.
+function hideJobPanelIfEmpty(){
+  const panel=document.getElementById('job-queue-panel');
+  const anyVisible=['job-panel-running','job-panel-queue','job-panel-result-wrap']
+    .some(id=>document.getElementById(id).style.display!=='none');
+  if(!anyVisible)panel.style.display='none';
+}
+// #job-panel-queue only — #job-panel-running is attachJob's/handleJobEvent's
+// to show/hide, #job-panel-result is renderResult's. Never touches the outer
+// panel's own visibility: once shown (by any of the three), it stays shown.
 function pollJobQueue(){
   fetch('/jobs/current').then(r=>r.json()).then(data=>{
     const badge=document.getElementById('job-queue-badge');
-    const panel=document.getElementById('job-queue-panel');
-    if(!badge||!panel)return;
+    const queuePanel=document.getElementById('job-panel-queue');
+    if(!badge||!queuePanel)return;
     if(!data.ok||!data.id){
       badge.style.display='none';
-      panel.style.display='none';panel.innerHTML='';
+      queuePanel.style.display='none';queuePanel.innerHTML='';
+      hideJobPanelIfEmpty();
       if(jobQueueTimer){clearInterval(jobQueueTimer);jobQueueTimer=null;}
       return;
     }
@@ -1074,7 +1121,7 @@ function pollJobQueue(){
     badge.textContent=text;
     badge.style.display='inline-block';
     if(queued.length){
-      panel.innerHTML=queued.map((q,i)=>
+      queuePanel.innerHTML=queued.map((q,i)=>
         '<div class="job-queue-row">'+
           '<span class="kind">'+(i+1)+'. '+escapeHtml(q.kind)+'</span>'+
           '<button title="Move earlier"'+(i===0?' disabled':'')+
@@ -1083,9 +1130,10 @@ function pollJobQueue(){
             ' onclick="moveQueuedJob(\''+q.id+'\',\'down\')">↓</button>'+
           '<button title="Remove from queue" onclick="dequeueJob(\''+q.id+'\')">✕</button>'+
         '</div>').join('');
-      panel.style.display='block';
+      queuePanel.style.display='block';
+      document.getElementById('job-queue-panel').style.display='block';
     } else {
-      panel.innerHTML='';panel.style.display='none';
+      queuePanel.innerHTML='';queuePanel.style.display='none';
     }
     if(!jobQueueTimer)jobQueueTimer=setInterval(pollJobQueue,2000);
   }).catch(()=>{});
@@ -1287,34 +1335,51 @@ document.addEventListener('keydown',function(e){
 // Import has its own UI because it answers decisions mid-run; these only need
 // a live status line and an abort button, so they share one small runner.
 // Only one job runs server-side at a time, so one runner here is enough.
-let jobRunner={es:null,id:null,el:null};
+let jobRunner={es:null,id:null,onDone:null};
 
 function postJSON(url,payload){
   return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
                     body:JSON.stringify(payload)}).then(r=>r.json());
 }
-function startJob(url,payload,elId,onDone){
-  const el=document.getElementById(elId);
-  el.innerHTML='<div class="lib-empty">Starting…</div>';
+// The one running-job region every job (artwork/convert/sync/traktor-scan)
+// shares — #65 folded the per-caller elId this used to take into the
+// header-docked panel. renderResult() is the sibling for what a job (or a
+// synchronous action) produced when it's done; this is only ever "is
+// something in flight right now".
+function startJob(url,payload,onDone){
+  const running=document.getElementById('job-panel-running');
+  running.style.display='block';
+  document.getElementById('job-queue-panel').style.display='block';
+  running.innerHTML='<div class="lib-empty">Starting…</div>';
   fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(r=>r.json())
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="alert alert-red">'+escapeHtml(data.error)+'</div>';return;}
-      attachJob(data.id,el,onDone,data.queued_behind);
+      if(!data.ok){
+        running.style.display='none';running.innerHTML='';
+        renderResult('<div class="alert alert-red">'+escapeHtml(data.error)+'</div>');
+        return;
+      }
+      attachJob(data.id,onDone,data.queued_behind);
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>{
+      running.style.display='none';running.innerHTML='';
+      renderResult('<div class="lib-empty">Could not reach the server.</div>');
+    });
 }
 // queuedBehind (#32): the server queued this job behind one still
 // finishing an abort instead of rejecting it — no real work has started
 // yet, so say that plainly rather than "Working…" until the first real
 // status event (once it actually starts) overwrites it.
-function attachJob(id,el,onDone,queuedBehind){
+function attachJob(id,onDone,queuedBehind){
   if(jobRunner.es)jobRunner.es.close();
-  jobRunner={es:new EventSource('/jobs/'+id+'/events'),id:id,el:el,onDone:onDone};
+  jobRunner={es:new EventSource('/jobs/'+id+'/events'),id:id,onDone:onDone};
   const initial=queuedBehind
     ?'Waiting for the current '+escapeHtml(queuedBehind)+' job to finish aborting…'
     :'Working…';
-  el.innerHTML='<div class="lib-count job-pulse" id="job-status">'+initial+'</div>'+
+  const running=document.getElementById('job-panel-running');
+  running.style.display='block';
+  document.getElementById('job-queue-panel').style.display='block';
+  running.innerHTML='<div class="lib-count job-pulse" id="job-status">'+initial+'</div>'+
     '<div class="btn-row"><button class="btn btn-danger btn-sm" id="job-abort-btn" onclick="abortJob()">Abort</button></div>';
   jobRunner.es.onmessage=e=>handleJobEvent(JSON.parse(e.data));
   pollJobQueue();
@@ -1354,19 +1419,22 @@ function jobSummary(ev){
   return (ev.aborted?'Aborted — ':'Done — ')+body;
 }
 function handleJobEvent(ev){
-  const el=jobRunner.el;
-  if(!el)return;
+  const running=document.getElementById('job-panel-running');
+  if(!running)return;
   if(ev.type==='status'){
     const status=document.getElementById('job-status');
     if(status)status.textContent=ev.message;
   } else if(ev.type==='error'){
-    el.innerHTML='<div class="alert alert-red">'+escapeHtml(ev.message)+'</div>';
+    running.innerHTML='<div class="alert alert-red">'+escapeHtml(ev.message)+'</div>';
   } else if(ev.type==='done'){
     if(jobRunner.es){jobRunner.es.close();jobRunner.es=null;}
-    // An error already replaced the panel with its own message — keep it.
-    if(!el.querySelector('.alert-red'))
-      el.innerHTML='<div class="alert alert-green">'+escapeHtml(jobSummary(ev))+'</div>';
-    if(jobRunner.onDone)jobRunner.onDone(ev,el);
+    // An error already replaced the running region with its own message —
+    // move that into the result, rather than the generic summary, once the
+    // running region is done being "running" and becomes "what happened".
+    const errored=running.querySelector('.alert-red');
+    renderResult(errored?errored.outerHTML:'<div class="alert alert-green">'+escapeHtml(jobSummary(ev))+'</div>');
+    running.style.display='none';running.innerHTML='';
+    if(jobRunner.onDone)jobRunner.onDone(ev,document.getElementById('job-panel-result'));
   }
 }
 // Fetch/embed have no pretend mode of their own to preview with (unlike
@@ -1374,32 +1442,36 @@ function handleJobEvent(ev){
 // a dry-run job — same principle as previewModify()/runMaint(): show what
 // it would touch before an empty query quietly means "the whole library."
 function startArtwork(action){
-  const el=document.getElementById('artwork-job');
   // Frozen at the moment of the check, so the button that appears below acts
   // on the set the count describes even if the filter moves underneath it.
   const scope=albumScopeBody();
-  el.innerHTML='<div class="lib-empty">Checking…</div>';
+  renderResult('<div class="lib-empty">Checking…</div>');
   postJSON('/library/count',scope)
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Could not check that scope.')+'</div>';return;}
-      if(!data.count){el.innerHTML='<div class="lib-empty">No albums in scope.</div>';return;}
+      if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Could not check that scope.')+'</div>');return;}
+      if(!data.count){renderResult('<div class="lib-empty">No albums in scope.</div>');return;}
       const label=(action==='fetch'?'Fetch art for ':'Embed art into ')+data.count+' album'+(data.count===1?'':'s');
       pendingArtwork={action,scope};
-      el.innerHTML='<div class="btn-row"><button class="btn btn-primary btn-sm" onclick="runArtwork()">'+label+'</button></div>';
+      renderResult('<div class="btn-row"><button class="btn btn-primary btn-sm" onclick="runArtwork()">'+label+'</button></div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 let pendingArtwork=null;
 function runArtwork(){
   if(!pendingArtwork)return;
+  // The preview button above lives in #job-panel-result; once the job
+  // itself starts (#job-panel-running takes over as "what's happening"),
+  // that button has to go — otherwise it sits there stale and clickable
+  // right next to "Working…".
+  dismissResult();
   startJob('/artwork/start',{
     action:pendingArtwork.action,
     force:document.getElementById('art-force').checked,
     ...pendingArtwork.scope,
-  },'artwork-job');
+  });
 }
 function startSync(kind){
-  startJob('/sync/start',{kind:kind,...scopeBody()},'sync-job');
+  startJob('/sync/start',{kind:kind,...scopeBody()});
 }
 
 // ── Filter (#64) ──────────────────────────────────────────────────────────────
@@ -1903,20 +1975,18 @@ document.addEventListener('DOMContentLoaded',function(){
 // ── Duplicates ────────────────────────────────────────────────────────────────
 let dupGroups=[];
 function scanDuplicates(){
-  const results=document.getElementById('dup-results'),count=document.getElementById('dup-count');
-  results.innerHTML='<div class="lib-empty">Scanning…</div>';count.textContent='';
+  renderResult('<div class="lib-empty">Scanning…</div>');
   fetch('/duplicates')
     .then(r=>r.json())
     .then(data=>renderDuplicates(data))
-    .catch(()=>{results.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function renderDuplicates(data){
-  const results=document.getElementById('dup-results'),count=document.getElementById('dup-count');
-  if(!data.ok){count.textContent='';results.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Scan failed.')+'</div>';return;}
+  if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Scan failed.')+'</div>');return;}
   dupGroups=data.groups;
-  if(!dupGroups.length){count.textContent='';results.innerHTML='<div class="lib-empty">No duplicate albums found.</div>';return;}
-  count.textContent=dupGroups.length+' duplicate group'+(dupGroups.length===1?'':'s');
-  results.innerHTML=dupGroups.map((g,gi)=>renderDupGroup(g,gi)).join('');
+  if(!dupGroups.length){renderResult('<div class="lib-empty">No duplicate albums found.</div>');return;}
+  const count='<div class="lib-count">'+dupGroups.length+' duplicate group'+(dupGroups.length===1?'':'s')+'</div>';
+  renderResult(count+dupGroups.map((g,gi)=>renderDupGroup(g,gi)).join(''));
 }
 function renderDupGroup(albums,gi){
   const tie=albums.every(a=>a.is_best);
@@ -1955,23 +2025,22 @@ function deleteDupAlbum(gi,ai,deleteFiles){
 function previewModify(){
   const field=document.getElementById('mod-field').value.trim();
   const value=document.getElementById('mod-value').value.trim();
-  const el=document.getElementById('mod-results');
-  if(!field||!value){el.innerHTML='<div class="lib-empty">Field and new value are required.</div>';return;}
+  if(!field||!value){renderResult('<div class="lib-empty">Field and new value are required.</div>');return;}
   // Captured here so Apply runs against exactly the set that was previewed,
   // not whatever the filter says by the time the button is clicked.
   pendingModify={field,value,scope:scopeBody()};
-  el.innerHTML='<div class="lib-empty">Checking…</div>';
+  renderResult('<div class="lib-empty">Checking…</div>');
   postJSON('/library/modify/preview',{field,value,...pendingModify.scope})
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>';return;}
-      if(!data.changes.length){el.innerHTML='<div class="lib-empty">No changes — nothing matches, or values are already set.</div>';return;}
-      el.innerHTML='<div class="lib-results">'+data.changes.map(c=>
+      if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>');return;}
+      if(!data.changes.length){renderResult('<div class="lib-empty">No changes — nothing matches, or values are already set.</div>');return;}
+      renderResult('<div class="lib-results">'+data.changes.map(c=>
         '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(c.label)+'</div>'+
         '<div class="lib-row-meta">'+escapeHtml(String(c.old??'—'))+' → <span class="diff">'+escapeHtml(String(c.new))+'</span></div></div>'
       ).join('')+'</div>'+
-      '<div class="btn-row"><button class="btn btn-primary btn-sm" onclick="applyModify()">Apply to '+data.changes.length+' item'+(data.changes.length===1?'':'s')+'</button></div>';
+      '<div class="btn-row"><button class="btn btn-primary btn-sm" onclick="applyModify()">Apply to '+data.changes.length+' item'+(data.changes.length===1?'':'s')+'</button></div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 let pendingModify=null;
 function applyModify(){
@@ -1979,10 +2048,7 @@ function applyModify(){
   const {field,value,scope}=pendingModify;
   if(!confirm('Apply this change and write tags to file?'))return;
   postJSON('/library/modify',{field,value,...scope})
-    .then(data=>{
-      const el=document.getElementById('mod-results');
-      el.innerHTML=data.ok?'<div class="alert alert-green">Changed '+data.changed+' item'+(data.changed===1?'':'s')+'.</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
-    })
+    .then(data=>renderResult(data.ok?'<div class="alert alert-green">Changed '+data.changed+' item'+(data.changed===1?'':'s')+'.</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>'))
     .catch(()=>alert('Could not reach the server.'));
 }
 // Both of these used to be two independent buttons — a "Preview" and an
@@ -1993,63 +2059,59 @@ const MAINT_LABELS={update:{verb:'Update the library',noun:'change'},
                     write:{verb:'Write these tags to files',noun:'file'}};
 let pendingMaint=null;
 function runMaint(kind,apply){
-  const el=document.getElementById('maint-results');
   const scope=apply&&pendingMaint?pendingMaint:scopeBody();
   if(!apply)pendingMaint=scope;
-  el.innerHTML='<div class="lib-empty">Working…</div>';
+  renderResult('<div class="lib-empty">Working…</div>');
   postJSON('/library/'+kind,{pretend:!apply,...scope})
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
+      if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>');return;}
       if(!data.output.length){
-        el.innerHTML='<div class="lib-empty">Nothing to do — nothing would change.</div>';return;
+        renderResult('<div class="lib-empty">Nothing to do — nothing would change.</div>');return;
       }
       const out='<pre class="pre-out">'+escapeHtml(data.output.join('\n'))+'</pre>';
-      if(apply){el.innerHTML='<div class="alert alert-green">Done.</div>'+out;return;}
+      if(apply){renderResult('<div class="alert alert-green">Done.</div>'+out);return;}
       const l=MAINT_LABELS[kind];
-      el.innerHTML=out+'<div class="btn-row"><button class="btn btn-primary btn-sm" '+
-        'onclick="runMaint(\''+kind+'\',true)">'+l.verb+'</button></div>';
+      renderResult(out+'<div class="btn-row"><button class="btn btn-primary btn-sm" '+
+        'onclick="runMaint(\''+kind+'\',true)">'+l.verb+'</button></div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function runUpdate(){runMaint('update',false);}
 function runWrite(){runMaint('write',false);}
 function showMissing(){
-  const el=document.getElementById('maint-results');
-  el.innerHTML='<div class="lib-empty">Loading…</div>';
+  renderResult('<div class="lib-empty">Loading…</div>');
   fetch('/library/missing')
     .then(r=>r.json())
     .then(data=>{
-      if(!data.albums.length){el.innerHTML='<div class="lib-empty">No albums with missing tracks.</div>';return;}
-      el.innerHTML='<div class="lib-results">'+data.albums.map(a=>
+      if(!data.albums.length){renderResult('<div class="lib-empty">No albums with missing tracks.</div>');return;}
+      renderResult('<div class="lib-results">'+data.albums.map(a=>
         '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(a.artist||'Unknown artist')+' — '+escapeHtml(a.album||'Untitled')+'</div>'+
         '<div class="lib-row-meta">'+a.have+' / '+a.total+' tracks</div></div>'
-      ).join('')+'</div>';
+      ).join('')+'</div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 
 // ── Quick info ────────────────────────────────────────────────────────────────
 function showStats(){
-  const el=document.getElementById('info-results');
-  el.innerHTML='<div class="lib-empty">Loading…</div>';
+  renderResult('<div class="lib-empty">Loading…</div>');
   fetch('/info/stats').then(r=>r.json()).then(data=>{
-    if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
-    el.innerHTML='<div class="lib-results"><div class="lib-row"><div class="lib-row-title">Tracks</div><div class="lib-row-meta">'+data.tracks+'</div></div>'+
+    if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>');return;}
+    renderResult('<div class="lib-results"><div class="lib-row"><div class="lib-row-title">Tracks</div><div class="lib-row-meta">'+data.tracks+'</div></div>'+
       '<div class="lib-row"><div class="lib-row-title">Total time</div><div class="lib-row-meta">'+escapeHtml(data.total_time)+'</div></div>'+
       '<div class="lib-row"><div class="lib-row-title">Total size</div><div class="lib-row-meta">'+escapeHtml(data.total_size)+'</div></div>'+
       '<div class="lib-row"><div class="lib-row-title">Artists</div><div class="lib-row-meta">'+data.artists+'</div></div>'+
       '<div class="lib-row"><div class="lib-row-title">Albums</div><div class="lib-row-meta">'+data.albums+'</div></div>'+
-      '<div class="lib-row"><div class="lib-row-title">Album artists</div><div class="lib-row-meta">'+data.album_artists+'</div></div></div>';
-  }).catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+      '<div class="lib-row"><div class="lib-row-title">Album artists</div><div class="lib-row-meta">'+data.album_artists+'</div></div></div>');
+  }).catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function showFields(){
-  const el=document.getElementById('info-results');
-  el.innerHTML='<div class="lib-empty">Loading…</div>';
+  renderResult('<div class="lib-empty">Loading…</div>');
   fetch('/info/fields').then(r=>r.json()).then(data=>{
-    if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
-    el.innerHTML='<div class="lib-count">Item fields</div><div class="path-preview">'+escapeHtml(data.item_fields.join(', '))+'</div>'+
-      '<div class="lib-count" style="margin-top:0.5rem;">Album fields</div><div class="path-preview">'+escapeHtml(data.album_fields.join(', '))+'</div>';
-  }).catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>');return;}
+    renderResult('<div class="lib-count">Item fields</div><div class="path-preview">'+escapeHtml(data.item_fields.join(', '))+'</div>'+
+      '<div class="lib-count" style="margin-top:0.5rem;">Album fields</div><div class="path-preview">'+escapeHtml(data.album_fields.join(', '))+'</div>');
+  }).catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 // The fields people actually retag, first in the list. The rest of beets'
 // item fields still follow, so nothing is hidden — but "which of these 80
@@ -2106,32 +2168,35 @@ function loadModFields(){
     dl.innerHTML=COMMON_FIELDS.map(opt).join('');
   });
 }
+// resultsId is only ever 'prefs-version-results' now (the Preferences
+// dialog's own beet-version button) — that div lives outside the three
+// tabs #65 folded into the shared panel, so it keeps writing to itself
+// instead of going through renderResult().
 function showVersion(resultsId){
-  const el=document.getElementById(resultsId||'info-results');
-  el.innerHTML='<div class="lib-empty">Loading…</div>';
+  const set=resultsId?html=>{document.getElementById(resultsId).innerHTML=html;}:renderResult;
+  set('<div class="lib-empty">Loading…</div>');
   fetch('/info/version').then(r=>r.json()).then(data=>{
-    if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
-    el.innerHTML='<div class="path-preview">beets '+escapeHtml(data.beets)+' · Python '+escapeHtml(data.python)+'<br>'+
-      (data.plugins.length?'plugins: '+escapeHtml(data.plugins.join(', ')):'no plugins loaded')+'</div>';
-  }).catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    if(!data.ok){set('<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>');return;}
+    set('<div class="path-preview">beets '+escapeHtml(data.beets)+' · Python '+escapeHtml(data.python)+'<br>'+
+      (data.plugins.length?'plugins: '+escapeHtml(data.plugins.join(', ')):'no plugins loaded')+'</div>');
+  }).catch(()=>set('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function removeFormat(fmt){
-  const el=document.getElementById('remove-format-results');
   const query='format:'+fmt;
-  el.innerHTML='<div class="lib-empty">Checking…</div>';
+  renderResult('<div class="lib-empty">Checking…</div>');
   fetch('/library/remove/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})})
     .then(r=>r.json())
     .then(data=>{
-      if(!data.items.length){el.innerHTML='<div class="lib-empty">No '+fmt+' tracks in the library.</div>';return;}
+      if(!data.items.length){renderResult('<div class="lib-empty">No '+fmt+' tracks in the library.</div>');return;}
       if(!confirm('Remove '+data.items.length+' '+fmt+' track'+(data.items.length===1?'':'s')+' from the database? Files stay on disk.'))return;
       fetch('/library/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,expect:data.items.length,delete_files:false})})
         .then(r=>r.json())
-        .then(d=>{el.innerHTML=d.ok
+        .then(d=>renderResult(d.ok
           ?'<div class="alert alert-green">Removed '+data.items.length+' track'+(data.items.length===1?'':'s')+' from the database.</div>'
-          :'<div class="lib-empty">'+escapeHtml(d.error||'Failed.')+'</div>';})
-        .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+          :'<div class="lib-empty">'+escapeHtml(d.error||'Failed.')+'</div>'))
+        .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 
 // ── Remove from library ──────────────────────────────────────────────────────
@@ -2139,107 +2204,101 @@ function removeFormat(fmt){
 // no selection), so this is the one action that refuses it: the preview would
 // be honest about it, but "I forgot to filter" and "I meant everything" look
 // identical at the moment of the click.
-function removeScope(el){
+function removeScope(){
   const scope=scopeBody();
   if(scope.scope.query===''){
-    el.innerHTML='<div class="lib-empty">Filter or select something first — '+
-      'remove will not run against the whole library.</div>';
+    renderResult('<div class="lib-empty">Filter or select something first — '+
+      'remove will not run against the whole library.</div>');
     return null;
   }
   return scope;
 }
 function previewRemove(){
-  const el=document.getElementById('rm-results'),scope=removeScope(el);
+  const scope=removeScope();
   if(!scope)return;
-  el.innerHTML='<div class="lib-empty">Checking…</div>';
+  renderResult('<div class="lib-empty">Checking…</div>');
   postJSON('/library/remove/preview',scope)
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>';return;}
-      if(!data.items.length){el.innerHTML='<div class="lib-empty">No matching tracks.</div>';return;}
-      el.innerHTML='<div class="lib-count">'+data.items.length+' track'+(data.items.length===1?'':'s')+' in scope</div>'+
+      if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>');return;}
+      if(!data.items.length){renderResult('<div class="lib-empty">No matching tracks.</div>');return;}
+      renderResult('<div class="lib-count">'+data.items.length+' track'+(data.items.length===1?'':'s')+' in scope</div>'+
         '<div class="lib-results">'+data.items.map(i=>
           '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(i.label)+'</div></div>'
-        ).join('')+'</div>';
+        ).join('')+'</div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function doRemove(deleteFiles){
-  const el=document.getElementById('rm-results'),scope=removeScope(el);
+  const scope=removeScope();
   if(!scope)return;
   // Preview before confirming, not just "you should preview": the count in the
   // prompt is the real match count, and the server requires it back as `expect`
   // (it removes with force=true, so this preview is the only confirmation).
-  el.innerHTML='<div class="lib-empty">Checking what matches…</div>';
+  renderResult('<div class="lib-empty">Checking what matches…</div>');
   postJSON('/library/remove/preview',scope)
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>';return;}
+      if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>');return;}
       const n=data.items.length;
-      if(!n){el.innerHTML='<div class="lib-empty">No matching tracks — nothing to remove.</div>';return;}
+      if(!n){renderResult('<div class="lib-empty">No matching tracks — nothing to remove.</div>');return;}
       const msg=(deleteFiles?'Permanently delete files for ':'Remove from database (files stay on disk): ')+
         n+' track'+(n===1?'':'s')+' — '+scopeLabel()+'?';
-      if(!confirm(msg)){el.innerHTML='<div class="lib-empty">Cancelled.</div>';return;}
+      if(!confirm(msg)){renderResult('<div class="lib-empty">Cancelled.</div>');return;}
       postJSON('/library/remove',{expect:n,delete_files:deleteFiles,...scope})
         .then(d=>{
-          el.innerHTML=d.ok?'<div class="alert alert-green">Removed '+d.removed+' track'+(d.removed===1?'':'s')+'.</div>':'<div class="lib-empty">'+escapeHtml(d.error||'Failed.')+'</div>';
+          renderResult(d.ok?'<div class="alert alert-green">Removed '+d.removed+' track'+(d.removed===1?'':'s')+'.</div>':'<div class="lib-empty">'+escapeHtml(d.error||'Failed.')+'</div>');
           if(d.ok)loadLibrary();
         })
         .catch(()=>alert('Could not reach the server.'));
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
-function exportM3u(dest,resultsId){
-  const el=document.getElementById(resultsId);
-  el.innerHTML='<div class="lib-empty">Writing…</div>';
+function exportM3u(dest){
+  renderResult('<div class="lib-empty">Writing…</div>');
   fetch('/export/m3u',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dest})})
     .then(r=>r.json())
-    .then(data=>{
-      el.innerHTML=data.ok
-        ?'<div class="alert alert-green">Wrote '+data.count+' track'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>'
-        :'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
-    })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .then(data=>renderResult(data.ok
+      ?'<div class="alert alert-green">Wrote '+data.count+' track'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>'
+      :'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>'))
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function exportPlaylists(){
   const src=document.getElementById('pl-path').value.trim();
-  const el=document.getElementById('pl-results');
-  if(!src){el.innerHTML='<div class="lib-empty">Enter a path to playlist folders.</div>';return;}
-  el.innerHTML='<div class="lib-empty">Working…</div>';
+  if(!src){renderResult('<div class="lib-empty">Enter a path to playlist folders.</div>');return;}
+  renderResult('<div class="lib-empty">Working…</div>');
   fetch('/export/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({src})})
     .then(r=>r.json())
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
-      el.innerHTML=data.playlists.length
+      if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>');return;}
+      renderResult(data.playlists.length
         ?'<div class="alert alert-green">Wrote '+data.playlists.length+' playlist'+(data.playlists.length===1?'':'s')+' to '+escapeHtml(data.dest)+'</div>'
-        :'<div class="lib-empty">No audio files found in any subfolder.</div>';
+        :'<div class="lib-empty">No audio files found in any subfolder.</div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function findFormat(ext){
   const src=document.getElementById('conv-src').value.trim();
-  const el=document.getElementById('find-format-results');
-  if(!src){el.innerHTML='<div class="lib-empty">Enter a path above first.</div>';return;}
-  el.innerHTML='<div class="lib-empty">Searching…</div>';
+  if(!src){renderResult('<div class="lib-empty">Enter a path above first.</div>');return;}
+  renderResult('<div class="lib-empty">Searching…</div>');
   fetch('/scan/list?dir='+encodeURIComponent(src)+'&ext='+ext+'&exclude=Samples,Stems')
     .then(r=>r.json())
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
-      if(!data.files.length){el.innerHTML='<div class="lib-empty">No '+ext.toUpperCase()+' files found.</div>';return;}
-      el.innerHTML=truncNote(data)+'<div class="lib-count">'+data.files.length+' file'+(data.files.length===1?'':'s')+'</div>'+
-        '<div class="lib-results">'+data.files.map(f=>'<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f)+'</div></div>').join('')+'</div>';
+      if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>');return;}
+      if(!data.files.length){renderResult('<div class="lib-empty">No '+ext.toUpperCase()+' files found.</div>');return;}
+      renderResult(truncNote(data)+'<div class="lib-count">'+data.files.length+' file'+(data.files.length===1?'':'s')+'</div>'+
+        '<div class="lib-results">'+data.files.map(f=>'<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f)+'</div></div>').join('')+'</div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function countFormats(exts){
   const src=document.getElementById('conv-src').value.trim();
-  const el=document.getElementById('find-format-results');
-  if(!src){el.innerHTML='<div class="lib-empty">Enter a path above first.</div>';return;}
-  el.innerHTML='<div class="lib-empty">Counting…</div>';
+  if(!src){renderResult('<div class="lib-empty">Enter a path above first.</div>');return;}
+  renderResult('<div class="lib-empty">Counting…</div>');
   fetch('/scan/count?dir='+encodeURIComponent(src)+'&ext='+exts+'&exclude=Samples,Stems')
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.ok?truncNote(data)+'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+      renderResult(data.ok?truncNote(data)+'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 // Always previews first — the old "Preview only" checkbox meant a stray
 // uncheck ran ffmpeg for real with no warning beyond a confirm() popup.
@@ -2249,7 +2308,7 @@ let pendingConvert=null;
 function startConvert(){
   const dest=document.getElementById('beet-conv-dest').value.trim();
   pendingConvert={dest:dest||null,scope:scopeBody()};
-  startJob('/convert/start',{pretend:true,dest:pendingConvert.dest,...pendingConvert.scope},'convert-job',
+  startJob('/convert/start',{pretend:true,dest:pendingConvert.dest,...pendingConvert.scope},
     (ev,el)=>{
       if(!ev.total)return;
       el.innerHTML+='<div class="btn-row"><button class="btn btn-warn btn-sm" onclick="runConvert()">Convert '+
@@ -2258,7 +2317,7 @@ function startConvert(){
 }
 function runConvert(){
   if(!pendingConvert)return;
-  startJob('/convert/start',{pretend:false,dest:pendingConvert.dest,...pendingConvert.scope},'convert-job');
+  startJob('/convert/start',{pretend:false,dest:pendingConvert.dest,...pendingConvert.scope});
 }
 // Server gives up on a scan after a wall-clock budget (#35) rather than
 // running forever on a huge dir — say so, or a partial count/list quietly
@@ -2275,83 +2334,79 @@ function fmtBytes(n){
   return n+' B';
 }
 function scanCount(){
-  const dir=scanDir(),el=document.getElementById('scan-util-results');
-  if(!dir){el.innerHTML='<div class="lib-empty">Enter a path above first.</div>';return;}
-  el.innerHTML='<div class="lib-empty">Counting…</div>';
+  const dir=scanDir();
+  if(!dir){renderResult('<div class="lib-empty">Enter a path above first.</div>');return;}
+  renderResult('<div class="lib-empty">Counting…</div>');
   fetch('/scan/count?dir='+encodeURIComponent(dir)+'&exclude='+encodeURIComponent(scanExclude()))
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.ok?truncNote(data)+'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+      renderResult(data.ok?truncNote(data)+'<div class="lib-empty">'+data.total_files+' file'+(data.total_files===1?'':'s')+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function scanSaveList(){
-  const dir=scanDir(),el=document.getElementById('scan-util-results');
-  if(!dir){el.innerHTML='<div class="lib-empty">Enter a path above first.</div>';return;}
-  el.innerHTML='<div class="lib-empty">Saving…</div>';
+  const dir=scanDir();
+  if(!dir){renderResult('<div class="lib-empty">Enter a path above first.</div>');return;}
+  renderResult('<div class="lib-empty">Saving…</div>');
   fetch('/scan/save-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dir,exclude:scanExclude()})})
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.ok?truncNote(data)+'<div class="alert alert-green">Saved '+data.count+' file'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
+      renderResult(data.ok?truncNote(data)+'<div class="alert alert-green">Saved '+data.count+' file'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function scanSizes(){
-  const dir=scanDir(),el=document.getElementById('scan-util-results');
-  if(!dir){el.innerHTML='<div class="lib-empty">Enter a path above first.</div>';return;}
-  el.innerHTML='<div class="lib-empty">Calculating…</div>';
+  const dir=scanDir();
+  if(!dir){renderResult('<div class="lib-empty">Enter a path above first.</div>');return;}
+  renderResult('<div class="lib-empty">Calculating…</div>');
   fetch('/scan/sizes?dir='+encodeURIComponent(dir))
     .then(r=>r.json())
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
-      if(!data.folders.length){el.innerHTML='<div class="lib-empty">No subfolders found.</div>';return;}
-      el.innerHTML=truncNote(data)+'<div class="lib-results">'+data.folders.map(f=>
+      if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>');return;}
+      if(!data.folders.length){renderResult('<div class="lib-empty">No subfolders found.</div>');return;}
+      renderResult(truncNote(data)+'<div class="lib-results">'+data.folders.map(f=>
         '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f.path)+'</div><div class="lib-row-meta">'+fmtBytes(f.size_bytes)+'</div></div>'
-      ).join('')+'</div>';
+      ).join('')+'</div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function scanItunesLibrary(){
-  const el=document.getElementById('scan-util-results');
-  el.innerHTML='<div class="lib-empty">Searching your home folder…</div>';
+  renderResult('<div class="lib-empty">Searching your home folder…</div>');
   fetch('/scan/itunes-library')
     .then(r=>r.json())
     .then(data=>{
-      el.innerHTML=data.paths.length
+      renderResult(data.paths.length
         ?'<div class="lib-results">'+data.paths.map(p=>'<div class="lib-row"><div class="lib-row-title">'+escapeHtml(p)+'</div></div>').join('')+'</div>'
-        :'<div class="lib-empty">No iTunes Library.xml found under your home folder.</div>';
+        :'<div class="lib-empty">No iTunes Library.xml found under your home folder.</div>');
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 
 function scanUnimported(){
   const dir=document.getElementById('scan-path').value.trim();
   const excl=Array.from(document.querySelectorAll('#scan-excl input:checked')).map(c=>c.value).join(',');
-  const results=document.getElementById('scan-results'),count=document.getElementById('scan-count');
-  if(!dir){results.innerHTML='<div class="lib-empty">Enter a path to scan.</div>';count.textContent='';return;}
-  results.innerHTML='<div class="lib-empty">Scanning…</div>';count.textContent='';
+  if(!dir){renderResult('<div class="lib-empty">Enter a path to scan.</div>');return;}
+  renderResult('<div class="lib-empty">Scanning…</div>');
   checkiCloud(dir);
   fetch('/unimported?dir='+encodeURIComponent(dir)+(excl?'&exclude='+encodeURIComponent(excl):''))
     .then(r=>r.json())
     .then(data=>renderUnimported(data))
-    .catch(()=>{results.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function renderUnimported(data){
-  const results=document.getElementById('scan-results'),count=document.getElementById('scan-count');
-  if(!data.ok){count.textContent='';results.innerHTML='<div class="lib-empty">'+escapeHtml(data.error)+'</div>';return;}
+  if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error)+'</div>');return;}
   if(!data.folders.length){
-    count.textContent='';
-    results.innerHTML='<div class="lib-empty">Nothing new — everything here is already in your library.</div>';
+    renderResult('<div class="lib-empty">Nothing new — everything here is already in your library.</div>');
     return;
   }
-  count.textContent=data.total_files+' unimported file'+(data.total_files===1?'':'s')+' in '+data.folders.length+' folder'+(data.folders.length===1?'':'s');
-  results.innerHTML=data.folders.map(f=>
+  const count='<div class="lib-count">'+data.total_files+' unimported file'+(data.total_files===1?'':'s')+' in '+data.folders.length+' folder'+(data.folders.length===1?'':'s')+'</div>';
+  renderResult(count+data.folders.map(f=>
     '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f.path)+'</div>'+
     '<div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">'+
       '<span class="lib-row-meta">'+f.count+' file'+(f.count===1?'':'s')+'</span>'+
       '<button class="btn btn-sm btn-primary" onclick="useForImport(this.dataset.path)" data-path="'+escapeHtml(f.path)+'">Import →</button>'+
     '</div></div>'
-  ).join('');
+  ).join(''));
 }
 function useForImport(path){
   document.getElementById('import-path').value=path;
@@ -2472,7 +2527,7 @@ function initGnomonShadow(){
   shadow.style.fontVariationSettings=`'TOTD' ${totd.toFixed(1)}, 'DIST' ${dist.toFixed(1)}`;
   face.style.fontVariationSettings=`'TOTD' ${totd.toFixed(1)}, 'DIST' 0`;
 }
-updatePathPreview();checkCurrentImport();pollJobQueue();loadModFields();checkFirstRun();initGnomonShadow();
+updatePathPreview();checkCurrentImport();checkCurrentJob();pollJobQueue();loadModFields();checkFirstRun();initGnomonShadow();
 </script>
 </body>
 </html>
