@@ -43,7 +43,8 @@
   html,body { height:100%; background:var(--bg); color:var(--text); font-family:var(--font-ui); font-weight:400; font-size:13px; line-height:1.6; }
   .app { display:flex; flex-direction:column; height:100vh; max-width:860px; margin:0 auto; }
   .app-header { display:flex; align-items:baseline; gap:0.75rem; padding:1rem 1.25rem 0; border-bottom:1px solid var(--border); flex-shrink:0; }
-  .prefs-btn { align-self:center; background:none; border:none; color:var(--text3); cursor:pointer; font-size:15px; margin-left:auto; padding:0.2rem 0.3rem; transition:color 0.1s; }
+  .job-queue-badge { align-self:center; margin-left:auto; font-size:11px; color:var(--text3); border:1px solid var(--border); border-radius:999px; padding:0.15rem 0.6rem; }
+  .prefs-btn { align-self:center; background:none; border:none; color:var(--text3); cursor:pointer; font-size:15px; margin-left:0.5rem; padding:0.2rem 0.3rem; transition:color 0.1s; }
   .prefs-btn:hover { color:var(--text2); }
   #prefs-dialog { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--text); margin:auto; max-height:85vh; padding:0; width:min(620px, 92vw); }
   #prefs-dialog::backdrop { background:rgba(0,0,0,0.55); }
@@ -182,6 +183,7 @@
   <div class="app-header">
     <span class="app-title" id="app-title"><span class="shadow" aria-hidden="true">BeetsGUI</span><span class="face">BeetsGUI</span></span>
     <span class="app-sub">beets music library assistant</span>
+    <span class="job-queue-badge" id="job-queue-badge" style="display:none"></span>
     <button class="prefs-btn" onclick="openPrefs()" title="Preferences (⌘,)">⚙</button>
   </div>
 
@@ -846,6 +848,31 @@ function checkCurrentImport(){
   }).catch(()=>{});
 }
 
+// A single "what's running" badge (#32) — covers import as well as the
+// generic job runner (sync/artwork/convert), since /jobs/current already
+// reports whichever kind is active. Self-stopping: only ticks while there's
+// something to show, rather than a permanent background timer (see the
+// Gnomon-shadow comment above for why this codebase avoids those by
+// default) — every job start/attach kicks it once so the badge appears
+// immediately rather than waiting up to one poll interval.
+let jobQueueTimer=null;
+function pollJobQueue(){
+  fetch('/jobs/current').then(r=>r.json()).then(data=>{
+    const badge=document.getElementById('job-queue-badge');
+    if(!badge)return;
+    if(!data.ok||!data.id){
+      badge.style.display='none';
+      if(jobQueueTimer){clearInterval(jobQueueTimer);jobQueueTimer=null;}
+      return;
+    }
+    let text=data.kind+(data.aborting?' aborting':' running');
+    if(data.queued)text+=' · '+data.queued.kind+' queued';
+    badge.textContent=text;
+    badge.style.display='inline-block';
+    if(!jobQueueTimer)jobQueueTimer=setInterval(pollJobQueue,2000);
+  }).catch(()=>{});
+}
+
 function attachImport(jobId){
   importState.jobId=jobId;importState.running=true;importState.decided=0;
   importState.log=[];importState.decision=null;
@@ -854,6 +881,7 @@ function attachImport(jobId){
   const es=new EventSource('/jobs/'+jobId+'/events');
   importState.es=es;
   es.onmessage=e=>handleImportEvent(JSON.parse(e.data));
+  pollJobQueue();
 }
 
 function handleImportEvent(ev){
@@ -1060,6 +1088,7 @@ function attachJob(id,el,onDone,queuedBehind){
   el.innerHTML='<div class="lib-count job-pulse" id="job-status">'+initial+'</div>'+
     '<div class="btn-row"><button class="btn btn-danger btn-sm" id="job-abort-btn" onclick="abortJob()">Abort</button></div>';
   jobRunner.es.onmessage=e=>handleJobEvent(JSON.parse(e.data));
+  pollJobQueue();
 }
 // mbsync/bpsync only checkpoint between phases, not between items within a
 // phase (see server.py's /jobs/<id>/abort docstring) — a click here can
@@ -1758,7 +1787,7 @@ function initGnomonShadow(){
   shadow.style.fontVariationSettings=`'TOTD' ${totd.toFixed(1)}, 'DIST' ${dist.toFixed(1)}`;
   face.style.fontVariationSettings=`'TOTD' ${totd.toFixed(1)}, 'DIST' 0`;
 }
-updatePathPreview();checkCurrentImport();loadModFields();checkFirstRun();initGnomonShadow();
+updatePathPreview();checkCurrentImport();pollJobQueue();loadModFields();checkFirstRun();initGnomonShadow();
 </script>
 </body>
 </html>

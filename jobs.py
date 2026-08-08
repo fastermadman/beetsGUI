@@ -125,6 +125,14 @@ def current():
     return None
 
 
+def queued():
+    """The job waiting to start once `current()` actually finishes, if any —
+    so the UI can show both halves of a queued-behind-an-abort pair (#32),
+    not just whichever one it happens to be subscribed to."""
+    with _lock:
+        return _pending[0] if _pending else None
+
+
 def start(job, work):
     """Register `job` and run `work(job)` on a background thread.
 

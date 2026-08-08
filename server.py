@@ -776,12 +776,18 @@ def sync_start():
 
 @app.route('/jobs/current')
 def jobs_current():
-    """The running job, if any — lets a reloaded page rejoin its stream."""
+    """The running job, if any — lets a reloaded page rejoin its stream.
+
+    Also reports the job queued behind it (#32), if any, so a client can
+    show both halves of a queued-behind-an-abort pair instead of just
+    whichever one it happens to be subscribed to."""
     job = jobs.current()
     if not job:
         return jsonify({'ok': True, 'id': None})
     decision = job.pending() if hasattr(job, 'pending') else None
-    return jsonify({'ok': True, **job.summary(), 'decision': decision})
+    queued = jobs.queued()
+    return jsonify({'ok': True, **job.summary(), 'decision': decision,
+                    'queued': queued.summary() if queued else None})
 
 
 @app.route('/jobs/<job_id>/events')
