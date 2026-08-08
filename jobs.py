@@ -37,6 +37,10 @@ class Job:
         self.id = uuid.uuid4().hex
         self.kind = kind
         self.meta = meta
+        # Set by start() if this job was queued behind one still finishing
+        # an abort (#32) — the kind of the job it's waiting on, so the UI
+        # can say what's actually happening instead of a silent "Working…".
+        self.queued_behind = None
         # One queue per connected SSE stream, not one shared queue — two
         # tabs open on the same job each got a *subset* of events before
         # (both calling .get() on one queue splits the stream between them)
@@ -93,13 +97,19 @@ class Job:
 
     def summary(self):
         return {'id': self.id, 'kind': self.kind, 'aborting': self.aborted.is_set(),
-                **self.meta}
+                'queued_behind': self.queued_behind, **self.meta}
 
 
 # ── Registry ──────────────────────────────────────────────────────────────
 
 _jobs = {}
 _lock = threading.Lock()
+# At most one (job, work) queued behind a job that's still finishing an
+# abort (#32) — not a general queue. A second start() while one is already
+# queued still raises RuntimeError, same as while a job is running: the
+# invariant is "at most one beets job running or about to run," extended to
+# cover "about to run" rather than widened into an actual job queue.
+_pending = None
 
 
 def get(job_id):
@@ -115,31 +125,68 @@ def current():
     return None
 
 
+def queued():
+    """The job waiting to start once `current()` actually finishes, if any —
+    so the UI can show both halves of a queued-behind-an-abort pair (#32),
+    not just whichever one it happens to be subscribed to."""
+    with _lock:
+        return _pending[0] if _pending else None
+
+
 def start(job, work):
     """Register `job` and run `work(job)` on a background thread.
 
-    Raises RuntimeError if any job is still running. The 'done' event is
-    emitted from a finally block, so a client's stream always terminates
-    even when the work raises.
+    Raises RuntimeError if another job is running and hasn't been aborted.
+    If the running job *has* been aborted but beets gives it no way to stop
+    mid-unit (mbsync/bpsync — see sync.py), `job` is queued instead of
+    rejected: it starts automatically the instant that job's thread
+    actually exits, so the caller never has to poll and retry by hand. The
+    two jobs still never run concurrently — that's the mutation hazard the
+    registry exists to prevent (#29) — this only removes the manual retry.
+
+    The 'done' event is emitted from a finally block, so a client's stream
+    always terminates even when the work raises.
     """
+    global _pending
     with _lock:
         for existing in list(_jobs.values()):
             if existing.done.is_set():
                 del _jobs[existing.id]
-            else:
+                continue
+            if not existing.aborted.is_set() or _pending is not None:
                 raise RuntimeError(
                     f'another job is already running ({existing.kind})')
+            job.queued_behind = existing.kind
+            _jobs[job.id] = job
+            _pending = (job, work)
+            return job
         _jobs[job.id] = job
 
+    _launch(job, work)
+    return job
+
+
+def _launch(job, work):
     def run():
         try:
-            work(job)
+            if not job.aborted.is_set():
+                work(job)
         except Exception as e:
             job.emit('error', message=f'{type(e).__name__}: {e}')
         finally:
             job.emit('done', aborted=job.aborted.is_set(), **job.result)
             job.done.set()
+            _start_pending()
 
     job.thread = threading.Thread(target=run, daemon=True)
     job.thread.start()
-    return job
+
+
+def _start_pending():
+    """Launch the queued job, if any, now that its predecessor is done."""
+    global _pending
+    with _lock:
+        pending = _pending
+        _pending = None
+    if pending:
+        _launch(*pending)
