@@ -428,54 +428,60 @@
       <div id="info-results"></div>
 
       <hr class="divider">
-      <div class="section">
-        <div class="section-title">
+      <details class="section">
+        <summary class="section-title">
           <span>Duplicates</span>
           <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">During import: beets ranks quality automatically and asks only when it can't tell. This scan uses the same rule after the fact — grouping by artist+album, lossless never counted worse than lossy.</span></span>
+        </summary>
+        <div style="margin-top:0.6rem;">
+          <div class="alert alert-yellow">Always preview first — delete buttons are red and secondary.</div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="scanDuplicates()"><span>Scan for duplicates</span></button>
+          </div>
+          <div class="lib-count" id="dup-count"></div>
+          <div id="dup-results"></div>
+          <div class="alert alert-red" style="font-size:10px;">Deleting with "also remove files" removes them permanently. Preview each group before deleting.</div>
         </div>
-        <div class="alert alert-yellow">Always preview first — delete buttons are red and secondary.</div>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="scanDuplicates()"><span>Scan for duplicates</span></button>
+      </details>
+      <details class="section">
+        <summary class="section-title">Cover art</summary>
+        <div style="margin-top:0.6rem;">
+          <div class="field"><label>Query (whole library if empty)</label><input type="text" id="art-query" placeholder="albumartist:Burial"></div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="startArtwork('fetch')">Fetch art <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Checks the album folder first (cover.jpg, folder.jpg, front.jpg), then whichever web sources your config enables. Albums that already have art are skipped unless you tick Re-fetch.</span></span></button>
+            <button class="btn" onclick="startArtwork('embed')">Embed art</button>
+            <label class="check-item"><input type="checkbox" id="art-force"><span>Re-fetch albums that already have art</span></label>
+          </div>
+          <div id="artwork-job"></div>
         </div>
-        <div class="lib-count" id="dup-count"></div>
-        <div id="dup-results"></div>
-        <div class="alert alert-red" style="font-size:10px;">Deleting with "also remove files" removes them permanently. Preview each group before deleting.</div>
-      </div>
-      <div class="section">
-        <div class="section-title">Cover art</div>
-        <div class="field"><label>Query (whole library if empty)</label><input type="text" id="art-query" placeholder="albumartist:Burial"></div>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="startArtwork('fetch')">Fetch art <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Checks the album folder first (cover.jpg, folder.jpg, front.jpg), then whichever web sources your config enables. Albums that already have art are skipped unless you tick Re-fetch.</span></span></button>
-          <button class="btn" onclick="startArtwork('embed')">Embed art</button>
-          <label class="check-item"><input type="checkbox" id="art-force"><span>Re-fetch albums that already have art</span></label>
+      </details>
+      <details class="section">
+        <summary class="section-title">Metadata</summary>
+        <div style="margin-top:0.6rem;">
+          <div class="field-row">
+            <div class="field"><label>Field</label><input type="text" list="beet-fields" id="mod-field" placeholder="Loading fields…" autocomplete="off"><datalist id="beet-fields"></datalist></div>
+            <div class="field"><label>New value</label><input type="text" id="mod-value" placeholder="Burial"></div>
+            <div class="field"><label>Query</label><input type="text" id="mod-query" placeholder="album:Untrue"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="previewModify()"><span>Preview changes</span></button>
+          </div>
+          <div id="mod-results"></div>
+          <hr class="divider">
+          <div class="field"><label>Query (all fields if empty)</label><input type="text" id="maint-query" placeholder="album:Untrue"></div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="runUpdate()">Check for changes on disk</button>
+            <button class="btn btn-primary" onclick="runWrite()">Check tags to write</button>
+          </div>
+          <div class="btn-row">
+            <button class="btn" onclick="startSync('mbsync')">mbsync <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Network call per track/album — can be slow on a real library.</span></span></button>
+            <button class="btn" onclick="startSync('bpsync')">bpsync</button>
+            <button class="btn" onclick="showMissing()">missing</button>
+          </div>
+          <div id="sync-job"></div>
+          <div id="maint-results"></div>
         </div>
-        <div id="artwork-job"></div>
-      </div>
-      <div class="section">
-        <div class="section-title">Metadata</div>
-        <div class="field-row">
-          <div class="field"><label>Field</label><input type="text" list="beet-fields" id="mod-field" placeholder="Loading fields…" autocomplete="off"><datalist id="beet-fields"></datalist></div>
-          <div class="field"><label>New value</label><input type="text" id="mod-value" placeholder="Burial"></div>
-          <div class="field"><label>Query</label><input type="text" id="mod-query" placeholder="album:Untrue"></div>
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="previewModify()"><span>Preview changes</span></button>
-        </div>
-        <div id="mod-results"></div>
-        <hr class="divider">
-        <div class="field"><label>Query (all fields if empty)</label><input type="text" id="maint-query" placeholder="album:Untrue"></div>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="runUpdate()">Check for changes on disk</button>
-          <button class="btn btn-primary" onclick="runWrite()">Check tags to write</button>
-        </div>
-        <div class="btn-row">
-          <button class="btn" onclick="startSync('mbsync')">mbsync <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Network call per track/album — can be slow on a real library.</span></span></button>
-          <button class="btn" onclick="startSync('bpsync')">bpsync</button>
-          <button class="btn" onclick="showMissing()">missing</button>
-        </div>
-        <div id="sync-job"></div>
-        <div id="maint-results"></div>
-      </div>
+      </details>
 
       <details class="section">
         <summary class="section-title">Formats</summary>
