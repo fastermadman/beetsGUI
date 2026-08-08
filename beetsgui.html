@@ -128,6 +128,32 @@
   .lib-row-meta { color:var(--text3); font-size:10px; letter-spacing:0.04em; white-space:nowrap; }
   .lib-empty { color:var(--text3); font-size:12px; padding:1.5rem; text-align:center; }
   .lib-count { color:var(--text3); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.5rem; }
+  .lib-row-actions { display:flex; gap:0.3rem; flex-shrink:0; }
+  .row-btn { background:none; border:1px solid var(--border2); border-radius:var(--radius); color:var(--text2); cursor:pointer; font-family:inherit; font-size:11px; line-height:1.1; padding:0.2rem 0.4rem; }
+  .row-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .lib-row.playing .lib-row-title,.lib-row.playing .lib-row-artist { color:var(--accent); }
+  .lib-row-link { cursor:pointer; }
+  .lib-row-link:hover .lib-row-title { color:var(--accent); }
+  /* Player: a sibling of .content, so playback survives a tab switch. The
+     <audio> keeps its native controls — that transport is the seek bar,
+     the volume slider and the elapsed/total readout, for no code. It's
+     given most of the bar's width so the scrub bar is long enough to drag
+     accurately; .player-now caps out rather than competing for space. */
+  .player { display:flex; align-items:center; gap:0.6rem; flex-shrink:0; border-top:1px solid var(--border); background:var(--bg2); padding:0.5rem 1.25rem; }
+  .player-now { flex:0 1 180px; min-width:90px; }
+  .player-title { color:var(--text); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .player-meta { color:var(--text3); font-size:10px; letter-spacing:0.04em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .player-meta.err { color:var(--red); }
+  .player audio { flex:2 1 260px; min-width:220px; height:32px; color-scheme:dark; }
+  /* Queue: a floating popover anchored above the bar, not a panel in normal
+     flow — opening it must not shrink .content's visible height. */
+  .player-queue { position:fixed; right:1.25rem; width:320px; max-width:calc(100vw - 2.5rem); max-height:55vh; overflow:auto; background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius-lg); box-shadow:0 8px 28px rgba(0,0,0,0.4); z-index:60; }
+  .player-queue .lib-row { cursor:pointer; }
+  .player-queue .lib-row:hover { background:var(--bg3); }
+  @media (prefers-color-scheme:light) {
+    .player audio { color-scheme:light; }
+    .player-queue { box-shadow:0 8px 28px rgba(0,0,0,0.18); }
+  }
   /* Indeterminate progress cue for a running background job — the app can't
      show a real percentage (mbsync/bpsync don't report counts at all), so
      this signals "still alive" rather than "how far along." */
@@ -359,15 +385,23 @@
       </div>
       <div class="section">
         <div class="section-title">Your library</div>
+        <div class="check-group" style="flex-direction:row;gap:1.1rem;margin-bottom:0.6rem;">
+          <label class="radio-item"><input type="radio" name="lib-mode" value="albums" checked onchange="setLibMode()"><span>Albums</span></label>
+          <label class="radio-item"><input type="radio" name="lib-mode" value="tracks" onchange="setLibMode()"><span>Tracks</span></label>
+          <label class="radio-item"><input type="radio" name="lib-mode" value="artists" onchange="setLibMode()"><span>Artists</span></label>
+        </div>
+        <div class="field-row" style="margin-bottom:0.75rem;">
+          <div class="field">
+            <label>Sort by</label>
+            <select id="lib-sort" onchange="loadLibrary()"></select>
+          </div>
+          <button class="btn btn-sm" id="lib-dir" onclick="toggleLibDir()">↑ Asc</button>
+        </div>
         <div class="lib-count" id="lib-count"></div>
         <div class="lib-results" id="lib-results"><div class="lib-empty">Loading…</div></div>
       </div>
       <div class="section">
-        <div class="section-title">View</div>
-        <div class="check-group" style="margin-bottom:0.5rem;">
-          <label class="radio-item"><input type="radio" name="lib-type" value="" checked onchange="buildLibCmd()"><span>Tracks (default)</span></label>
-          <label class="radio-item"><input type="radio" name="lib-type" value="-a" onchange="buildLibCmd()"><span>Albums</span> <span class="mono">-a</span></label>
-        </div>
+        <div class="section-title">Command</div>
         <div class="field">
           <label><span>Output format</span> <span class="mono">-f</span>
             <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Use $artist, $album, $year, $title, $format, $bitrate, $path etc. to shape output.</span></span>
@@ -785,6 +819,19 @@
     </div>
   </dialog>
 
+  </div>
+
+  <div class="player-queue" id="player-queue" style="display:none"></div>
+  <div class="player" id="player-bar" style="display:none">
+    <div class="player-now">
+      <div class="player-title" id="player-title"></div>
+      <div class="player-meta" id="player-meta"></div>
+    </div>
+    <audio id="player-audio" controls preload="metadata"></audio>
+    <button class="row-btn" onclick="playStep(-1)" title="Previous">⏮</button>
+    <button class="row-btn" onclick="playStep(1)" title="Next">⏭</button>
+    <button class="row-btn" id="queue-btn" onclick="toggleQueue()" title="Queue">Queue</button>
+    <button class="row-btn" onclick="stopPlayback()" title="Stop and clear queue">✕</button>
   </div>
 
   <details class="cmd-box" id="cmd-box">
@@ -1332,7 +1379,10 @@ function buildLibCmd(){
   const q=document.getElementById('lib-query').value.trim();
   const field=document.getElementById('lib-field').value;
   const fval=document.getElementById('lib-field-val').value.trim();
-  const type=document.querySelector('input[name="lib-type"]:checked').value;
+  // Same Albums/Tracks/Artists choice that drives the results panel — beet
+  // ls has no "list artists" mode, so Artists falls back to plain track
+  // listing here, same as the default.
+  const type=libMode==='albums'?'-a':'';
   const fmt=document.getElementById('lib-format').value.trim();
   const exp=document.getElementById('lib-export').checked;
   let parts=['beet ls'];
@@ -1353,37 +1403,251 @@ function fmtDuration(sec){
   const m=Math.floor(sec/60),s=sec%60;
   return m+':'+String(s).padStart(2,'0');
 }
-let libLoadSeq=0;
+// The Library results panel: three row shapes over three endpoints, one
+// search box. Only tracks carry an item id, so only tracks are playable —
+// an album row plays by fetching its tracks first.
+const LIB_MODES={
+  albums: {url:'/library',         key:'albums',  noun:'album',
+           sorts:[['artist','Artist'],['album','Album'],['year','Year'],['added','Date added']]},
+  tracks: {url:'/library/tracks',  key:'tracks',  noun:'track',
+           sorts:[['artist','Artist'],['album','Album'],['title','Title'],['year','Year'],['added','Date added']]},
+  artists:{url:'/library/artists', key:'artists', noun:'artist',
+           sorts:[['artist','Name'],['tracks','Track count'],['added','Date added']]},
+};
+let libMode='albums',libDir='asc',libLoadSeq=0,libTracks=[];
+
+function setLibMode(){
+  libMode=document.querySelector('input[name="lib-mode"]:checked').value;
+  fillLibSorts();
+  loadLibrary();
+  buildLibCmd();
+}
+// The Tracks sort dropdown also offers every other real metadata column
+// (bpm, initial_key, genres, label, ...) — fetched once from /info/fields
+// rather than hardcoded, so it stays in sync with whatever this beets
+// install's schema actually has. The backend independently re-validates
+// whatever key is chosen, so this list is a UI convenience, not a trust
+// boundary.
+let allItemColumns=null;
+function loadFieldOptions(){
+  if(allItemColumns)return Promise.resolve(allItemColumns);
+  return fetch('/info/fields').then(r=>r.json())
+    .then(d=>allItemColumns=(d.ok&&d.item_columns)||[])
+    .catch(()=>allItemColumns=[]);
+}
+function fillLibSorts(){
+  const sel=document.getElementById('lib-sort'),prev=sel.value,sorts=LIB_MODES[libMode].sorts;
+  sel.innerHTML=sorts.map(s=>'<option value="'+s[0]+'">'+s[1]+'</option>').join('');
+  if(sorts.some(s=>s[0]===prev))sel.value=prev;
+  if(libMode!=='tracks')return;
+  const known=new Set(sorts.map(s=>s[0]).concat(['id','path','album_id']));
+  loadFieldOptions().then(cols=>{
+    if(libMode!=='tracks'||sel!==document.getElementById('lib-sort'))return;
+    const extra=cols.filter(c=>!known.has(c));
+    if(!extra.length)return;
+    sel.insertAdjacentHTML('beforeend','<optgroup label="All fields">'+
+      extra.map(c=>'<option value="'+c+'">'+c+'</option>').join('')+'</optgroup>');
+    if(extra.includes(prev))sel.value=prev;
+  });
+}
+function toggleLibDir(){
+  libDir=libDir==='asc'?'desc':'asc';
+  document.getElementById('lib-dir').textContent=libDir==='asc'?'↑ Asc':'↓ Desc';
+  loadLibrary();
+}
 function loadLibrary(){
   const q=document.getElementById('lib-query').value.trim();
-  const seq=++libLoadSeq;
-  fetch('/library?q='+encodeURIComponent(q)+'&limit=200')
+  const mode=LIB_MODES[libMode],seq=++libLoadSeq;
+  fetch(mode.url+'?q='+encodeURIComponent(q)+'&limit=200'+
+        '&sort='+encodeURIComponent(document.getElementById('lib-sort').value)+'&dir='+libDir)
     .then(r=>r.json())
-    .then(data=>{ if(seq===libLoadSeq)renderLibrary(data,q); })
-    .catch(()=>{ if(seq===libLoadSeq)renderLibrary({ok:false},q); });
+    .then(data=>{ if(seq===libLoadSeq)renderLibrary(data,q,mode); })
+    .catch(()=>{ if(seq===libLoadSeq)renderLibrary({ok:false},q,mode); });
 }
-function renderLibrary(data,q){
+function renderLibrary(data,q,mode){
   const el=document.getElementById('lib-results'),count=document.getElementById('lib-count');
+  libTracks=[];
   if(!data.ok){
     count.textContent='';
     el.innerHTML='<div class="lib-empty">Could not reach the library. Is the server running?</div>';
     return;
   }
-  if(!data.albums.length){
+  const rows=data[mode.key];
+  if(!rows.length){
     count.textContent='';
-    el.innerHTML='<div class="lib-empty">'+(q?'No albums match "'+escapeHtml(q)+'".':'No albums yet — import some music to get started.')+'</div>';
+    el.innerHTML='<div class="lib-empty">'+(q
+      ?'No '+mode.noun+'s match "'+escapeHtml(q)+'".'
+      :'No '+mode.noun+'s yet — import some music to get started.')+'</div>';
     return;
   }
-  count.textContent=data.total+' album'+(data.total===1?'':'s');
-  el.innerHTML=data.albums.map(a=>
-    '<div class="lib-row">'+
-      '<div class="lib-row-title"><span class="lib-row-artist">'+escapeHtml(a.albumartist||'Unknown artist')+'</span>'+
-      ' — '+escapeHtml(a.album||'Untitled')+
-      (a.year?' <span class="lib-row-year">('+a.year+')</span>':'')+'</div>'+
-      '<div class="lib-row-meta">'+(a.format||'')+' · '+a.track_count+' track'+(a.track_count===1?'':'s')+' · '+fmtDuration(a.duration)+'</div>'+
-    '</div>'
-  ).join('');
+  count.textContent=data.total+' '+mode.noun+(data.total===1?'':'s');
+  if(libMode==='tracks')libTracks=rows;
+  el.innerHTML=rows.map(libMode==='albums'?albumRow:libMode==='tracks'?trackRow:artistRow).join('');
+  markPlayingRow();
 }
+function albumRow(a){
+  return '<div class="lib-row">'+
+    '<div class="lib-row-title" style="flex:1;min-width:0;"><span class="lib-row-artist">'+escapeHtml(a.albumartist||'Unknown artist')+'</span>'+
+    ' — '+escapeHtml(a.album||'Untitled')+
+    (a.year?' <span class="lib-row-year">('+a.year+')</span>':'')+'</div>'+
+    '<div class="lib-row-meta">'+(a.format||'')+' · '+a.track_count+' track'+(a.track_count===1?'':'s')+' · '+fmtDuration(a.duration)+'</div>'+
+    '<div class="lib-row-actions">'+
+      '<button class="row-btn" onclick="playAlbum('+a.id+',false)" title="Play album">▶</button>'+
+      '<button class="row-btn" onclick="playAlbum('+a.id+',true)" title="Add album to queue">+</button>'+
+    '</div></div>';
+}
+function trackRow(t,i){
+  return '<div class="lib-row" data-track="'+t.id+'">'+
+    '<div class="lib-row-title" style="flex:1;min-width:0;"><span class="lib-row-artist">'+escapeHtml(t.artist||'Unknown artist')+'</span>'+
+    ' — '+escapeHtml(t.title||'Untitled')+'</div>'+
+    '<div class="lib-row-meta">'+escapeHtml(t.format||'')+' · '+fmtDuration(t.length)+'</div>'+
+    '<div class="lib-row-actions">'+
+      '<button class="row-btn" onclick="playFromResults('+i+')" title="Play from here">▶</button>'+
+      '<button class="row-btn" onclick="addToQueue([libTracks['+i+']])" title="Add to queue">+</button>'+
+    '</div></div>';
+}
+function artistRow(a){
+  // No id to play by — clicking narrows the search to this artist instead.
+  return '<div class="lib-row lib-row-link" onclick="searchArtist(this.dataset.name)" data-name="'+escapeHtml(a.name)+'">'+
+    '<div class="lib-row-title" style="flex:1;min-width:0;">'+escapeHtml(a.name||'Unknown artist')+'</div>'+
+    '<div class="lib-row-meta">'+a.albums+' album'+(a.albums===1?'':'s')+' · '+a.tracks+' track'+(a.tracks===1?'':'s')+'</div>'+
+    '</div>';
+}
+function searchArtist(name){
+  document.getElementById('lib-query').value=name;
+  document.querySelector('input[name="lib-mode"][value="albums"]').checked=true;
+  buildLibCmd();
+  setLibMode();
+}
+
+// ── Player ────────────────────────────────────────────────────────────────────
+// Playback is a plain <audio> element pointed at /stream/<item id>. The
+// browser does the decoding, the buffering and the Range requests that make
+// seeking work, so nothing here is a player — it's a queue and two buttons
+// that move through it. The bar lives outside .content, so a tab switch
+// doesn't interrupt what's playing.
+let queue=[],queueIdx=-1,queueOpen=false;
+
+function trackLabel(t){return (t.artist||'Unknown artist')+' — '+(t.title||'Untitled');}
+function playFromResults(i){playQueue(libTracks,i);}
+function playQueue(tracks,idx){
+  if(!tracks.length)return;
+  queue=tracks.slice();queueIdx=idx||0;playCurrent();
+}
+function addToQueue(tracks){
+  if(!tracks.length)return;
+  const wasEmpty=!queue.length;
+  queue=queue.concat(tracks);
+  if(wasEmpty){queueIdx=0;playCurrent();}else renderPlayer();
+}
+function playAlbum(albumId,append){
+  fetch('/library/tracks?album_id='+albumId+'&sort=album&limit=1000')
+    .then(r=>r.json())
+    .then(d=>{ if(d.ok&&d.tracks.length)append?addToQueue(d.tracks):playQueue(d.tracks,0); })
+    .catch(()=>{});
+}
+function playStep(d){
+  const next=queueIdx+d;
+  if(next<0||next>=queue.length)return;  // stops at both ends: no wrap, no shuffle
+  playAt(next);
+}
+function playAt(i){queueIdx=i;playCurrent();}
+function playCurrent(){
+  const a=document.getElementById('player-audio'),t=queue[queueIdx];
+  if(!t)return stopPlayback();
+  a.src='/stream/'+t.id;
+  a.play().catch(()=>{});  // a failed load reports itself through the error event
+  setNowPlaying(t);
+  renderPlayer();
+}
+function stopPlayback(){
+  const a=document.getElementById('player-audio');
+  a.pause();a.removeAttribute('src');a.load();
+  queue=[];queueIdx=-1;queueOpen=false;
+  if('mediaSession' in navigator){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState='none';}
+  renderPlayer();
+}
+function toggleQueue(){queueOpen=!queueOpen;renderPlayer();}
+
+// ── macOS media keys / Now Playing (Control Center, Touch Bar, notch
+// widgets like Boring Notch) ─────────────────────────────────────────────
+// All of it runs through the Media Session API — the browser is what talks
+// to the OS, this just feeds it. Safari populates the system Now Playing
+// info from exactly this; nothing notch-specific to add.
+function setNowPlaying(t){
+  if(!('mediaSession' in navigator))return;
+  navigator.mediaSession.metadata=new MediaMetadata({
+    title: t.title||'Untitled', artist: t.artist||'Unknown artist', album: t.album||'',
+    artwork: t.album_id?[{src:'/art/'+t.album_id,sizes:'600x600',type:'image/jpeg'}]:[],
+  });
+}
+function renderPlayer(){
+  const bar=document.getElementById('player-bar'),qEl=document.getElementById('player-queue'),t=queue[queueIdx];
+  bar.style.display=t?'flex':'none';
+  if(!t){qEl.style.display='none';markPlayingRow();return;}
+  document.getElementById('player-title').textContent=trackLabel(t);
+  const meta=document.getElementById('player-meta');
+  meta.className='player-meta';
+  meta.textContent=[t.album,t.format,fmtDuration(t.length)].filter(Boolean).join(' · ')+
+    ' · '+(queueIdx+1)+' of '+queue.length;
+  document.getElementById('queue-btn').textContent='Queue '+queue.length;
+  // A popover, not a panel in the page flow — anchored just above the bar
+  // so opening it never shrinks the results list underneath. Measured from
+  // the bar's actual screen position, not just its own height: the command
+  // box sits below it in normal flow, so the bar usually isn't flush with
+  // the viewport bottom.
+  qEl.style.bottom=(window.innerHeight-bar.getBoundingClientRect().top)+'px';
+  qEl.style.display=queueOpen?'block':'none';
+  qEl.innerHTML=queue.map((q,i)=>
+    '<div class="lib-row'+(i===queueIdx?' playing':'')+'" onclick="playAt('+i+')">'+
+      '<div class="lib-row-title" style="flex:1;min-width:0;">'+escapeHtml(trackLabel(q))+'</div>'+
+      '<div class="lib-row-meta">'+fmtDuration(q.length)+'</div></div>').join('');
+  markPlayingRow();
+}
+function markPlayingRow(){
+  const id=queue[queueIdx]?String(queue[queueIdx].id):null;
+  document.querySelectorAll('#lib-results .lib-row[data-track]').forEach(r=>
+    r.classList.toggle('playing',r.dataset.track===id));
+}
+document.addEventListener('DOMContentLoaded',function(){
+  fillLibSorts();
+  const a=document.getElementById('player-audio');
+  a.addEventListener('ended',function(){playStep(1);});
+  a.addEventListener('error',function(){
+    const t=queue[queueIdx],m=document.getElementById('player-meta');
+    m.className='player-meta err';
+    m.textContent='Cannot play this '+((t&&t.format)||'file')+' — no decoder for it in this browser.';
+  });
+
+  // Queue popover: closes on an outside click or Escape, like any dropdown.
+  document.addEventListener('click',function(e){
+    if(!queueOpen)return;
+    const qEl=document.getElementById('player-queue'),btn=document.getElementById('queue-btn');
+    if(qEl.contains(e.target)||btn.contains(e.target))return;
+    queueOpen=false;renderPlayer();
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&queueOpen){queueOpen=false;renderPlayer();}
+  });
+  window.addEventListener('resize',function(){ if(queueOpen)renderPlayer(); });
+
+  if('mediaSession' in navigator){
+    a.addEventListener('play',function(){navigator.mediaSession.playbackState='playing';});
+    a.addEventListener('pause',function(){navigator.mediaSession.playbackState='paused';});
+    a.addEventListener('timeupdate',function(){
+      if(!isFinite(a.duration))return;
+      try{navigator.mediaSession.setPositionState({duration:a.duration,playbackRate:a.playbackRate||1,position:a.currentTime});}catch(e){}
+    });
+    navigator.mediaSession.setActionHandler('play',()=>a.play().catch(()=>{}));
+    navigator.mediaSession.setActionHandler('pause',()=>a.pause());
+    navigator.mediaSession.setActionHandler('stop',()=>stopPlayback());
+    navigator.mediaSession.setActionHandler('previoustrack',()=>playStep(-1));
+    navigator.mediaSession.setActionHandler('nexttrack',()=>playStep(1));
+    navigator.mediaSession.setActionHandler('seekbackward',d=>{a.currentTime=Math.max(0,a.currentTime-(d.seekOffset||10));});
+    navigator.mediaSession.setActionHandler('seekforward',d=>{a.currentTime=Math.min(a.duration||1e9,a.currentTime+(d.seekOffset||10));});
+    navigator.mediaSession.setActionHandler('seekto',d=>{a.currentTime=d.seekTime;});
+  }
+});
 
 // ── Duplicates ────────────────────────────────────────────────────────────────
 let dupGroups=[];

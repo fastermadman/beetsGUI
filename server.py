@@ -19,7 +19,8 @@ import time
 from pathlib import Path
 
 try:
-    from flask import Flask, Response, request, send_from_directory, jsonify
+    from flask import (Flask, Response, request, send_file, send_from_directory,
+                       jsonify)
 except ImportError:
     print("Flask not found.")
     print("Install: pip install flask   (or: pip3 install flask)")
@@ -45,6 +46,15 @@ except ImportError as e:
 
 # Extensions scanned by /unimported — matches beets' default valid_extensions.
 AUDIO_EXTENSIONS = {'.mp3', '.aiff', '.aif', '.wav', '.flac', '.m4a', '.aac', '.ogg'}
+
+# Types the stdlib guesses wrong for /stream. mimetypes says 'audio/mp4a-latm'
+# for .m4a and 'audio/x-flac' for .flac; neither is a container Chrome
+# registers, so both play only by content-sniffing and canPlayType() lies.
+# Only formats a browser can actually decode are worth correcting — nothing
+# here rescues ALAC, AIFF or WavPack, which no amount of Content-Type makes
+# playable outside Safari. The player surfaces those as an error instead.
+AUDIO_MIMETYPES = {'.m4a': 'audio/mp4', '.mp4': 'audio/mp4',
+                   '.flac': 'audio/flac', '.opus': 'audio/ogg'}
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 PORT       = int(os.environ.get('BEETSGUI_PORT', 1612))
@@ -211,25 +221,93 @@ def open_app_when_ready():
         )
 
 
+# Sort orders offered by the Library tab. The request only ever picks a key
+# here — column names never come from the query string, because this is the
+# one place in the app where user input reaches SQL that can't be a bound
+# parameter. Each value is a tuple so ?dir=desc can flip every column.
+ALBUM_SORTS = {
+    'artist': ('a.albumartist COLLATE NOCASE', 'a.year', 'a.album COLLATE NOCASE'),
+    'album':  ('a.album COLLATE NOCASE', 'a.albumartist COLLATE NOCASE'),
+    'year':   ('a.year', 'a.albumartist COLLATE NOCASE', 'a.album COLLATE NOCASE'),
+    'added':  ('a.added',),
+}
+TRACK_SORTS = {
+    'artist': ('i.artist COLLATE NOCASE', 'i.album COLLATE NOCASE', 'i.disc', 'i.track'),
+    'album':  ('i.album COLLATE NOCASE', 'i.disc', 'i.track'),
+    'title':  ('i.title COLLATE NOCASE',),
+    'year':   ('i.year', 'i.album COLLATE NOCASE', 'i.disc', 'i.track'),
+    'added':  ('i.added',),
+}
+ARTIST_SORTS = {
+    'artist': ('name COLLATE NOCASE',),
+    'added':  ('MAX(i.added)',),
+    'tracks': ('tracks',),
+}
+
+
+def _resolve_sort(con, table, alias, col):
+    """(expr,) sorting by any real column on `table`, or None if `col` isn't
+    one. Validated against the live schema on every call — the only way a
+    user-typed field name (bpm, initial_key, label, ...) can reach an ORDER
+    BY without ever being spliced in as arbitrary SQL."""
+    info = {r['name']: r['type'] for r in con.execute(f'PRAGMA table_info({table})')}
+    coltype = info.get(col)
+    if coltype is None:
+        return None
+    is_text = not coltype or any(t in coltype.upper() for t in ('CHAR', 'TEXT', 'CLOB'))
+    return (f'{alias}.{col}' + (' COLLATE NOCASE' if is_text else ''),)
+
+
+def _order_by(sorts, default, dynamic=None):
+    """ORDER BY fragment from ?sort= / ?dir=.
+
+    `sorts` is the curated, multi-column whitelist (e.g. artist sort also
+    breaks ties by album/track). `dynamic`, if given, is (con, table, alias)
+    — a fallback that accepts any other real column on that table, so sort
+    isn't limited to the fields curated here.
+    """
+    key = request.args.get('sort', default)
+    cols = sorts.get(key)
+    if cols is None and dynamic is not None:
+        cols = _resolve_sort(*dynamic, key)
+    if cols is None:
+        cols = sorts[default]
+    suffix = ' DESC' if request.args.get('dir') == 'desc' else ''
+    return ', '.join(c + suffix for c in cols)
+
+
+def _page(default_limit=200, max_limit=1000):
+    """(limit, offset) from the query string. Raises ValueError on garbage."""
+    return (min(int(request.args.get('limit', default_limit)), max_limit),
+            max(int(request.args.get('offset', 0)), 0))
+
+
+def _library_con():
+    """Read-only connection to the beets library.db, or None if there isn't one."""
+    db_path = get_library_db_path()
+    if not Path(db_path).exists():
+        return None
+    con = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
+    con.row_factory = sqlite3.Row
+    return con
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────────
 @app.route('/library')
 def library():
     """Read albums directly from the beets library.db (read-only)."""
     q = request.args.get('q', '').strip()
     try:
-        limit  = min(int(request.args.get('limit', 200)), 1000)
-        offset = max(int(request.args.get('offset', 0)), 0)
+        limit, offset = _page()
     except ValueError:
         return jsonify({'ok': False,
                         'error': 'limit and offset must be integers'}), 400
-    db_path = get_library_db_path()
 
-    if not Path(db_path).exists():
+    con = _library_con()
+    if con is None:
         return jsonify({'ok': True, 'albums': [], 'total': 0})
 
     try:
-        con = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
-        con.row_factory = sqlite3.Row
         qlike = f'%{q}%'
         where = '''
             :q = '' OR a.albumartist LIKE :qlike OR a.album LIKE :qlike OR EXISTS (
@@ -244,7 +322,7 @@ def library():
                    (SELECT COALESCE(SUM(length), 0) FROM items i WHERE i.album_id = a.id) AS duration
             FROM albums a
             WHERE {where}
-            ORDER BY a.albumartist, a.year, a.album
+            ORDER BY {_order_by(ALBUM_SORTS, 'artist')}
             LIMIT :limit OFFSET :offset
         ''', {'q': q, 'qlike': qlike, 'limit': limit, 'offset': offset}).fetchall()
         total = con.execute(f'SELECT COUNT(*) FROM albums a WHERE {where}', {'q': q, 'qlike': qlike}).fetchone()[0]
@@ -253,6 +331,132 @@ def library():
         return jsonify({'ok': True, 'albums': albums, 'total': total})
     except sqlite3.Error as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/library/tracks')
+def library_tracks():
+    """Track-level rows, each with the item id /stream plays by.
+
+    A separate endpoint from /library rather than a mode flag on it: this is a
+    different row shape, not a different ordering of the same one.
+    """
+    q = request.args.get('q', '').strip()
+    album_id = request.args.get('album_id', '').strip()
+    try:
+        limit, offset = _page()
+        params = {'album_id': int(album_id)} if album_id else {}
+    except ValueError:
+        return jsonify({'ok': False,
+                        'error': 'limit, offset and album_id must be integers'}), 400
+
+    con = _library_con()
+    if con is None:
+        return jsonify({'ok': True, 'tracks': [], 'total': 0})
+
+    try:
+        params.update({'q': q, 'qlike': f'%{q}%', 'limit': limit, 'offset': offset})
+        where = '''(:q = '' OR i.title LIKE :qlike OR i.artist LIKE :qlike
+                    OR i.album LIKE :qlike OR i.albumartist LIKE :qlike)'''
+        if album_id:
+            where += ' AND i.album_id = :album_id'
+        rows = con.execute(f'''
+            SELECT i.id, i.title, i.artist, i.album, i.albumartist, i.album_id,
+                   i.year, i.length, i.format, i.track, i.disc
+            FROM items i
+            WHERE {where}
+            ORDER BY {_order_by(TRACK_SORTS, 'artist', dynamic=(con, 'items', 'i'))}
+            LIMIT :limit OFFSET :offset
+        ''', params).fetchall()
+        total = con.execute(f'SELECT COUNT(*) FROM items i WHERE {where}',
+                            params).fetchone()[0]
+        con.close()
+        return jsonify({'ok': True, 'tracks': [dict(r) for r in rows], 'total': total})
+    except sqlite3.Error as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/library/artists')
+def library_artists():
+    """Album artists with their album and track counts."""
+    q = request.args.get('q', '').strip()
+    try:
+        limit, offset = _page()
+    except ValueError:
+        return jsonify({'ok': False,
+                        'error': 'limit and offset must be integers'}), 400
+
+    con = _library_con()
+    if con is None:
+        return jsonify({'ok': True, 'artists': [], 'total': 0})
+
+    try:
+        params = {'q': q, 'qlike': f'%{q}%', 'limit': limit, 'offset': offset}
+        # Tracks with no albumartist fall back to artist so nothing vanishes
+        # from this view; unattributed files group under one empty name.
+        name = "COALESCE(NULLIF(i.albumartist, ''), i.artist, '')"
+        where = f"(:q = '' OR {name} LIKE :qlike OR i.artist LIKE :qlike)"
+        rows = con.execute(f'''
+            SELECT {name} AS name,
+                   COUNT(DISTINCT i.album_id) AS albums,
+                   COUNT(*) AS tracks
+            FROM items i
+            WHERE {where}
+            GROUP BY name COLLATE NOCASE
+            ORDER BY {_order_by(ARTIST_SORTS, 'artist')}
+            LIMIT :limit OFFSET :offset
+        ''', params).fetchall()
+        total = con.execute(f'''
+            SELECT COUNT(*) FROM (
+                SELECT 1 FROM items i WHERE {where} GROUP BY {name} COLLATE NOCASE
+            )
+        ''', params).fetchone()[0]
+        con.close()
+        return jsonify({'ok': True, 'artists': [dict(r) for r in rows], 'total': total})
+    except sqlite3.Error as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/stream/<int:item_id>')
+def stream(item_id):
+    """Serve one library file to the browser's <audio> element.
+
+    Addressed by item id, never by path: the only files this can ever hand
+    out are ones beets already has in its database, so there's no traversal
+    to defend against. send_file's conditional=True does the Range/206
+    handling — that, and nothing else, is what makes seeking work.
+    """
+    con = _library_con()
+    if con is None:
+        return jsonify({'ok': False, 'error': 'no library database'}), 404
+    row = con.execute('SELECT path FROM items WHERE id = ?', (item_id,)).fetchone()
+    con.close()
+    if not row:
+        return jsonify({'ok': False, 'error': 'no such track'}), 404
+
+    # beets stores paths as BLOBs of raw filesystem bytes.
+    path = os.fsdecode(row['path'])
+    if not os.path.isfile(path):
+        return jsonify({'ok': False, 'error': 'file is missing from disk'}), 404
+    return send_file(path, conditional=True,
+                     mimetype=AUDIO_MIMETYPES.get(Path(path).suffix.lower()))
+
+
+@app.route('/art/<int:album_id>')
+def album_art(album_id):
+    """Cover art for an album, if beets has any on disk. Same id-only
+    addressing as /stream — nothing here ever fetches or generates art, it
+    only serves what fetchart/embedart already put at albums.artpath."""
+    con = _library_con()
+    if con is None:
+        return jsonify({'ok': False, 'error': 'no library database'}), 404
+    row = con.execute('SELECT artpath FROM albums WHERE id = ?', (album_id,)).fetchone()
+    con.close()
+    if not row or not row['artpath']:
+        return jsonify({'ok': False, 'error': 'no art'}), 404
+    path = os.fsdecode(row['artpath'])
+    if not os.path.isfile(path):
+        return jsonify({'ok': False, 'error': 'art file is missing from disk'}), 404
+    return send_file(path, conditional=True)
 
 
 @app.route('/duplicates')
@@ -288,7 +492,15 @@ def info_stats():
 
 @app.route('/info/fields')
 def info_fields():
-    return jsonify({'ok': True, **libops.fields()})
+    data = {'ok': True, **libops.fields()}
+    # Real items columns, not beets' full Model.all_keys() (that includes
+    # flexible attributes with no SQL column) — this is specifically what
+    # the Library tab's "sort by" dropdown can safely offer.
+    con = _library_con()
+    if con is not None:
+        data['item_columns'] = sorted(r['name'] for r in con.execute('PRAGMA table_info(items)'))
+        con.close()
+    return jsonify(data)
 
 
 @app.route('/info/version')
