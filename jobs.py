@@ -104,12 +104,12 @@ class Job:
 
 _jobs = {}
 _lock = threading.Lock()
-# At most one (job, work) queued behind a job that's still finishing an
-# abort (#32) — not a general queue. A second start() while one is already
-# queued still raises RuntimeError, same as while a job is running: the
-# invariant is "at most one beets job running or about to run," extended to
-# cover "about to run" rather than widened into an actual job queue.
-_pending = None
+# Jobs queued behind one still finishing an abort (#32), in run order. Still
+# never more than one *running* at a time — that's the mutation hazard the
+# registry exists to prevent (#29) — this is only a waiting line for whoever
+# goes next, same as the queue a paused printer builds instead of rejecting
+# every job sent to it.
+_pending = []
 
 
 def get(job_id):
@@ -126,11 +126,35 @@ def current():
 
 
 def queued():
-    """The job waiting to start once `current()` actually finishes, if any —
-    so the UI can show both halves of a queued-behind-an-abort pair (#32),
-    not just whichever one it happens to be subscribed to."""
+    """Jobs waiting to start once `current()` finishes, in run order."""
     with _lock:
-        return _pending[0] if _pending else None
+        return [job for job, _ in _pending]
+
+
+def dequeue(job_id):
+    """Remove a job that's still waiting in line (not the running one —
+    that's what /abort is for). Returns True if it was actually queued."""
+    with _lock:
+        for i, (job, _) in enumerate(_pending):
+            if job.id == job_id:
+                del _pending[i]
+                _jobs.pop(job_id, None)
+                return True
+    return False
+
+
+def move_queued(job_id, delta):
+    """Move a queued job earlier (delta=-1) or later (delta=+1) in line.
+    Returns True if moved, False if not queued or already at that end."""
+    with _lock:
+        for i, (job, _) in enumerate(_pending):
+            if job.id == job_id:
+                j = i + delta
+                if 0 <= j < len(_pending):
+                    _pending[i], _pending[j] = _pending[j], _pending[i]
+                    return True
+                return False
+    return False
 
 
 def start(job, work):
@@ -139,26 +163,25 @@ def start(job, work):
     Raises RuntimeError if another job is running and hasn't been aborted.
     If the running job *has* been aborted but beets gives it no way to stop
     mid-unit (mbsync/bpsync — see sync.py), `job` is queued instead of
-    rejected: it starts automatically the instant that job's thread
-    actually exits, so the caller never has to poll and retry by hand. The
-    two jobs still never run concurrently — that's the mutation hazard the
-    registry exists to prevent (#29) — this only removes the manual retry.
+    rejected — behind any job already waiting — and starts automatically
+    the instant its turn comes, so the caller never has to poll and retry
+    by hand. Jobs still never run concurrently — see the `_pending` note
+    above — this only removes the manual retry.
 
     The 'done' event is emitted from a finally block, so a client's stream
     always terminates even when the work raises.
     """
-    global _pending
     with _lock:
         for existing in list(_jobs.values()):
             if existing.done.is_set():
                 del _jobs[existing.id]
                 continue
-            if not existing.aborted.is_set() or _pending is not None:
+            if not existing.aborted.is_set():
                 raise RuntimeError(
                     f'another job is already running ({existing.kind})')
             job.queued_behind = existing.kind
             _jobs[job.id] = job
-            _pending = (job, work)
+            _pending.append((job, work))
             return job
         _jobs[job.id] = job
 
@@ -183,10 +206,8 @@ def _launch(job, work):
 
 
 def _start_pending():
-    """Launch the queued job, if any, now that its predecessor is done."""
-    global _pending
+    """Launch the next queued job, if any, now that its predecessor is done."""
     with _lock:
-        pending = _pending
-        _pending = None
-    if pending:
-        _launch(*pending)
+        nxt = _pending.pop(0) if _pending else None
+    if nxt:
+        _launch(*nxt)
