@@ -22,11 +22,15 @@ and no real music are needed.
 Run: python test_playback.py
 """
 import os
+import shutil
 import sqlite3
 import tempfile
 import wave
 from pathlib import Path
 
+from beets.library import Library
+
+import libops
 import server
 
 BASE = f'http://localhost:{server.PORT}'  # _reject_foreign_host wants the real host
@@ -88,9 +92,19 @@ def main():
     art.write_bytes(b'\xff\xd8\xff\xe0fake jpeg')
     db = make_library(root, audio, art)
 
-    # The real one shells out to `beet config --path`; this test has no beets
-    # library and doesn't need one.
+    # The real one shells out to `beet config --path`.
     server.get_library_db_path = lambda: str(db)
+    # `?q=` is a beets query since #64: the list endpoints resolve it through
+    # beets and then read the matching rows straight out of the database, so
+    # the test needs both halves. They point at a *copy* rather than the same
+    # file because opening a beets Library migrates the schema it finds —
+    # which would quietly add every real beets column to the deliberately
+    # partial `items` table above and take the `sort=composers` fallback case
+    # below with it. Same ids, same rows, so the two agree on everything the
+    # endpoints actually compare.
+    beets_db = root / 'beets-copy.db'
+    shutil.copy(db, beets_db)
+    libops.get_library = lambda: Library(str(beets_db))
     client = server.app.test_client()
 
     def get(path, **kw):
