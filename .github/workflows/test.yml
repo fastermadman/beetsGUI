@@ -34,3 +34,6 @@ jobs:
 
       - name: Run test_jobs.py
         run: python test_jobs.py
+
+      - name: Run test_playback.py
+        run: python test_playback.py

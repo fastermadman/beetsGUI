@@ -11,7 +11,7 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
 ## Features
 
 - **Inbox** — scan a folder for music not yet in your library (matches on artist/title, not path, so it's correct however previous imports were copied or moved), then import with a keyboard-driven decision queue for matches and duplicates
-- **Library** — search and browse your collection, manage duplicates, cover art and metadata, convert WAV/AIFF/FLAC to ALAC, remove tracks
+- **Library** — search and browse your collection by album, track or artist with a sort control, play tracks in the app with a queue and a seekable transport, manage duplicates, cover art and metadata, convert WAV/AIFF/FLAC to ALAC, remove tracks
 - **Export** — playlists and tracklists for Lexicon/Traktor, USB mirror
 - **Preferences** (⚙ in the header, or ⌘,) — library/import/plugin config with a live `config.yaml` preview, and Discogs/MusicBrainz/Beatport4 credentials
 - Dark + light mode (follows macOS system preference)
@@ -132,6 +132,11 @@ Test it end to end (needs ffmpeg; runs against a throwaway library):
 - Lossless files (WAV, AIFF, FLAC) convert to **ALAC 24-bit** on import — 32-bit float is handled automatically
 - MP3 and AAC are never re-encoded
 - Designed for Traktor / Lexicon / Rekordbox workflows
+- In-app playback decodes in the browser, so it inherits the browser's codec
+  support. Safari plays everything this app produces, including ALAC and AIFF;
+  Chrome plays MP3, AAC, FLAC and WAV but **not ALAC or AIFF**, so a library
+  converted to ALAC on import is Safari-only for preview. Unplayable files say
+  so in the player bar rather than failing silently.
 
 ## Beets plugins supported in Settings UI
 
