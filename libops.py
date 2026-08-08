@@ -65,6 +65,48 @@ def split_query(query):
         raise UserError(f'could not parse query: {e}')
 
 
+# An `ids` scope becomes one `id:` term per id, so the whole set has to fit
+# in a query. Beyond this the caller is describing a filter, not a
+# selection, and should send that filter as scope.query instead.
+MAX_SCOPE_IDS = 500
+
+
+def scope_query(data):
+    """The beets query string a request body asks to operate on (#63).
+
+    Accepts `{"scope": {"query": "..."}}`, `{"scope": {"ids": [12, 88]}}`,
+    and the legacy top-level `{"query": "..."}` — so an `ids` scope stays a
+    query string all the way down, and every caller of split_query() below
+    (plus artwork/transcode/sync) keeps working unchanged.
+
+    beets ORs on a comma *token*, so the spaces in `id:12 , id:88` are load
+    bearing: `id:12,id:88` is one keyword and parses as a single, invalid
+    numeric term.
+    """
+    scope = data.get('scope')
+    if scope is None:
+        return data.get('query', '') or ''
+    if not isinstance(scope, dict):
+        raise UserError('scope must be an object')
+    if 'ids' not in scope:
+        return scope.get('query', '') or ''
+
+    ids = scope['ids']
+    # bool is an int in Python; `[True]` would silently become `id:1`.
+    if not isinstance(ids, list) or not all(
+            isinstance(i, int) and not isinstance(i, bool) for i in ids):
+        raise UserError('scope.ids must be a list of integers')
+    # An empty list means "these zero items", never "the whole library" —
+    # which is what an empty query string would mean one line further down.
+    if not ids:
+        raise UserError('scope.ids must not be empty')
+    if len(ids) > MAX_SCOPE_IDS:
+        raise UserError(
+            f'scope.ids is limited to {MAX_SCOPE_IDS} ids (got {len(ids)}) — '
+            f'send the filter itself as scope.query instead')
+    return ' , '.join(f'id:{i}' for i in ids)
+
+
 def _resolve_field(field):
     """Reject non-metadata fields, and translate beets' renamed ones.
 
@@ -77,7 +119,13 @@ def _resolve_field(field):
     """
     if field in PROTECTED_FIELDS:
         raise UserError(f'{field} is not an editable metadata field')
-    return maybe_replace_legacy_field(field, False, modify=True)
+    field = maybe_replace_legacy_field(field, False, modify=True)
+    # Anything else lands as a flexible attribute that write() silently
+    # never writes to the file (the genre/genres class of bug — see
+    # module docstring). Reject it here instead of letting it hide.
+    if field not in library.Item.all_keys():
+        raise UserError(f'{field} is not a known metadata field')
+    return field
 
 
 def _capture(fn, *args, **kwargs):

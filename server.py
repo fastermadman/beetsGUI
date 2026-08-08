@@ -510,12 +510,12 @@ def info_version():
 
 @app.route('/library/modify/preview', methods=['POST'])
 def library_modify_preview():
-    """Body: {"field": "artist", "value": "Burial", "query": "album:Untrue"}."""
+    """Body: {"field": "artist", "value": "Burial", "scope": {...}}."""
     data = request.get_json(silent=True) or {}
     field, value = data.get('field'), data.get('value')
     if not field or value is None:
         return jsonify({'ok': False, 'error': 'field and value are required'}), 400
-    changes = libops.preview_modify(field, value, data.get('query', ''))
+    changes = libops.preview_modify(field, value, libops.scope_query(data))
     return jsonify({'ok': True, 'changes': changes})
 
 
@@ -527,19 +527,19 @@ def library_modify():
     field, value = data.get('field'), data.get('value')
     if not field or value is None:
         return jsonify({'ok': False, 'error': 'field and value are required'}), 400
-    changed = libops.apply_modify(field, value, data.get('query', ''))
+    changed = libops.apply_modify(field, value, libops.scope_query(data))
     return jsonify({'ok': True, 'changed': changed})
 
 
 @app.route('/library/update', methods=['POST'])
 def library_update():
-    """Body: {"query": "...", "pretend": true}. `pretend` defaults to true:
+    """Body: {"scope": {...}, "pretend": true}. `pretend` defaults to true:
     this rewrites library rows, so an omitted flag must not mean "do it"."""
     if busy := _busy_response():
         return busy
     data = request.get_json(silent=True) or {}
     try:
-        output = libops.update(data.get('query', ''),
+        output = libops.update(libops.scope_query(data),
                                bool(data.get('pretend', True)))
     except UserError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
@@ -548,13 +548,13 @@ def library_update():
 
 @app.route('/library/write', methods=['POST'])
 def library_write():
-    """Body: {"query": "...", "pretend": true}. `pretend` defaults to true:
+    """Body: {"scope": {...}, "pretend": true}. `pretend` defaults to true:
     this writes tags into files, so an omitted flag must not mean "do it"."""
     if busy := _busy_response():
         return busy
     data = request.get_json(silent=True) or {}
     try:
-        output = libops.write(data.get('query', ''),
+        output = libops.write(libops.scope_query(data),
                               bool(data.get('pretend', True)))
     except UserError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
@@ -578,9 +578,9 @@ def library_count():
 
 @app.route('/library/remove/preview', methods=['POST'])
 def library_remove_preview():
-    """Body: {"query": "..."}."""
+    """Body: {"scope": {"query": "..."}} or {"scope": {"ids": [...]}}."""
     data = request.get_json(silent=True) or {}
-    query = data.get('query', '')
+    query = libops.scope_query(data)
     # Parse first, so a malformed query is a 400 (via the UserError handler)
     # rather than being swallowed below and reported as "nothing matches" —
     # this preview is what gates the destructive remove, so the two cases
@@ -595,8 +595,8 @@ def library_remove_preview():
 
 @app.route('/library/remove', methods=['POST'])
 def library_remove():
-    """Body: {"query": "...", "expect": 12, "delete_files": false}.
-    "Remove short files" is the same call with query=length:..N, built
+    """Body: {"scope": {...}, "expect": 12, "delete_files": false}.
+    "Remove short files" is the same call with scope.query=length:..N, built
     client-side.
 
     `expect` is the item count the caller previewed and is required, because
@@ -608,10 +608,10 @@ def library_remove():
     if busy := _busy_response():
         return busy
     data = request.get_json(silent=True) or {}
-    query = data.get('query', '')
+    query = libops.scope_query(data)
     expect = data.get('expect')
     if not query.strip():
-        return jsonify({'ok': False, 'error': 'query is required'}), 400
+        return jsonify({'ok': False, 'error': 'a scope is required'}), 400
     if not isinstance(expect, int) or isinstance(expect, bool):
         return jsonify({'ok': False,
                         'error': 'expect (the previewed item count) is required'}), 400
@@ -960,11 +960,11 @@ def import_start():
 @app.route('/artwork/start', methods=['POST'])
 def artwork_start():
     """Fetch or embed cover art. Body: {"action": "fetch"|"embed",
-    "query": "", "force": false}. Progress streams on /jobs/<id>/events."""
+    "scope": {...}, "force": false}. Progress streams on /jobs/<id>/events."""
     data = request.get_json(silent=True) or {}
     try:
         job = artwork.start(data.get('action', 'fetch'),
-                            query=data.get('query', ''),
+                            query=libops.scope_query(data),
                             force=data.get('force', False))
     except ValueError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
@@ -975,12 +975,12 @@ def artwork_start():
 
 @app.route('/convert/start', methods=['POST'])
 def convert_start():
-    """Convert tracks with beets' convert plugin. Body: {"query":
-    "format:AIFF", "format": "alac", "pretend": true, "dest": null}.
-    Progress streams on /jobs/<id>/events."""
+    """Convert tracks with beets' convert plugin. Body: {"scope":
+    {"query": "format:AIFF"}, "format": "alac", "pretend": true,
+    "dest": null}. Progress streams on /jobs/<id>/events."""
     data = request.get_json(silent=True) or {}
     try:
-        job = transcode.start(query=data.get('query', ''),
+        job = transcode.start(query=libops.scope_query(data),
                               fmt=data.get('format'),
                               pretend=data.get('pretend', True),
                               dest=data.get('dest'))
@@ -991,11 +991,11 @@ def convert_start():
 
 @app.route('/sync/start', methods=['POST'])
 def sync_start():
-    """Body: {"kind": "mbsync"|"bpsync", "query": ""}. Progress streams
+    """Body: {"kind": "mbsync"|"bpsync", "scope": {...}}. Progress streams
     on /jobs/<id>/events."""
     data = request.get_json(silent=True) or {}
     try:
-        job = sync.start(data.get('kind', ''), query=data.get('query', ''))
+        job = sync.start(data.get('kind', ''), query=libops.scope_query(data))
     except ValueError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
     except RuntimeError as e:
