@@ -77,7 +77,13 @@ def _resolve_field(field):
     """
     if field in PROTECTED_FIELDS:
         raise UserError(f'{field} is not an editable metadata field')
-    return maybe_replace_legacy_field(field, False, modify=True)
+    field = maybe_replace_legacy_field(field, False, modify=True)
+    # Anything else lands as a flexible attribute that write() silently
+    # never writes to the file (the genre/genres class of bug — see
+    # module docstring). Reject it here instead of letting it hide.
+    if field not in library.Item.all_keys():
+        raise UserError(f'{field} is not a known metadata field')
+    return field
 
 
 def _capture(fn, *args, **kwargs):
