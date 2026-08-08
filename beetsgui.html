@@ -45,6 +45,12 @@
   .app-header { display:flex; align-items:baseline; gap:0.75rem; padding:1rem 1.25rem 0; border-bottom:1px solid var(--border); flex-shrink:0; }
   .job-queue-badge { align-self:center; margin-left:auto; font-size:11px; color:var(--text3); border:1px solid var(--border); border-radius:999px; padding:0.15rem 0.6rem; }
   .prefs-btn { align-self:center; background:none; border:none; color:var(--text3); cursor:pointer; font-size:15px; margin-left:0.5rem; padding:0.2rem 0.3rem; transition:color 0.1s; }
+  .job-queue-panel { padding:0.4rem 1.25rem; border-bottom:1px solid var(--border); font-size:11px; color:var(--text3); flex-shrink:0; }
+  .job-queue-row { display:flex; align-items:center; gap:0.4rem; padding:0.15rem 0; }
+  .job-queue-row .kind { flex:1; }
+  .job-queue-row button { background:none; border:1px solid var(--border); border-radius:4px; color:var(--text3); cursor:pointer; font-size:10px; line-height:1.4; padding:0 0.35rem; }
+  .job-queue-row button:disabled { cursor:default; opacity:0.3; }
+  .job-queue-row button:hover:not(:disabled) { color:var(--text2); }
   .prefs-btn:hover { color:var(--text2); }
   #prefs-dialog { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--text); margin:auto; max-height:85vh; padding:0; width:min(620px, 92vw); }
   #prefs-dialog::backdrop { background:rgba(0,0,0,0.55); }
@@ -186,6 +192,8 @@
     <span class="job-queue-badge" id="job-queue-badge" style="display:none"></span>
     <button class="prefs-btn" onclick="openPrefs()" title="Preferences (⌘,)">⚙</button>
   </div>
+
+  <div class="job-queue-panel" id="job-queue-panel" style="display:none"></div>
 
   <div class="tabs" role="tablist">
     <button class="tab-btn active" onclick="switchTab('inbox',this)">Inbox</button>
@@ -848,29 +856,54 @@ function checkCurrentImport(){
   }).catch(()=>{});
 }
 
-// A single "what's running" badge (#32) — covers import as well as the
-// generic job runner (sync/artwork/convert), since /jobs/current already
-// reports whichever kind is active. Self-stopping: only ticks while there's
-// something to show, rather than a permanent background timer (see the
-// Gnomon-shadow comment above for why this codebase avoids those by
-// default) — every job start/attach kicks it once so the badge appears
-// immediately rather than waiting up to one poll interval.
+// A single "what's running" badge plus the full wait line (#32) — covers
+// import as well as the generic job runner (sync/artwork/convert), since
+// /jobs/current already reports whichever kind is active. Self-stopping:
+// only ticks while there's something to show, rather than a permanent
+// background timer (see the Gnomon-shadow comment above for why this
+// codebase avoids those by default) — every job start/attach kicks it once
+// so the badge appears immediately rather than waiting up to one poll
+// interval.
 let jobQueueTimer=null;
 function pollJobQueue(){
   fetch('/jobs/current').then(r=>r.json()).then(data=>{
     const badge=document.getElementById('job-queue-badge');
-    if(!badge)return;
+    const panel=document.getElementById('job-queue-panel');
+    if(!badge||!panel)return;
     if(!data.ok||!data.id){
       badge.style.display='none';
+      panel.style.display='none';panel.innerHTML='';
       if(jobQueueTimer){clearInterval(jobQueueTimer);jobQueueTimer=null;}
       return;
     }
+    const queued=data.queued||[];
     let text=data.kind+(data.aborting?' aborting':' running');
-    if(data.queued)text+=' · '+data.queued.kind+' queued';
+    if(queued.length)text+=' · '+queued.length+' queued';
     badge.textContent=text;
     badge.style.display='inline-block';
+    if(queued.length){
+      panel.innerHTML=queued.map((q,i)=>
+        '<div class="job-queue-row">'+
+          '<span class="kind">'+(i+1)+'. '+escapeHtml(q.kind)+'</span>'+
+          '<button title="Move earlier"'+(i===0?' disabled':'')+
+            ' onclick="moveQueuedJob(\''+q.id+'\',\'up\')">↑</button>'+
+          '<button title="Move later"'+(i===queued.length-1?' disabled':'')+
+            ' onclick="moveQueuedJob(\''+q.id+'\',\'down\')">↓</button>'+
+          '<button title="Remove from queue" onclick="dequeueJob(\''+q.id+'\')">✕</button>'+
+        '</div>').join('');
+      panel.style.display='block';
+    } else {
+      panel.innerHTML='';panel.style.display='none';
+    }
     if(!jobQueueTimer)jobQueueTimer=setInterval(pollJobQueue,2000);
   }).catch(()=>{});
+}
+function moveQueuedJob(id,direction){
+  fetch('/jobs/'+id+'/move',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({direction:direction})}).then(pollJobQueue).catch(()=>{});
+}
+function dequeueJob(id){
+  fetch('/jobs/'+id+'/dequeue',{method:'POST'}).then(pollJobQueue).catch(()=>{});
 }
 
 function attachImport(jobId){

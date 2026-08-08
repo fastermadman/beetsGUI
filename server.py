@@ -778,16 +778,37 @@ def sync_start():
 def jobs_current():
     """The running job, if any — lets a reloaded page rejoin its stream.
 
-    Also reports the job queued behind it (#32), if any, so a client can
-    show both halves of a queued-behind-an-abort pair instead of just
-    whichever one it happens to be subscribed to."""
+    Also reports the jobs queued behind it (#32), in run order, so a
+    client can show the whole line instead of just whichever one it
+    happens to be subscribed to."""
     job = jobs.current()
     if not job:
         return jsonify({'ok': True, 'id': None})
     decision = job.pending() if hasattr(job, 'pending') else None
-    queued = jobs.queued()
     return jsonify({'ok': True, **job.summary(), 'decision': decision,
-                    'queued': queued.summary() if queued else None})
+                    'queued': [q.summary() for q in jobs.queued()]})
+
+
+@app.route('/jobs/<job_id>/dequeue', methods=['POST'])
+def job_dequeue(job_id):
+    """Remove a job still waiting in line (#32). The running job can't be
+    dequeued this way — that's what /abort is for."""
+    if jobs.dequeue(job_id):
+        return jsonify({'ok': True})
+    return jsonify({'ok': False, 'error': 'job is not queued'}), 404
+
+
+@app.route('/jobs/<job_id>/move', methods=['POST'])
+def job_move(job_id):
+    """Reorder a queued job (#32). Body: {"direction": "up"|"down"}."""
+    data = request.get_json(silent=True) or {}
+    delta = {'up': -1, 'down': 1}.get(data.get('direction'))
+    if delta is None:
+        return jsonify({'ok': False, 'error': 'direction must be "up" or "down"'}), 400
+    if jobs.move_queued(job_id, delta):
+        return jsonify({'ok': True})
+    return jsonify({'ok': False,
+                     'error': 'job is not queued, or already at that end'}), 404
 
 
 @app.route('/jobs/<job_id>/events')
