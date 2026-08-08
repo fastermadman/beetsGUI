@@ -32,6 +32,7 @@ try:
     import jobs
     import libops
     import sync
+    import traktor
     import transcode
     from beets.ui import UserError
     from beets.util import displayable_path
@@ -788,6 +789,72 @@ def sync_start():
     except RuntimeError as e:
         return jsonify({'ok': False, 'error': str(e)}), 409
     return jsonify({'ok': True, **job.summary()})
+
+
+@app.route('/traktor/scan/start', methods=['POST'])
+def traktor_scan_start():
+    """Rebuild the most-played list from old Traktor files (#42). Body:
+    {"roots": ["~/Documents"], "reset": false}. Progress streams on
+    /jobs/<id>/events.
+
+    Read-only on the sources: the owner has lost this collection three
+    times, so nothing here opens a .nml for writing, moves it, or deletes
+    it. The only write is this app's own state file next to library.db.
+    """
+    data = request.get_json(silent=True) or {}
+    roots = data.get('roots') or ['~/Documents']
+    if not isinstance(roots, list) or not all(isinstance(r, str) for r in roots):
+        return jsonify({'ok': False, 'error': 'roots must be a list of paths'}), 400
+    roots = [os.path.expanduser(r.strip()) for r in roots if r.strip()]
+    missing = [r for r in roots if not os.path.isdir(r)]
+    if not roots or missing:
+        return jsonify({'ok': False,
+                        'error': f'no such directory: {missing[0]}' if missing
+                                 else 'no roots given'}), 400
+    db_path = get_library_db_path()
+    try:
+        job = traktor.start(roots, traktor.state_path(db_path),
+                            db_path=db_path if Path(db_path).exists() else None,
+                            reset=bool(data.get('reset')))
+    except RuntimeError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 409
+    return jsonify({'ok': True, **job.summary()})
+
+
+@app.route('/traktor/results')
+def traktor_results():
+    """The recovered list. Query: sort, missing_only, limit, offset.
+
+    `assumptions` travels with the data on purpose — the play counts are
+    estimates, and the UI has to be able to say so next to the numbers.
+    """
+    try:
+        limit = min(int(request.args.get('limit', 200)), 2000)
+        offset = max(int(request.args.get('offset', 0)), 0)
+    except ValueError:
+        return jsonify({'ok': False,
+                        'error': 'limit and offset must be integers'}), 400
+    path = traktor.state_path(get_library_db_path())
+    if not Path(path).exists():
+        return jsonify({'ok': True, 'total': 0, 'tracks': [], 'scanned': False,
+                        'assumptions': [], 'sources': [], 'stats': {}})
+    state = traktor.load_state(path)
+    # Re-checked on every read rather than only at scan time: the point of the
+    # list is "what do I still need", and importing a recovered track is
+    # exactly what makes a row stale. Costs one query against a read-only
+    # connection, and nothing is written back.
+    db_path = get_library_db_path()
+    if Path(db_path).exists():
+        traktor.annotate_library(state['tracks'], db_path)
+    out = traktor.results(
+        state,
+        sort=request.args.get('sort', 'play_count'),
+        missing_only=request.args.get('missing_only', '1') != '0',
+        limit=limit, offset=offset)
+    return jsonify({'ok': True, 'scanned': True, **out,
+                    'stats': state.get('stats', {}),
+                    'assumptions': traktor.assumptions(state),
+                    'sources': traktor.source_report(state)})
 
 
 @app.route('/jobs/current')
