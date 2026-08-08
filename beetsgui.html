@@ -393,7 +393,7 @@
         <div class="field-row" style="margin-bottom:0.75rem;">
           <div class="field">
             <label>Sort by</label>
-            <select id="lib-sort" onchange="loadLibrary()"></select>
+            <input type="text" list="lib-sort-list" id="lib-sort" onchange="loadLibrary()" autocomplete="off"><datalist id="lib-sort-list"></datalist>
           </div>
           <button class="btn btn-sm" id="lib-dir" onclick="toggleLibDir()">↑ Asc</button>
         </div>
@@ -454,7 +454,7 @@
       <div class="section">
         <div class="section-title">Metadata</div>
         <div class="field-row">
-          <div class="field"><label>Field</label><select id="mod-field"><option value="">Loading fields…</option></select></div>
+          <div class="field"><label>Field</label><input type="text" list="beet-fields" id="mod-field" placeholder="Loading fields…" autocomplete="off"><datalist id="beet-fields"></datalist></div>
           <div class="field"><label>New value</label><input type="text" id="mod-value" placeholder="Burial"></div>
           <div class="field"><label>Query</label><input type="text" id="mod-query" placeholder="album:Untrue"></div>
         </div>
@@ -1436,18 +1436,18 @@ function loadFieldOptions(){
     .catch(()=>allItemColumns=[]);
 }
 function fillLibSorts(){
-  const sel=document.getElementById('lib-sort'),prev=sel.value,sorts=LIB_MODES[libMode].sorts;
-  sel.innerHTML=sorts.map(s=>'<option value="'+s[0]+'">'+s[1]+'</option>').join('');
-  if(sorts.some(s=>s[0]===prev))sel.value=prev;
+  const inp=document.getElementById('lib-sort'),dl=document.getElementById('lib-sort-list'),
+        prev=inp.value,sorts=LIB_MODES[libMode].sorts;
+  dl.innerHTML=sorts.map(s=>'<option value="'+s[0]+'" label="'+escapeHtml(s[1])+'">').join('');
+  inp.value=sorts.some(s=>s[0]===prev)?prev:sorts[0][0];
   if(libMode!=='tracks')return;
   const known=new Set(sorts.map(s=>s[0]).concat(['id','path','album_id']));
   loadFieldOptions().then(cols=>{
-    if(libMode!=='tracks'||sel!==document.getElementById('lib-sort'))return;
+    if(libMode!=='tracks'||inp!==document.getElementById('lib-sort'))return;
     const extra=cols.filter(c=>!known.has(c));
     if(!extra.length)return;
-    sel.insertAdjacentHTML('beforeend','<optgroup label="All fields">'+
-      extra.map(c=>'<option value="'+c+'">'+c+'</option>').join('')+'</optgroup>');
-    if(extra.includes(prev))sel.value=prev;
+    dl.insertAdjacentHTML('beforeend',extra.map(c=>'<option value="'+c+'">').join(''));
+    if(extra.includes(prev))inp.value=prev;
   });
 }
 function toggleLibDir(){
@@ -1836,18 +1836,18 @@ function dismissFirstRun(){
   document.getElementById('first-run-banner').style.display='none';
 }
 function loadModFields(){
-  const sel=document.getElementById('mod-field');
+  const inp=document.getElementById('mod-field'),dl=document.getElementById('beet-fields');
+  inp.placeholder='artist, genres, mb_albumid…';
+  const opt=f=>'<option value="'+escapeHtml(f)+'">';
   fetch('/info/fields').then(r=>r.json()).then(data=>{
     if(!data.ok)throw new Error(data.error);
     const all=data.item_fields.filter(f=>!NON_FIELDS.includes(f));
     const common=COMMON_FIELDS.filter(f=>all.includes(f));
     const rest=all.filter(f=>!common.includes(f));
-    const opt=f=>'<option value="'+escapeHtml(f)+'">'+escapeHtml(f)+'</option>';
-    sel.innerHTML=common.map(opt).join('')+
-      (rest.length?'<optgroup label="other fields">'+rest.map(opt).join('')+'</optgroup>':'');
+    dl.innerHTML=common.map(opt).join('')+rest.map(opt).join('');
   }).catch(()=>{
     // Fall back to the common list so the section still works offline.
-    sel.innerHTML=COMMON_FIELDS.map(f=>'<option value="'+f+'">'+f+'</option>').join('');
+    dl.innerHTML=COMMON_FIELDS.map(opt).join('');
   });
 }
 function showVersion(resultsId){
