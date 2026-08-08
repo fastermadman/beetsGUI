@@ -223,10 +223,53 @@ def album_count(query):
     return len(list(lib.albums(split_query(query))))
 
 
+def matching_ids(query):
+    """(item_ids, album_ids) a beets query selects — item ids, and the ids of
+    the albums those items belong to.
+
+    The Library list and every action now share one filter (#64), so the two
+    have to agree on what it selects. They agree by both going through beets
+    here, rather than the list re-implementing the query language against the
+    raw SQL it reads — which is what made `?q=` a `LIKE` over four columns
+    while the actions got the real thing.
+
+    Resolving against *items* is the single semantics the whole tab is built
+    on: the filter selects tracks, and the Albums/Artists views group them.
+    That is also why album ids are derived here instead of from
+    `lib.albums(query)` — beets falls back to item fields for some album
+    queries (`format:AIFF` matches) but not others (`length:..10` doesn't),
+    and a list whose grouping disagreed with its own filter would be worse
+    than either.
+
+    ponytail: materialises the whole match set to render one page of 200.
+    Fine at personal-library scale. The upgrade, if it ever stops being
+    fine, is to splice beets' own `Query.clause()` into the list SQL — which
+    needs the custom SQL functions (regexp, bytelower) that the read-only
+    connection in server.py deliberately doesn't register.
+    """
+    lib = get_library()
+    items = list(lib.items(split_query(query)))
+    return ([i.id for i in items],
+            sorted({i.album_id for i in items if i.album_id}))
+
+
 def fields():
+    """Field names, plus which of them are numeric.
+
+    The filter rows (#64) offer a different operator set per type — "contains"
+    makes no sense for `year`, "at least" makes none for `artist`. Which is
+    which comes from beets' own declared SQL type rather than a hardcoded
+    list here, for the same reason the sort dropdown reads /info/fields:
+    plugins add fields, and a list that drifts silently offers the wrong
+    operators for them.
+    """
+    numeric = sorted(
+        name for name, typ in library.Item._fields.items()
+        if str(getattr(typ, 'sql', '')).upper().startswith(('INTEGER', 'REAL')))
     return {
         'item_fields': sorted(library.Item.all_keys()),
         'album_fields': sorted(library.Album.all_keys()),
+        'numeric_fields': numeric,
     }
 
 

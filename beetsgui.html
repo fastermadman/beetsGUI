@@ -133,6 +133,22 @@
   .row-btn:hover { border-color:var(--accent); color:var(--accent); }
   .lib-row.playing .lib-row-title,.lib-row.playing .lib-row-artist { color:var(--accent); }
   .lib-row-link { cursor:pointer; }
+  .lib-row-check { flex-shrink:0; margin:0; }
+  /* Filter rows (#64) — field · operator · value, one row per condition. */
+  .filter-row { display:flex; gap:0.4rem; align-items:center; margin-bottom:0.4rem; }
+  .filter-row select { flex:0 0 8.5rem; }
+  .filter-row .f-field { flex:0 0 11rem; }
+  .filter-row .f-value { flex:1; min-width:5rem; }
+  .filter-row .row-btn { align-self:stretch; }
+  .filter-head { align-items:center; color:var(--text2); display:flex; font-size:12px; gap:0.4rem; margin-bottom:0.6rem; }
+  .filter-head select { flex:0 0 5rem; }
+  .filter-all { color:var(--text3); font-size:12px; font-style:italic; margin-bottom:0.6rem; }
+  .filter-note { color:var(--yellow); font-size:11px; margin-top:0.4rem; }
+  /* Action bar — the scope line is not decoration: it is the only place the
+     user sees what the buttons below are about to touch. */
+  .action-bar { align-items:center; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.6rem; padding:0.6rem 0.7rem; }
+  .action-scope { color:var(--text2); flex-basis:100%; font-size:11px; letter-spacing:0.04em; }
+  .action-scope b { color:var(--accent); font-weight:500; }
   .lib-row-link:hover .lib-row-title { color:var(--accent); }
   /* Player: a sibling of .content, so playback survives a tab switch. The
      <audio> keeps its native controls — that transport is the seek bar,
@@ -367,21 +383,31 @@
     <!-- LIBRARY -->
     <div id="tab-library" class="tab-panel">
       <div class="section">
-        <div class="section-title">Search</div>
-        <div class="field"><label>Free text</label><input type="text" id="lib-query" placeholder="Burial" oninput="buildLibCmd();loadLibrary();"></div>
-        <div class="field-row">
-          <div class="field">
-            <label>Field</label>
-            <select id="lib-field" onchange="buildLibCmd()">
-              <option value="">— no field —</option>
-              <option value="artist">artist</option><option value="album">album</option>
-              <option value="year">year</option><option value="format">format</option>
-              <option value="bitrate">bitrate</option><option value="genre">genre</option>
-              <option value="bpm">bpm</option><option value="key">key</option>
-            </select>
-          </div>
-          <div class="field"><label>Field value</label><input type="text" id="lib-field-val" placeholder="2005..2010" oninput="buildLibCmd()"></div>
+        <div class="section-title">Filter</div>
+        <div class="filter-head" id="filter-head" style="display:none;">
+          <span>Match</span>
+          <select id="filter-match" onchange="onFilterEdit()">
+            <option value="all">all</option>
+            <option value="any">any</option>
+          </select>
+          <span>of these conditions:</span>
         </div>
+        <div id="filter-rows"></div>
+        <div class="btn-row">
+          <button class="btn btn-sm" onclick="addFilterRow()">+ Add condition</button>
+          <button class="btn btn-sm" onclick="setFilterPreset([{field:'length',op:'lte',value:'10'}])">Short files</button>
+          <button class="btn btn-sm" onclick="setFilterPreset([{field:'format',op:'is',value:'AIFF'}])">AIFF</button>
+          <button class="btn btn-sm" id="filter-clear" onclick="setFilterPreset([])" style="display:none;">Clear</button>
+        </div>
+        <details class="section" style="margin-bottom:0;">
+          <summary class="section-title">Advanced: beets query</summary>
+          <div style="margin-top:0.6rem;">
+            <div class="field">
+              <input type="text" id="filter-raw" class="mono" placeholder="albumartist:Burial year:2007.." oninput="onRawEdit()" autocomplete="off">
+            </div>
+            <div class="filter-note" id="filter-note" style="display:none;"></div>
+          </div>
+        </details>
       </div>
       <div class="section">
         <div class="section-title">Your library</div>
@@ -396,6 +422,14 @@
             <input type="text" list="lib-sort-list" id="lib-sort" onchange="loadLibrary()" autocomplete="off"><datalist id="lib-sort-list"></datalist>
           </div>
           <button class="btn btn-sm" id="lib-dir" onclick="toggleLibDir()">↑ Asc</button>
+        </div>
+        <div class="action-bar">
+          <span class="action-scope" id="action-scope"></span>
+          <button class="btn btn-sm" onclick="openAction('sec-art')">Fetch art</button>
+          <button class="btn btn-sm" onclick="openAction('sec-meta')">Fix field</button>
+          <button class="btn btn-sm" onclick="openAction('sec-meta')">Re-fetch from MusicBrainz</button>
+          <button class="btn btn-sm" onclick="openAction('sec-formats')">Convert</button>
+          <button class="btn btn-sm btn-warn" onclick="openAction('sec-remove')">Remove</button>
         </div>
         <div class="lib-count" id="lib-count"></div>
         <div class="lib-results" id="lib-results"><div class="lib-empty">Loading…</div></div>
@@ -443,10 +477,10 @@
           <div class="alert alert-red" style="font-size:10px;">Deleting with "also remove files" removes them permanently. Preview each group before deleting.</div>
         </div>
       </details>
-      <details class="section">
+      <details class="section" id="sec-art">
         <summary class="section-title">Cover art</summary>
         <div style="margin-top:0.6rem;">
-          <div class="field"><label>Query (whole library if empty)</label><input type="text" id="art-query" placeholder="albumartist:Burial"></div>
+          <div class="lib-count scope-line"></div>
           <div class="btn-row">
             <button class="btn btn-primary" onclick="startArtwork('fetch')">Fetch art <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Checks the album folder first (cover.jpg, folder.jpg, front.jpg), then whichever web sources your config enables. Albums that already have art are skipped unless you tick Re-fetch.</span></span></button>
             <button class="btn" onclick="startArtwork('embed')">Embed art</button>
@@ -455,20 +489,19 @@
           <div id="artwork-job"></div>
         </div>
       </details>
-      <details class="section">
+      <details class="section" id="sec-meta">
         <summary class="section-title">Metadata</summary>
         <div style="margin-top:0.6rem;">
+          <div class="lib-count scope-line"></div>
           <div class="field-row">
             <div class="field"><label>Field</label><input type="text" list="beet-fields" id="mod-field" placeholder="Loading fields…" autocomplete="off"><datalist id="beet-fields"></datalist></div>
             <div class="field"><label>New value</label><input type="text" id="mod-value" placeholder="Burial"></div>
-            <div class="field"><label>Query</label><input type="text" id="mod-query" placeholder="album:Untrue"></div>
           </div>
           <div class="btn-row">
             <button class="btn btn-primary" onclick="previewModify()"><span>Preview changes</span></button>
           </div>
           <div id="mod-results"></div>
           <hr class="divider">
-          <div class="field"><label>Query (all fields if empty)</label><input type="text" id="maint-query" placeholder="album:Untrue"></div>
           <div class="btn-row">
             <button class="btn btn-primary" onclick="runUpdate()">Check for changes on disk</button>
             <button class="btn btn-primary" onclick="runWrite()">Check tags to write</button>
@@ -483,7 +516,7 @@
         </div>
       </details>
 
-      <details class="section">
+      <details class="section" id="sec-formats">
         <summary class="section-title">Formats</summary>
         <div style="margin-top:0.6rem;">
           <div class="section-title">Find audio files (fd)</div>
@@ -516,14 +549,7 @@
       command: ffmpeg -i $source -c:a alac -map_metadata 0 $dest
       extension: m4a</pre>
           </div>
-          <div class="field">
-            <label>Source format</label>
-            <select id="beet-conv-fmt">
-              <option value="AIFF">AIFF</option>
-              <option value="WAV">WAV</option>
-              <option value="FLAC">FLAC</option>
-            </select>
-          </div>
+          <div class="lib-count scope-line"></div>
           <div class="field"><label>Destination (blank = convert.dest from config)</label><input type="text" id="beet-conv-dest" placeholder="~/Music/Converted"></div>
           <div class="btn-row">
             <button class="btn btn-primary" onclick="startConvert()">Check what would convert</button>
@@ -544,32 +570,19 @@
         </div>
       </details>
 
-      <details class="section">
+      <details class="section" id="sec-remove">
         <summary class="section-title">Remove from library</summary>
         <div style="margin-top:0.6rem;">
-          <div class="field"><label>Query</label><input type="text" id="rm-query" placeholder="artist:Burial album:Untrue"></div>
+          <div class="lib-count scope-line"></div>
           <div class="btn-row">
-            <button class="btn btn-sm" onclick="previewRemove('rm-query')">Preview</button>
+            <button class="btn btn-sm" onclick="previewRemove()">Preview</button>
           </div>
           <div id="rm-results"></div>
           <div class="btn-row">
-            <button class="btn btn-warn" onclick="doRemove('rm-query',false)">⚠ <span>Remove from database</span></button>
-            <button class="btn btn-danger" onclick="doRemove('rm-query',true)">⚠ <span>Also delete file from disk</span></button>
+            <button class="btn btn-warn" onclick="doRemove(false)">⚠ <span>Remove from database</span></button>
+            <button class="btn btn-danger" onclick="doRemove(true)">⚠ <span>Also delete file from disk</span></button>
           </div>
-          <div class="alert alert-yellow" style="font-size:10px;"><b>Remove from database</b> only removes from database, not disk. <b>Also delete file from disk</b> deletes the file permanently.</div>
-          <hr class="divider">
-          <div class="section-title" style="margin-bottom:0.4rem;">Remove short files (one shots) from database</div>
-          <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Removes tracks under X seconds from the database (files stay on disk). Beets has no duration import filter — use this after importing.</div>
-          <div class="field-row">
-            <div class="field" style="max-width:120px;"><label>Max seconds</label><input type="number" id="short-secs" value="10" min="1" max="60"></div>
-            <div class="field" style="align-self:flex-end;">
-              <button class="btn btn-sm" onclick="previewRemove('short-query')">Preview short files</button>
-            </div>
-            <div class="field" style="align-self:flex-end;">
-              <button class="btn btn-warn btn-sm" onclick="doRemove('short-query',false)">⚠ Remove from DB</button>
-            </div>
-          </div>
-          <div id="short-results"></div>
+          <div class="alert alert-yellow" style="font-size:10px;"><b>Remove from database</b> only removes from database, not disk. <b>Also delete file from disk</b> deletes the file permanently.<br>Removing one-shots is the <b>Short files</b> filter preset above — beets has no duration import filter, so this is the after-the-fact way to do it.</div>
         </div>
       </details>
     </div>
@@ -1276,6 +1289,10 @@ document.addEventListener('keydown',function(e){
 // Only one job runs server-side at a time, so one runner here is enough.
 let jobRunner={es:null,id:null,el:null};
 
+function postJSON(url,payload){
+  return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify(payload)}).then(r=>r.json());
+}
 function startJob(url,payload,elId,onDone){
   const el=document.getElementById(elId);
   el.innerHTML='<div class="lib-empty">Starting…</div>';
@@ -1357,34 +1374,252 @@ function handleJobEvent(ev){
 // a dry-run job — same principle as previewModify()/runMaint(): show what
 // it would touch before an empty query quietly means "the whole library."
 function startArtwork(action){
-  const query=document.getElementById('art-query').value.trim();
   const el=document.getElementById('artwork-job');
+  // Frozen at the moment of the check, so the button that appears below acts
+  // on the set the count describes even if the filter moves underneath it.
+  const scope=albumScopeBody();
   el.innerHTML='<div class="lib-empty">Checking…</div>';
-  fetch('/library/count?query='+encodeURIComponent(query))
-    .then(r=>r.json())
+  postJSON('/library/count',scope)
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Could not check that query.')+'</div>';return;}
-      if(!data.count){el.innerHTML='<div class="lib-empty">No albums match'+(query?' that query':'')+'.</div>';return;}
+      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Could not check that scope.')+'</div>';return;}
+      if(!data.count){el.innerHTML='<div class="lib-empty">No albums in scope.</div>';return;}
       const label=(action==='fetch'?'Fetch art for ':'Embed art into ')+data.count+' album'+(data.count===1?'':'s');
-      el.innerHTML='<div class="btn-row"><button class="btn btn-primary btn-sm" onclick="runArtwork(\''+action+'\')">'+label+'</button></div>';
+      pendingArtwork={action,scope};
+      el.innerHTML='<div class="btn-row"><button class="btn btn-primary btn-sm" onclick="runArtwork()">'+label+'</button></div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
-function runArtwork(action){
+let pendingArtwork=null;
+function runArtwork(){
+  if(!pendingArtwork)return;
   startJob('/artwork/start',{
-    action:action,
-    query:document.getElementById('art-query').value.trim(),
+    action:pendingArtwork.action,
     force:document.getElementById('art-force').checked,
+    ...pendingArtwork.scope,
   },'artwork-job');
 }
 function startSync(kind){
-  startJob('/sync/start',{kind:kind,query:document.getElementById('maint-query').value.trim()},'sync-job');
+  startJob('/sync/start',{kind:kind,...scopeBody()},'sync-job');
+}
+
+// ── Filter (#64) ──────────────────────────────────────────────────────────────
+// beets' query language stops being the user interface. Rows of
+// field · operator · value compile to a beets query; that one query is both
+// what the list shows and what every action runs against. The raw query stays
+// as an escape hatch, and is the *authoritative* value — the rows are a view
+// onto it, which is what keeps "rows → raw → rows" from having two sources of
+// truth that can disagree.
+//
+// The operator set is deliberately four wide, one value box each. "between"
+// was the obvious fifth and is deliberately absent: it is the only operator
+// that needs a second input, and "at least X" + "at most Y" as two rows says
+// the same thing with the shape every other row already has. The warning in
+// #64 was that the operators must not become a second DSL — the way that
+// happens is one special case at a time.
+const FILTER_OPS={
+  text:[['contains','contains'],['is','is'],['isnot','is not']],
+  num: [['is','is'],['gte','at least'],['lte','at most'],['isnot','is not']],
+};
+let libFilter={match:'all',rows:[]};
+let libFilterRaw='';
+let numericFields=new Set();
+
+function isNumField(f){return numericFields.has(f);}
+function opsFor(f){return isNumField(f)?FILTER_OPS.num:FILTER_OPS.text;}
+
+// Quote only when beets' shlex split would otherwise break the value apart.
+function quoteVal(v){
+  return /[\s"'\\]/.test(v)?'"'+v.replace(/(["\\])/g,'\\$1')+'"':v;
+}
+function filterTerm(r){
+  const v=quoteVal(r.value);
+  if(r.op==='contains')return r.field+':'+v;
+  if(r.op==='is')      return r.field+':='+v;
+  if(r.op==='isnot')   return '-'+r.field+':='+v;
+  if(r.op==='gte')     return r.field+':'+v+'..';
+  if(r.op==='lte')     return r.field+':..'+v;
+  return '';
+}
+// all → space (beets ANDs); any → a comma *token* (the spaces are the OR,
+// see libops.scope_query — `a,b` is one keyword).
+function compileFilter(){
+  const terms=libFilter.rows.filter(r=>r.field&&r.value!=='').map(filterTerm);
+  return terms.join(libFilter.match==='any'?' , ':' ');
+}
+
+// Shell-like split, matching what shlex does server-side closely enough to
+// round-trip our own output. Returns null on an unbalanced quote — the server
+// is the one that gets to call that an error.
+function splitTokens(s){
+  const out=[];let cur='',quote=null,quoted=false;
+  for(let i=0;i<s.length;i++){
+    const c=s[i];
+    if(quote){
+      if(c==='\\'&&quote==='"'&&i+1<s.length){cur+=s[++i];continue;}
+      if(c===quote){quote=null;continue;}
+      cur+=c;
+    } else if(c==='"'||c==="'"){quote=c;quoted=true;}
+    else if(/\s/.test(c)){if(cur||quoted){out.push(cur);cur='';quoted=false;}}
+    else cur+=c;
+  }
+  if(quote)return null;
+  if(cur||quoted)out.push(cur);
+  return out;
+}
+// One token → one row, or null when the rows cannot express it. Everything
+// beets can say that the rows cannot — regex (`::`), bare words, path
+// queries, two-sided ranges, a negated substring — lands here as null and
+// leaves the raw query in charge.
+function parseTerm(tok){
+  let neg=false;
+  if(tok[0]==='-'){neg=true;tok=tok.slice(1);}
+  const i=tok.indexOf(':');
+  if(i<=0)return null;
+  const field=tok.slice(0,i),v=tok.slice(i+1);
+  if(v[0]===':'||v.startsWith('=~'))return null;
+  if(v[0]==='=')return {field,op:neg?'isnot':'is',value:v.slice(1)};
+  if(neg)return null;
+  const m=v.match(/^(.*)\.\.(.*)$/);
+  if(!m)return {field,op:'contains',value:v};
+  if(m[1]&&m[2])return null;
+  if(m[2])return {field,op:'lte',value:m[2]};
+  if(m[1])return {field,op:'gte',value:m[1]};
+  return null;
+}
+// Raw query → {match, rows}, or null if the rows can't hold it losslessly.
+function parseFilter(raw){
+  if(!raw.trim())return {match:libFilter.match,rows:[]};
+  const toks=splitTokens(raw);
+  if(!toks)return null;
+  const groups=[[]];
+  for(const t of toks){ if(t===','){groups.push([]);} else groups[groups.length-1].push(t); }
+  const any=groups.length>1;
+  // Mixed and/or is a shape one flat list of rows cannot represent.
+  if(any&&groups.some(g=>g.length!==1))return null;
+  const rows=[];
+  for(const t of any?groups.map(g=>g[0]):groups[0]){
+    const row=parseTerm(t);
+    if(!row)return null;
+    rows.push(row);
+  }
+  return {match:any?'any':'all',rows};
+}
+
+function renderFilter(){
+  const wrap=document.getElementById('filter-rows');
+  document.getElementById('filter-head').style.display=
+    libFilter.rows.length>1?'flex':'none';
+  document.getElementById('filter-clear').style.display=
+    libFilter.rows.length?'':'none';
+  document.getElementById('filter-match').value=libFilter.match;
+  if(!libFilter.rows.length){
+    wrap.innerHTML='<div class="filter-all">Everything in your library.</div>';
+    return;
+  }
+  wrap.innerHTML=libFilter.rows.map((r,i)=>
+    '<div class="filter-row">'+
+      '<input class="f-field" type="text" list="beet-fields" value="'+escapeHtml(r.field)+'" '+
+        'placeholder="field" autocomplete="off" onchange="setRow('+i+',\'field\',this.value)">'+
+      '<select onchange="setRow('+i+',\'op\',this.value)">'+
+        opsFor(r.field).map(o=>'<option value="'+o[0]+'"'+(o[0]===r.op?' selected':'')+'>'+o[1]+'</option>').join('')+
+      '</select>'+
+      '<input class="f-value" type="text" value="'+escapeHtml(r.value)+'" '+
+        'placeholder="value" oninput="setRow('+i+',\'value\',this.value)">'+
+      '<button class="row-btn" title="Remove condition" onclick="dropFilterRow('+i+')">×</button>'+
+    '</div>').join('');
+}
+function setRow(i,key,val){
+  const r=libFilter.rows[i];
+  r[key]=val;
+  // A field change can swap the operator vocabulary out from under the row.
+  if(key==='field'&&!opsFor(val).some(o=>o[0]===r.op))r.op=opsFor(val)[0][0];
+  onFilterEdit(key!=='value');
+}
+function addFilterRow(){
+  libFilter.rows.push({field:'',op:'contains',value:''});
+  onFilterEdit(true);
+}
+function dropFilterRow(i){libFilter.rows.splice(i,1);onFilterEdit(true);}
+function setFilterPreset(rows){
+  libFilter={match:'all',rows:rows.map(r=>({...r}))};
+  onFilterEdit(true);
+}
+// Rows changed → they are now the truth, so recompile the raw query from
+// them. `rerender` is false while typing in a value box, so the caret
+// doesn't jump.
+function onFilterEdit(rerender){
+  libFilterRaw=compileFilter();
+  document.getElementById('filter-raw').value=libFilterRaw;
+  showFilterNote('');
+  if(rerender)renderFilter(); else document.getElementById('filter-clear').style.display=libFilter.rows.length?'':'none';
+  afterFilterChange();
+}
+// Raw query changed → try to pull it back into rows. When it can't be, the
+// rows go stale rather than silently lying about what is being filtered.
+function onRawEdit(){
+  libFilterRaw=document.getElementById('filter-raw').value;
+  const parsed=parseFilter(libFilterRaw);
+  if(parsed){
+    libFilter=parsed;
+    showFilterNote('');
+    renderFilter();
+  } else {
+    showFilterNote('This query says more than the conditions above can — '+
+      'it is what the list and the actions use. Editing a condition replaces it.');
+  }
+  afterFilterChange();
+}
+function showFilterNote(msg){
+  const el=document.getElementById('filter-note');
+  el.textContent=msg;
+  el.style.display=msg?'':'none';
+}
+function afterFilterChange(){
+  buildLibCmd();
+  loadLibrary();
+}
+function currentQuery(){return libFilterRaw.trim();}
+
+// ── Scope (#63/#64) ───────────────────────────────────────────────────────────
+// Nothing selected → the filter is the scope. Selecting rows narrows it to
+// those ids. Item ids, always: that is what `scope.ids` means server-side,
+// and it is why selection is offered in the Tracks view only — the Albums
+// and Artists views have no item id to send.
+let libSel=new Set();
+
+function scopeBody(){
+  return libSel.size?{scope:{ids:[...libSel]}}:{scope:{query:currentQuery()}};
+}
+// Cover art is the one album-level action. A track selection maps to the
+// albums those tracks belong to, which is both what the user means and the
+// only reading that agrees with the Albums view (which groups the same way).
+function albumScopeBody(){
+  if(!libSel.size)return {scope:{query:currentQuery()}};
+  const ids=[...new Set(libTracks.filter(t=>libSel.has(t.id))
+                                 .map(t=>t.album_id).filter(Boolean))];
+  return {scope:{ids}};
+}
+function scopeLabel(){
+  if(libSel.size)return libSel.size+' selected track'+(libSel.size===1?'':'s');
+  return currentQuery()?'everything matching the filter':'your whole library';
+}
+function renderScope(){
+  const label='Actions apply to <b>'+escapeHtml(scopeLabel())+'</b>';
+  document.getElementById('action-scope').innerHTML=label;
+  document.querySelectorAll('.scope-line').forEach(el=>el.innerHTML=label);
+}
+function toggleSel(id,on){
+  if(on)libSel.add(id); else libSel.delete(id);
+  renderScope();
+}
+function openAction(id){
+  const el=document.getElementById(id);
+  el.open=true;
+  el.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function buildLibCmd(){
-  const q=document.getElementById('lib-query').value.trim();
-  const field=document.getElementById('lib-field').value;
-  const fval=document.getElementById('lib-field-val').value.trim();
+  const q=currentQuery();
   // Same Albums/Tracks/Artists choice that drives the results panel — beet
   // ls has no "list artists" mode, so Artists falls back to plain track
   // listing here, same as the default.
@@ -1395,7 +1630,6 @@ function buildLibCmd(){
   if(type)parts.push(type);
   if(fmt)parts.push('-f "'+fmt+'"');
   if(q)parts.push(q);
-  if(field&&fval)parts.push(field+':'+fval);
   if(exp)parts.push('> ~/Desktop/library.txt');
   setCmd(parts.join(' '));
 }
@@ -1462,7 +1696,11 @@ function toggleLibDir(){
   loadLibrary();
 }
 function loadLibrary(){
-  const q=document.getElementById('lib-query').value.trim();
+  const q=currentQuery();
+  // Selection is per-result-set: ids from a list the user can no longer see
+  // would be a scope nothing on screen explains.
+  libSel.clear();
+  renderScope();
   const mode=LIB_MODES[libMode],seq=++libLoadSeq;
   fetch(mode.url+'?q='+encodeURIComponent(q)+'&limit=200'+
         '&sort='+encodeURIComponent(document.getElementById('lib-sort').value)+'&dir='+libDir)
@@ -1475,14 +1713,17 @@ function renderLibrary(data,q,mode){
   libTracks=[];
   if(!data.ok){
     count.textContent='';
-    el.innerHTML='<div class="lib-empty">Could not reach the library. Is the server running?</div>';
+    // The advanced query box can now produce a query beets rejects, so a
+    // failure here is more often "that query is malformed" than "no server".
+    el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error
+      ||'Could not reach the library. Is the server running?')+'</div>';
     return;
   }
   const rows=data[mode.key];
   if(!rows.length){
     count.textContent='';
     el.innerHTML='<div class="lib-empty">'+(q
-      ?'No '+mode.noun+'s match "'+escapeHtml(q)+'".'
+      ?'No '+mode.noun+'s match this filter.'
       :'No '+mode.noun+'s yet — import some music to get started.')+'</div>';
     return;
   }
@@ -1504,6 +1745,8 @@ function albumRow(a){
 }
 function trackRow(t,i){
   return '<div class="lib-row" data-track="'+t.id+'">'+
+    '<input class="lib-row-check" type="checkbox" title="Select for actions" '+
+      'onchange="toggleSel('+t.id+',this.checked)">'+
     '<div class="lib-row-title" style="flex:1;min-width:0;"><span class="lib-row-artist">'+escapeHtml(t.artist||'Unknown artist')+'</span>'+
     ' — '+escapeHtml(t.title||'Untitled')+'</div>'+
     '<div class="lib-row-meta">'+escapeHtml(t.format||'')+' · '+fmtDuration(t.length)+'</div>'+
@@ -1520,10 +1763,10 @@ function artistRow(a){
     '</div>';
 }
 function searchArtist(name){
-  document.getElementById('lib-query').value=name;
   document.querySelector('input[name="lib-mode"][value="albums"]').checked=true;
-  buildLibCmd();
-  setLibMode();
+  libMode='albums';
+  fillLibSorts();
+  setFilterPreset([{field:'albumartist',op:'is',value:name}]);
 }
 
 // ── Player ────────────────────────────────────────────────────────────────────
@@ -1617,6 +1860,8 @@ function markPlayingRow(){
 }
 document.addEventListener('DOMContentLoaded',function(){
   fillLibSorts();
+  renderFilter();
+  renderScope();
   const a=document.getElementById('player-audio');
   a.addEventListener('ended',function(){playStep(1);});
   a.addEventListener('error',function(){
@@ -1710,12 +1955,13 @@ function deleteDupAlbum(gi,ai,deleteFiles){
 function previewModify(){
   const field=document.getElementById('mod-field').value.trim();
   const value=document.getElementById('mod-value').value.trim();
-  const query=document.getElementById('mod-query').value.trim();
   const el=document.getElementById('mod-results');
   if(!field||!value){el.innerHTML='<div class="lib-empty">Field and new value are required.</div>';return;}
+  // Captured here so Apply runs against exactly the set that was previewed,
+  // not whatever the filter says by the time the button is clicked.
+  pendingModify={field,value,scope:scopeBody()};
   el.innerHTML='<div class="lib-empty">Checking…</div>';
-  fetch('/library/modify/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({field,value,query})})
-    .then(r=>r.json())
+  postJSON('/library/modify/preview',{field,value,...pendingModify.scope})
     .then(data=>{
       if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>';return;}
       if(!data.changes.length){el.innerHTML='<div class="lib-empty">No changes — nothing matches, or values are already set.</div>';return;}
@@ -1727,13 +1973,12 @@ function previewModify(){
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
+let pendingModify=null;
 function applyModify(){
-  const field=document.getElementById('mod-field').value.trim();
-  const value=document.getElementById('mod-value').value.trim();
-  const query=document.getElementById('mod-query').value.trim();
+  if(!pendingModify)return;
+  const {field,value,scope}=pendingModify;
   if(!confirm('Apply this change and write tags to file?'))return;
-  fetch('/library/modify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({field,value,query})})
-    .then(r=>r.json())
+  postJSON('/library/modify',{field,value,...scope})
     .then(data=>{
       const el=document.getElementById('mod-results');
       el.innerHTML=data.ok?'<div class="alert alert-green">Changed '+data.changed+' item'+(data.changed===1?'':'s')+'.</div>':'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';
@@ -1746,12 +1991,13 @@ function applyModify(){
 // previewModify()/applyModify() and as /library/remove's expect check.
 const MAINT_LABELS={update:{verb:'Update the library',noun:'change'},
                     write:{verb:'Write these tags to files',noun:'file'}};
+let pendingMaint=null;
 function runMaint(kind,apply){
-  const query=document.getElementById('maint-query').value.trim();
   const el=document.getElementById('maint-results');
+  const scope=apply&&pendingMaint?pendingMaint:scopeBody();
+  if(!apply)pendingMaint=scope;
   el.innerHTML='<div class="lib-empty">Working…</div>';
-  fetch('/library/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,pretend:!apply})})
-    .then(r=>r.json())
+  postJSON('/library/'+kind,{pretend:!apply,...scope})
     .then(data=>{
       if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>';return;}
       if(!data.output.length){
@@ -1851,6 +2097,10 @@ function loadModFields(){
     const common=COMMON_FIELDS.filter(f=>all.includes(f));
     const rest=all.filter(f=>!common.includes(f));
     dl.innerHTML=common.map(opt).join('')+rest.map(opt).join('');
+    // Filter rows share this datalist, and pick their operator set from the
+    // field's declared type — so re-render once the types actually arrive.
+    numericFields=new Set(data.numeric_fields||[]);
+    renderFilter();
   }).catch(()=>{
     // Fall back to the common list so the section still works offline.
     dl.innerHTML=COMMON_FIELDS.map(opt).join('');
@@ -1885,47 +2135,53 @@ function removeFormat(fmt){
 }
 
 // ── Remove from library ──────────────────────────────────────────────────────
-function removeQuery(which){
-  return which==='short-query'
-    ?'length:..'+(document.getElementById('short-secs').value||10)
-    :document.getElementById(which).value.trim();
+// Removing the whole library is a thing the scope can now express (no filter,
+// no selection), so this is the one action that refuses it: the preview would
+// be honest about it, but "I forgot to filter" and "I meant everything" look
+// identical at the moment of the click.
+function removeScope(el){
+  const scope=scopeBody();
+  if(scope.scope.query===''){
+    el.innerHTML='<div class="lib-empty">Filter or select something first — '+
+      'remove will not run against the whole library.</div>';
+    return null;
+  }
+  return scope;
 }
-function removeResultsEl(which){return document.getElementById(which==='short-query'?'short-results':'rm-results');}
-function previewRemove(which){
-  const query=removeQuery(which),el=removeResultsEl(which);
-  if(!query){el.innerHTML='<div class="lib-empty">Enter a query.</div>';return;}
+function previewRemove(){
+  const el=document.getElementById('rm-results'),scope=removeScope(el);
+  if(!scope)return;
   el.innerHTML='<div class="lib-empty">Checking…</div>';
-  fetch('/library/remove/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})})
-    .then(r=>r.json())
+  postJSON('/library/remove/preview',scope)
     .then(data=>{
+      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>';return;}
       if(!data.items.length){el.innerHTML='<div class="lib-empty">No matching tracks.</div>';return;}
-      el.innerHTML='<div class="lib-count">'+data.items.length+' track'+(data.items.length===1?'':'s')+' match</div>'+
+      el.innerHTML='<div class="lib-count">'+data.items.length+' track'+(data.items.length===1?'':'s')+' in scope</div>'+
         '<div class="lib-results">'+data.items.map(i=>
           '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(i.label)+'</div></div>'
         ).join('')+'</div>';
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
-function doRemove(which,deleteFiles){
-  const query=removeQuery(which),el=removeResultsEl(which);
-  if(!query){alert('Enter a query first.');return;}
+function doRemove(deleteFiles){
+  const el=document.getElementById('rm-results'),scope=removeScope(el);
+  if(!scope)return;
   // Preview before confirming, not just "you should preview": the count in the
   // prompt is the real match count, and the server requires it back as `expect`
   // (it removes with force=true, so this preview is the only confirmation).
   el.innerHTML='<div class="lib-empty">Checking what matches…</div>';
-  fetch('/library/remove/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})})
-    .then(r=>r.json())
+  postJSON('/library/remove/preview',scope)
     .then(data=>{
       if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Preview failed.')+'</div>';return;}
       const n=data.items.length;
       if(!n){el.innerHTML='<div class="lib-empty">No matching tracks — nothing to remove.</div>';return;}
       const msg=(deleteFiles?'Permanently delete files for ':'Remove from database (files stay on disk): ')+
-        n+' track'+(n===1?'':'s')+' matching "'+query+'"?';
+        n+' track'+(n===1?'':'s')+' — '+scopeLabel()+'?';
       if(!confirm(msg)){el.innerHTML='<div class="lib-empty">Cancelled.</div>';return;}
-      fetch('/library/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,expect:n,delete_files:deleteFiles})})
-        .then(r=>r.json())
+      postJSON('/library/remove',{expect:n,delete_files:deleteFiles,...scope})
         .then(d=>{
           el.innerHTML=d.ok?'<div class="alert alert-green">Removed '+d.removed+' track'+(d.removed===1?'':'s')+'.</div>':'<div class="lib-empty">'+escapeHtml(d.error||'Failed.')+'</div>';
+          if(d.ok)loadLibrary();
         })
         .catch(()=>alert('Could not reach the server.'));
     })
@@ -1989,10 +2245,11 @@ function countFormats(exts){
 // uncheck ran ffmpeg for real with no warning beyond a confirm() popup.
 // Same shape as startArtwork()/runArtwork(): check step reveals the real
 // button, sized to what it's actually about to do.
+let pendingConvert=null;
 function startConvert(){
-  const fmt=document.getElementById('beet-conv-fmt').value;
   const dest=document.getElementById('beet-conv-dest').value.trim();
-  startJob('/convert/start',{query:'format:'+fmt,pretend:true,dest:dest||null},'convert-job',
+  pendingConvert={dest:dest||null,scope:scopeBody()};
+  startJob('/convert/start',{pretend:true,dest:pendingConvert.dest,...pendingConvert.scope},'convert-job',
     (ev,el)=>{
       if(!ev.total)return;
       el.innerHTML+='<div class="btn-row"><button class="btn btn-warn btn-sm" onclick="runConvert()">Convert '+
@@ -2000,9 +2257,8 @@ function startConvert(){
     });
 }
 function runConvert(){
-  const fmt=document.getElementById('beet-conv-fmt').value;
-  const dest=document.getElementById('beet-conv-dest').value.trim();
-  startJob('/convert/start',{query:'format:'+fmt,pretend:false,dest:dest||null},'convert-job');
+  if(!pendingConvert)return;
+  startJob('/convert/start',{pretend:false,dest:pendingConvert.dest,...pendingConvert.scope},'convert-job');
 }
 // Server gives up on a scan after a wall-clock budget (#35) rather than
 // running forever on a huge dir — say so, or a partial count/list quietly

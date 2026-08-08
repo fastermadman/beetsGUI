@@ -282,6 +282,28 @@ def _page(default_limit=200, max_limit=1000):
             max(int(request.args.get('offset', 0)), 0))
 
 
+def _filter_sql(q, level):
+    """SQL restricting a list query to what the shared filter matches (#64).
+
+    Returns '' when there is no filter, otherwise ` AND <col> IN (...)`. The
+    ids come out of beets as real ints, so inlining them is safe — sqlite
+    can't bind a variable-length list, and a temp table is more machinery
+    than one page of results is worth.
+
+    `AND 0` for an empty match set is deliberate: "the filter matched
+    nothing" and "there is no filter" must not collapse into the same SQL,
+    which is the same distinction /library/remove/preview draws for the same
+    reason.
+    """
+    if not q:
+        return ''
+    item_ids, album_ids = libops.matching_ids(q)
+    ids, col = ((album_ids, 'a.id') if level == 'albums' else (item_ids, 'i.id'))
+    if not ids:
+        return ' AND 0'
+    return f' AND {col} IN ({",".join(str(i) for i in ids)})'
+
+
 def _library_con():
     """Read-only connection to the beets library.db, or None if there isn't one."""
     db_path = get_library_db_path()
@@ -307,14 +329,8 @@ def library():
     if con is None:
         return jsonify({'ok': True, 'albums': [], 'total': 0})
 
+    where = '1' + _filter_sql(q, 'albums')
     try:
-        qlike = f'%{q}%'
-        where = '''
-            :q = '' OR a.albumartist LIKE :qlike OR a.album LIKE :qlike OR EXISTS (
-                SELECT 1 FROM items i WHERE i.album_id = a.id
-                AND (i.title LIKE :qlike OR i.artist LIKE :qlike)
-            )
-        '''
         rows = con.execute(f'''
             SELECT a.id, a.albumartist, a.album, a.year,
                    (SELECT format FROM items i WHERE i.album_id = a.id LIMIT 1) AS format,
@@ -324,8 +340,8 @@ def library():
             WHERE {where}
             ORDER BY {_order_by(ALBUM_SORTS, 'artist')}
             LIMIT :limit OFFSET :offset
-        ''', {'q': q, 'qlike': qlike, 'limit': limit, 'offset': offset}).fetchall()
-        total = con.execute(f'SELECT COUNT(*) FROM albums a WHERE {where}', {'q': q, 'qlike': qlike}).fetchone()[0]
+        ''', {'limit': limit, 'offset': offset}).fetchall()
+        total = con.execute(f'SELECT COUNT(*) FROM albums a WHERE {where}').fetchone()[0]
         con.close()
         albums = [dict(r) for r in rows]
         return jsonify({'ok': True, 'albums': albums, 'total': total})
@@ -353,10 +369,9 @@ def library_tracks():
     if con is None:
         return jsonify({'ok': True, 'tracks': [], 'total': 0})
 
+    where = '1' + _filter_sql(q, 'tracks')
     try:
-        params.update({'q': q, 'qlike': f'%{q}%', 'limit': limit, 'offset': offset})
-        where = '''(:q = '' OR i.title LIKE :qlike OR i.artist LIKE :qlike
-                    OR i.album LIKE :qlike OR i.albumartist LIKE :qlike)'''
+        params.update({'limit': limit, 'offset': offset})
         if album_id:
             where += ' AND i.album_id = :album_id'
         rows = con.execute(f'''
@@ -389,12 +404,12 @@ def library_artists():
     if con is None:
         return jsonify({'ok': True, 'artists': [], 'total': 0})
 
+    where = '1' + _filter_sql(q, 'tracks')
     try:
-        params = {'q': q, 'qlike': f'%{q}%', 'limit': limit, 'offset': offset}
+        params = {'limit': limit, 'offset': offset}
         # Tracks with no albumartist fall back to artist so nothing vanishes
         # from this view; unattributed files group under one empty name.
         name = "COALESCE(NULLIF(i.albumartist, ''), i.artist, '')"
-        where = f"(:q = '' OR {name} LIKE :qlike OR i.artist LIKE :qlike)"
         rows = con.execute(f'''
             SELECT {name} AS name,
                    COUNT(DISTINCT i.album_id) AS albums,
@@ -566,12 +581,20 @@ def library_missing():
     return jsonify({'ok': True, 'albums': libops.missing_albums()})
 
 
-@app.route('/library/count')
+@app.route('/library/count', methods=['POST'])
 def library_count():
-    """Albums a beets query matches — the preview step before artwork/sync
-    jobs, which have no pretend mode of their own to preview with."""
+    """Albums a scope matches — the preview step before artwork/sync jobs,
+    which have no pretend mode of their own to preview with.
+
+    POST with a scope body rather than GET with a query string (#64): the
+    caller is an album-level action, and an `ids` scope is the one shape a
+    URL parameter can't carry without the client rebuilding the id-query
+    that libops.scope_query() already owns.
+    """
+    data = request.get_json(silent=True) or {}
     try:
-        return jsonify({'ok': True, 'count': libops.album_count(request.args.get('query', ''))})
+        return jsonify({'ok': True,
+                        'count': libops.album_count(libops.scope_query(data))})
     except UserError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
 
