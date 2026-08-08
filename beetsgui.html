@@ -199,6 +199,7 @@
     <button class="tab-btn active" onclick="switchTab('inbox',this)">Inbox</button>
     <button class="tab-btn" onclick="switchTab('library',this)">Library</button>
     <button class="tab-btn" onclick="switchTab('export',this)">Export</button>
+    <button class="tab-btn" onclick="switchTab('recover',this)">Recover</button>
   </div>
 
   <div class="content">
@@ -570,6 +571,48 @@
       </div>
     </div>
 
+    <!-- RECOVER (#42) -->
+    <div id="tab-recover" class="tab-panel">
+      <div class="section">
+        <div class="section-title">
+          <span>Most-played tracks from old Traktor files</span>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Reads old collection.nml, history .nml and .m3u files to rebuild what you played most, so you can go re-source what's still missing. Only ever reads them — nothing is moved, changed or deleted.</span></span>
+        </div>
+        <div class="field">
+          <label for="traktor-roots">Folders to search</label>
+          <input type="text" id="traktor-roots" placeholder="~/Documents" value="~/Documents">
+          <div class="drop-hint">Comma-separated. Add an external drive here later and re-scan — results build up rather than starting over.</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="startTraktorScan(false)"><span>Scan</span></button>
+          <button class="btn" onclick="startTraktorScan(true)">Rebuild from scratch</button>
+        </div>
+        <div id="traktor-job"></div>
+      </div>
+      <div class="section">
+        <div class="section-title">
+          <span>Recovered tracks</span>
+          <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Play count is the highest number seen across all your snapshots, not a total — see the note under the list.</span></span>
+        </div>
+        <div class="btn-row">
+          <select id="traktor-sort" onchange="loadTraktor()">
+            <option value="play_count">Most played</option>
+            <option value="histories">Most played live (gig history)</option>
+            <option value="playlists">Most playlisted</option>
+            <option value="rating">Highest rated</option>
+          </select>
+          <label class="check-item"><input type="checkbox" id="traktor-missing" checked onchange="loadTraktor()"> Only tracks not in my library</label>
+          <button class="btn btn-sm" onclick="loadTraktor()">Refresh</button>
+        </div>
+        <div class="lib-results" id="traktor-results"></div>
+        <div id="traktor-assumptions"></div>
+        <details id="traktor-sources-box" style="display:none;margin-top:0.75rem;">
+          <summary>Source files</summary>
+          <div class="lib-results" id="traktor-sources"></div>
+        </details>
+      </div>
+    </div>
+
   <dialog id="prefs-dialog">
     <div class="prefs-header">
       <span class="prefs-title">Preferences</span>
@@ -763,6 +806,85 @@ function switchTab(name,btn){
   if(btn)btn.classList.add('active');
   activeTab=name;
   if(name==='library'){buildLibCmd();loadLibrary();}
+  if(name==='recover'){loadTraktor();}
+}
+
+// ── Recover: most-played tracks from old Traktor files (#42) ────────────────
+function startTraktorScan(reset){
+  const roots=document.getElementById('traktor-roots').value.split(',')
+    .map(s=>s.trim()).filter(Boolean);
+  if(reset&&!confirm('Discard the recovered list and rebuild it from the source files?'))return;
+  startJob('/traktor/scan/start',{roots:roots,reset:!!reset},'traktor-job',loadTraktor);
+}
+function loadTraktor(){
+  const results=document.getElementById('traktor-results');
+  const sort=document.getElementById('traktor-sort').value;
+  const missing=document.getElementById('traktor-missing').checked?'1':'0';
+  results.innerHTML='<div class="lib-empty">Loading…</div>';
+  fetch('/traktor/results?sort='+sort+'&missing_only='+missing+'&limit=300')
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.ok){results.innerHTML='<div class="alert alert-red">'+escapeHtml(data.error)+'</div>';return;}
+      if(!data.scanned){
+        results.innerHTML='<div class="lib-empty">Nothing scanned yet — hit Scan above.</div>';
+        document.getElementById('traktor-assumptions').innerHTML='';
+        return;
+      }
+      renderTraktor(data);
+    })
+    .catch(()=>{results.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function renderTraktor(data){
+  const results=document.getElementById('traktor-results');
+  if(!data.tracks.length){
+    results.innerHTML='<div class="lib-empty">No tracks match — try unticking "only tracks not in my library".</div>';
+  }else{
+    results.innerHTML='<div class="lib-count">'+data.total+' track'+(data.total===1?'':'s')+
+      (data.tracks.length<data.total?' — showing first '+data.tracks.length:'')+'</div>'+
+      data.tracks.map(t=>{
+        // An unknown artist is shown as exactly that. Traktor never recorded
+        // one for a third of these entries, and inventing a plausible-looking
+        // artist would send the owner hunting for a record that doesn't exist.
+        const who=t.artist?escapeHtml(t.artist):'<span class="lib-row-meta">artist unknown</span>';
+        const bits=[];
+        if(t.play_count)bits.push('▶ '+t.play_count+'×');
+        if(t.histories)bits.push('🎧 '+t.histories+' gig'+(t.histories===1?'':'s'));
+        if(t.playlist_count)bits.push('☰ '+t.playlist_count+' playlist'+(t.playlist_count===1?'':'s'));
+        if(t.rating)bits.push('★'.repeat(t.rating));
+        if(t.last_played)bits.push('last '+escapeHtml(t.last_played));
+        if(t.snapshots)bits.push('in '+t.snapshots+' snapshot'+(t.snapshots===1?'':'s')+
+          (t.eras>1?' / '+t.eras+' installs':''));
+        // A title-only row could only be matched on title, which is a guess,
+        // not a confirmation — say which it is.
+        const inLib=t.library_match==='exact'
+          ?'<span class="badge badge-rec">in library</span>'
+          :(t.library_match==='title-only'
+            ?'<span class="badge">title matches library — verify</span>':'');
+        // min-width:0 lets the flex child actually shrink (so the title can
+        // ellipsis), and the meta line wraps instead of running off the row —
+        // .lib-row-meta is nowrap because everywhere else it's a short chip
+        // pinned right, which is not what it is here.
+        return '<div class="lib-row"><div style="min-width:0;flex:1;">'+
+          '<div class="lib-row-title">'+who+' — '+escapeHtml(t.title)+' '+inLib+'</div>'+
+          '<div class="lib-row-meta" style="white-space:normal;margin-top:0.15rem;">'+
+          bits.join(' · ')+'</div></div></div>';
+      }).join('');
+  }
+  document.getElementById('traktor-assumptions').innerHTML=
+    '<div class="alert alert-yellow" style="font-size:10px;margin-top:0.75rem;">'+
+    data.assumptions.map(a=>escapeHtml(a)).join('<br><br>')+'</div>';
+  const bad=(data.sources||[]).filter(s=>s.status!=='ok');
+  const box=document.getElementById('traktor-sources-box');
+  box.style.display='';
+  box.querySelector('summary').textContent=
+    'Source files — '+(data.stats.files_parsed||0)+' read'+
+    (bad.length?', '+bad.length+' skipped':'');
+  document.getElementById('traktor-sources').innerHTML=
+    (bad.length
+      ?bad.map(s=>'<div class="lib-row"><div><div class="lib-row-title">'+
+         escapeHtml(s.name)+'</div><div class="lib-row-meta">'+
+         escapeHtml(s.error||s.status)+'</div></div></div>').join('')
+      :'<div class="lib-empty">Every source file was read.</div>');
 }
 function openPrefs(){
   buildConfig();
