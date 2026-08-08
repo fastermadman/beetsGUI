@@ -837,7 +837,11 @@ def job_abort(job_id):
     the beets plugin itself, with no hook to interrupt mid-loop without
     duplicating its matching logic. So this can legitimately time out with
     the job still running; `finished: false` is a true answer, not a bug,
-    and the caller is expected to say so rather than imply it's stuck."""
+    and the caller is expected to say so rather than imply it's stuck.
+
+    A still-running-but-aborted job no longer blocks the next one, though
+    (#32): starting a new job now queues it behind this one instead of
+    being rejected — see jobs.start()."""
     job = jobs.get(job_id)
     if not job:
         return jsonify({'ok': False, 'error': 'unknown job id'}), 404

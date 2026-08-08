@@ -1043,14 +1043,21 @@ function startJob(url,payload,elId,onDone){
     .then(r=>r.json())
     .then(data=>{
       if(!data.ok){el.innerHTML='<div class="alert alert-red">'+escapeHtml(data.error)+'</div>';return;}
-      attachJob(data.id,el,onDone);
+      attachJob(data.id,el,onDone,data.queued_behind);
     })
     .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
-function attachJob(id,el,onDone){
+// queuedBehind (#32): the server queued this job behind one still
+// finishing an abort instead of rejecting it — no real work has started
+// yet, so say that plainly rather than "Working…" until the first real
+// status event (once it actually starts) overwrites it.
+function attachJob(id,el,onDone,queuedBehind){
   if(jobRunner.es)jobRunner.es.close();
   jobRunner={es:new EventSource('/jobs/'+id+'/events'),id:id,el:el,onDone:onDone};
-  el.innerHTML='<div class="lib-count job-pulse" id="job-status">Working…</div>'+
+  const initial=queuedBehind
+    ?'Waiting for the current '+escapeHtml(queuedBehind)+' job to finish aborting…'
+    :'Working…';
+  el.innerHTML='<div class="lib-count job-pulse" id="job-status">'+initial+'</div>'+
     '<div class="btn-row"><button class="btn btn-danger btn-sm" id="job-abort-btn" onclick="abortJob()">Abort</button></div>';
   jobRunner.es.onmessage=e=>handleJobEvent(JSON.parse(e.data));
 }

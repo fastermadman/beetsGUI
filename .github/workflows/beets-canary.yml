@@ -32,3 +32,6 @@ jobs:
 
       - name: Run test_transcode.py
         run: python test_transcode.py
+
+      - name: Run test_jobs.py
+        run: python test_jobs.py
