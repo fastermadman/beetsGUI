@@ -6,6 +6,7 @@ Stop: Ctrl+C
 
 Serves beetsgui.html on http://localhost:1612.
 """
+import functools
 import json
 import os
 import queue
@@ -149,8 +150,18 @@ def list_volumes() -> list:
     return vols
 
 
+@functools.lru_cache(maxsize=1)
 def get_config_path() -> str:
-    """Find the beets config file via 'beet config --path'."""
+    """Find the beets config file via 'beet config --path'.
+
+    Cached for the life of the process: this used to shell out on every
+    /library request (~700ms measured — `beet` is a Python CLI wrapper that
+    imports the whole beets package plus every enabled plugin on each
+    invocation), which dwarfed the actual query time (~6ms) by two orders
+    of magnitude. The config path doesn't move while this server is
+    running, same assumption `importsession.get_library()` already makes
+    about the Library object itself.
+    """
     try:
         r = subprocess.run(
             [find_beet(), 'config', '--path'],
@@ -163,8 +174,13 @@ def get_config_path() -> str:
     return os.path.expanduser('~/.config/beets/config.yaml')
 
 
+@functools.lru_cache(maxsize=1)
 def get_library_db_path() -> str:
-    """Find the beets library.db path from the 'library:' key in config.yaml."""
+    """Find the beets library.db path from the 'library:' key in config.yaml.
+
+    Cached alongside get_config_path() for the same reason — same process
+    lifetime, same "doesn't move while we're running" assumption.
+    """
     config_path = get_config_path()
     try:
         for line in Path(config_path).read_text().splitlines():
