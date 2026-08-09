@@ -148,6 +148,15 @@ Test it end to end (needs ffmpeg; runs against a throwaway library):
 ~/.local/pipx/venvs/beets/bin/python test_importsession.py
 ```
 
+`test_smoke.py` drives the real UI in a headless browser against the same
+throwaway-library harness — needs Playwright, once:
+
+```bash
+pipx inject beets playwright
+~/.local/pipx/venvs/beets/bin/playwright install chromium
+~/.local/pipx/venvs/beets/bin/python test_smoke.py
+```
+
 ## DJ workflow notes
 
 - Lossless files (WAV, AIFF, FLAC) convert to **ALAC 24-bit** on import — 32-bit float is handled automatically
