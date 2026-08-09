@@ -11,8 +11,9 @@ that actually bites:
    rewrites the user's filter.
 
 2. That the JS agrees with **beets** about what it just wrote. The compiler
-   quotes values with `"` and joins OR terms with a comma token; the parser
-   is a hand-written shlex-alike. Any drift between that and Python's shlex
+   POSIX single-quotes values (the same string is pasted into a shell, see
+   shellQuote) and joins OR terms with a comma token; the parser is a
+   hand-written shlex-alike. Any drift between that and Python's shlex
    makes the rows say one thing and the library do another — and it would
    drift silently, because the JS half never sees the server's opinion.
    So every compiled query is re-parsed here by beets itself and matched
@@ -65,6 +66,29 @@ BEYOND_ROWS = [
 ]
 
 
+# Values a real music library can contain that a shell would otherwise act
+# on rather than pass through. `$(echo PWNED)` stands in for command
+# substitution: harmless when the quoting holds, unmistakable when it does
+# not. `$artist - $album ($year)` is not hostile at all — it is what every
+# format preset puts in `beet ls -f`, and double quotes would let the shell
+# expand it to nothing before beets ever saw it (#12).
+SHELL_HOSTILE = [
+    'plain',
+    '$(echo PWNED)',
+    '`echo PWNED`',
+    'a;echo PWNED',
+    'a && echo PWNED',
+    '$HOME',
+    '*',
+    '~',
+    "it's here",
+    'a "quoted" bit',
+    'Blæst æøå',
+    '日本語 🎵',
+    '$artist - $album ($year)',
+]
+
+
 def js_block():
     """The filter compiler/parser, lifted out of the page."""
     src = HTML.read_text()
@@ -78,7 +102,8 @@ def run_js():
     script = js_block() + '''
 const CASES=''' + json.dumps(CASES) + ''';
 const BEYOND=''' + json.dumps(BEYOND_ROWS) + ''';
-const out={compiled:[],roundtrip:[],beyond:[]};
+const HOSTILE=''' + json.dumps(SHELL_HOSTILE) + ''';
+const out={compiled:[],roundtrip:[],beyond:[],quoted:HOSTILE.map(shellQuote)};
 for(const c of CASES){
   libFilter={match:c.match,rows:c.rows.map(r=>({...r}))};
   const q=compileFilter();
@@ -144,8 +169,8 @@ def test_beets_agrees(result):
         expected = {
             'artist:Burial': {'Burial'},
             'artist:=Burial': {'Burial'},
-            'albumartist:="Aphex Twin"': {'Aphex Twin'},
-            'album:"a \\"quoted\\" bit"': {'Someone Else'},
+            "albumartist:='Aphex Twin'": {'Aphex Twin'},
+            "album:'a \"quoted\" bit'": {'Someone Else'},
             'year:2000..': {'Burial', 'Someone Else', 'Nobody'},
             'year:..2010': {'Aphex Twin', 'Burial', 'Nobody'},
             'year:2000.. year:..2010': {'Burial', 'Nobody'},
@@ -166,11 +191,37 @@ def test_beets_agrees(result):
         assert got == {'Nobody'}, f'{apos!r} selected {got}'
 
 
+def test_shell_agrees(result):
+    """A real shell must hand beets exactly the token the row meant.
+
+    The compiled query is displayed as a `beet ls …` command with a Copy
+    button next to it, so a shell — not shlex — is what re-splits it when the
+    user pastes. Anything the shell expands on the way is both a correctness
+    bug (`$artist` reaching beets as an empty string) and, for a value that
+    came out of a file's tags, an injection (#12). Checking the argv a real
+    bash produces is the only way to see that; shlex agrees with the row
+    either way, which is exactly why this drifted unnoticed.
+    """
+    for value, quoted in zip(SHELL_HOSTILE, result['quoted']):
+        term = f'artist:{quoted}'
+        r = subprocess.run(['bash', '-c', f'printf "%s\\n" {term}'],
+                           capture_output=True, text=True, cwd='/')
+        assert r.returncode == 0, f'{term!r} is not even valid shell: {r.stderr}'
+        argv = r.stdout.rstrip('\n').split('\n')
+        assert argv == [f'artist:{value}'], (
+            f'pasting {term!r} gives beets {argv!r}, not '
+            f'{[f"artist:{value}"]!r} — the shell got at it')
+        # …and the server has to read that same string back the same way.
+        assert shlex.split(term) == [f'artist:{value}'], (
+            f'{term!r}: shlex and bash disagree')
+
+
 def main():
     result = run_js()
     test_roundtrip(result)
     test_beyond_rows_stays_raw(result)
     test_beets_agrees(result)
+    test_shell_agrees(result)
     print('ok')
 
 

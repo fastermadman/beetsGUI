@@ -28,10 +28,9 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
   ```bash
   brew install ffmpeg
   ```
-- [fd](https://github.com/sharkdp/fd) (required for Inbox's Utilities section and Library's Formats/WAV-AIFF finder — the unimported-music scan itself doesn't need it):
-  ```bash
-  brew install fd
-  ```
+
+No `fd` needed: the scans that once shelled out to it (Inbox's Utilities,
+Library's Formats/WAV-AIFF finder) walk the tree in Python instead.
 
 ## Setup
 

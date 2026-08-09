@@ -58,14 +58,23 @@ PROTECTED_FIELDS = {'path', 'id', 'album_id'}
 
 
 def split_query(query):
-    """Split a beets query string. Raises UserError on unbalanced quotes,
-    which the endpoints turn into a 400 rather than a 500."""
+    """Split a beets query string the way the shell would.
+
+    An unbalanced quote falls back to a plain whitespace split rather than
+    erroring. `Don't Stop`, `O'Brien`, `Guns N' Roses` are ordinary things to
+    type into a search box, and shlex reads that apostrophe as an unclosed
+    quote — a 400 there is the wrong answer for a music library, where the
+    apostrophe is a letter far more often than it is punctuation. Everything
+    the UI quotes itself is balanced (shellQuote in beetsgui.html), so this
+    fallback only ever sees hand-typed input, where matching the literal
+    words beats refusing to search.
+    """
     if not query:
         return []
     try:
         return shlex.split(query)
-    except ValueError as e:
-        raise UserError(f'could not parse query: {e}')
+    except ValueError:
+        return query.split()
 
 
 # An `ids` scope becomes one `id:` term per id, so the whole set has to fit
@@ -197,25 +206,32 @@ def write(query, pretend):
 # printed text, since these are display-only, nothing to preview or apply.
 
 def stats():
+    """The same totals as beets' `stats`, but as one SQL aggregate.
+
+    beets walks every Item to sum these, which is a full ORM materialisation
+    of the library; measured at ~2.9s over 40k tracks (#12). That cost sits
+    on the page-load path, not just this panel — the first-run banner asks
+    /info/stats whether the library is empty. The CAST reproduces beets' own
+    per-item `int()` truncation exactly, so the byte total is unchanged.
+    """
     lib = get_library()
-    items = lib.items()
-    total_size = total_time = total_items = 0
-    artists, albums, album_artists = set(), set(), set()
-    for item in items:
-        total_size += int(item.length * item.bitrate / 8)
-        total_time += item.length
-        total_items += 1
-        artists.add(item.artist)
-        album_artists.add(item.albumartist)
-        if item.album_id:
-            albums.add(item.album_id)
+    with lib.transaction() as tx:
+        tracks, total_time, total_size, artists, album_artists, albums = tx.query('''
+            SELECT COUNT(*),
+                   COALESCE(SUM(length), 0),
+                   COALESCE(SUM(CAST(length * bitrate / 8 AS INTEGER)), 0),
+                   COUNT(DISTINCT artist),
+                   COUNT(DISTINCT albumartist),
+                   COUNT(DISTINCT album_id)
+            FROM items
+        ''')[0]
     return {
-        'tracks': total_items,
+        'tracks': tracks,
         'total_time': human_seconds(total_time),
         'total_size': human_bytes(total_size),
-        'artists': len(artists),
-        'albums': len(albums),
-        'album_artists': len(album_artists),
+        'artists': artists,
+        'albums': albums,
+        'album_artists': album_artists,
     }
 
 
@@ -245,8 +261,11 @@ def matching_ids(query):
     than either.
 
     ponytail: materialises the whole match set to render one page of 200.
-    Fine at personal-library scale. The upgrade, if it ever stops being
-    fine, is to splice beets' own `Query.clause()` into the list SQL — which
+    Measured at 5,000 albums / 40,000 items (#12): ~630ms for a free-text
+    search, ~280ms for a field match, against ~5ms for the unfiltered list.
+    Still under the 1s the issue asks for, so it stays. The upgrade, when it
+    stops being fine, is to splice beets' own `Query.clause()` into the
+    list SQL — which
     needs the custom SQL functions (regexp, bytelower) that the read-only
     connection in server.py deliberately doesn't register.
     """

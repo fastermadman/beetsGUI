@@ -17,7 +17,31 @@ from beets.ui import UserError
 import libops
 
 
+def test_split_query_apostrophes():
+    """An apostrophe is a letter here, not an unclosed quote (#12).
+
+    shlex reads `Don't` as the start of a quoted string and raises, which
+    used to surface as a 400 from /library?q= — for a search term that is
+    entirely ordinary in a music library. Balanced quoting still has to keep
+    working, because that is what the UI itself generates.
+    """
+    for q, expected in [
+        ("O'Brien", ["O'Brien"]),
+        ("Don't Stop", ["Don't", 'Stop']),
+        ("Guns N' Roses", ['Guns', "N'", 'Roses']),
+        ("artist:O'Brien year:2020..", ["artist:O'Brien", 'year:2020..']),
+        # What the UI compiles is balanced and must be unquoted, not split.
+        ("artist:'it'\\''s here'", ['artist:it\'s here']),
+        ('album:"a quoted bit"', ['album:a quoted bit']),
+        ('', []),
+    ]:
+        assert libops.split_query(q) == expected, (
+            f'split_query({q!r}) == {libops.split_query(q)!r}, want {expected!r}')
+
+
 def main():
+    test_split_query_apostrophes()
+
     libops.get_library = lambda: (_ for _ in ()).throw(
         AssertionError('should not reach the library'))
 
