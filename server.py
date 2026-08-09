@@ -376,7 +376,7 @@ def library_tracks():
             where += ' AND i.album_id = :album_id'
         rows = con.execute(f'''
             SELECT i.id, i.title, i.artist, i.album, i.albumartist, i.album_id,
-                   i.year, i.length, i.format, i.track, i.disc
+                   i.year, i.length, i.format, i.track, i.disc, i.path
             FROM items i
             WHERE {where}
             ORDER BY {_order_by(TRACK_SORTS, 'artist', dynamic=(con, 'items', 'i'))}
@@ -385,7 +385,13 @@ def library_tracks():
         total = con.execute(f'SELECT COUNT(*) FROM items i WHERE {where}',
                             params).fetchone()[0]
         con.close()
-        return jsonify({'ok': True, 'tracks': [dict(r) for r in rows], 'total': total})
+        tracks = []
+        for r in rows:
+            t = dict(r)
+            # beets stores paths as BLOBs of raw filesystem bytes.
+            t['path'] = os.fsdecode(t['path']) if t['path'] else ''
+            tracks.append(t)
+        return jsonify({'ok': True, 'tracks': tracks, 'total': total})
     except sqlite3.Error as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
@@ -454,6 +460,28 @@ def stream(item_id):
         return jsonify({'ok': False, 'error': 'file is missing from disk'}), 404
     return send_file(path, conditional=True,
                      mimetype=AUDIO_MIMETYPES.get(Path(path).suffix.lower()))
+
+
+@app.route('/reveal/<int:item_id>', methods=['POST'])
+def reveal(item_id):
+    """Select one library file in Finder (#71).
+
+    Same id-only addressing as /stream: the path is looked up here, never
+    sent by the caller, so this can only ever point Finder at a file beets
+    already knows about.
+    """
+    con = _library_con()
+    if con is None:
+        return jsonify({'ok': False, 'error': 'no library database'}), 404
+    row = con.execute('SELECT path FROM items WHERE id = ?', (item_id,)).fetchone()
+    con.close()
+    if not row:
+        return jsonify({'ok': False, 'error': 'no such track'}), 404
+    path = os.fsdecode(row['path'])
+    if not os.path.isfile(path):
+        return jsonify({'ok': False, 'error': 'file is missing from disk'}), 404
+    subprocess.run(['open', '-R', path], check=False)
+    return jsonify({'ok': True, 'path': path})
 
 
 @app.route('/art/<int:album_id>')
