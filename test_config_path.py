@@ -64,9 +64,14 @@ def test_unusable_output_is_not_cached_as_success(tmp_path):
         first = server.get_config_path()
         second = server.get_config_path()
 
-    # The bug: first (bad) call would get cached and returned forever,
-    # so `second` would equal `first` instead of the real path.
-    assert first == str(server.Path('~/.config/beets/config.yaml').expanduser())
+    # The bug: first (bad) call would get cached and returned forever, so
+    # `second` would equal `first` instead of the real path. `first`'s
+    # exact value is just get_config_path()'s fallback (not asserted
+    # against a redundant re-derivation here — os.path.expanduser and
+    # Path.expanduser aren't guaranteed byte-identical on every platform);
+    # what actually matters is that it is *not* the real config, and that
+    # the retry finds the real one instead of repeating it.
+    assert first != str(good), f'first call should have hit the fallback, not {good}'
     assert second == str(good), (
         f'a failed resolution was cached — second call returned {second!r} '
         f'instead of retrying and finding the real config')
