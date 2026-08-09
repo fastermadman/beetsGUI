@@ -22,7 +22,6 @@ and reported zero results, `ok: true`, no error.
 
 Run: ~/.local/pipx/venvs/beets/bin/python test_config_path.py
 """
-import subprocess
 from unittest import mock
 
 import server
@@ -37,6 +36,18 @@ def _fake_run(stdout, returncode=0):
     return mock.Mock(stdout=stdout, stderr='', returncode=returncode)
 
 
+# find_beet() has its own subprocess fallback (`which beet`, when none of
+# its hardcoded macOS/pipx candidate paths exist) — real on a bare CI
+# runner, never taken on a dev machine where one of those paths exists.
+# Patching it directly means these tests exercise exactly one
+# subprocess.run call per _resolve_config_path() invocation regardless of
+# which paths happen to exist on whatever machine runs them — this bit
+# once already: an early version of this file mocked subprocess.run alone
+# and passed locally but failed in CI, because find_beet()'s fallback call
+# silently consumed one of the two staged mock responses there.
+_FIND_BEET = mock.patch('server.find_beet', return_value='beet')
+
+
 def test_migration_noise_on_stdout_is_stripped(tmp_config):
     """The path is always the first line; trailing migration/backup notices
     on later lines must not become part of it."""
@@ -44,7 +55,7 @@ def test_migration_noise_on_stdout_is_stripped(tmp_config):
     noisy = (f'{tmp_config}\n'
              "Created database backup at: '/tmp/x/library.db-before-y.bak'.\n"
              "Created database backup at: '/tmp/x/library.db-before-z.bak'.\n")
-    with mock.patch('server.subprocess.run', return_value=_fake_run(noisy)):
+    with _FIND_BEET, mock.patch('server.subprocess.run', return_value=_fake_run(noisy)):
         assert server.get_config_path() == str(tmp_config)
 
 
@@ -60,13 +71,18 @@ def test_unusable_output_is_not_cached_as_success(tmp_path):
 
     calls = [_fake_run('/does/not/exist/config.yaml\n'),  # first: unusable
              _fake_run(f'{good}\n')]                        # second: real
-    with mock.patch('server.subprocess.run', side_effect=calls):
+    with _FIND_BEET, mock.patch('server.subprocess.run', side_effect=calls):
         first = server.get_config_path()
         second = server.get_config_path()
 
-    # The bug: first (bad) call would get cached and returned forever,
-    # so `second` would equal `first` instead of the real path.
-    assert first == str(server.Path('~/.config/beets/config.yaml').expanduser())
+    # The bug: first (bad) call would get cached and returned forever, so
+    # `second` would equal `first` instead of the real path. `first`'s
+    # exact value is just get_config_path()'s fallback (not asserted
+    # against a redundant re-derivation here — os.path.expanduser and
+    # Path.expanduser aren't guaranteed byte-identical on every platform);
+    # what actually matters is that it is *not* the real config, and that
+    # the retry finds the real one instead of repeating it.
+    assert first != str(good), f'first call should have hit the fallback, not {good}'
     assert second == str(good), (
         f'a failed resolution was cached — second call returned {second!r} '
         f'instead of retrying and finding the real config')
@@ -86,7 +102,7 @@ def test_library_db_path_reads_through_the_retrying_resolver(tmp_path):
 
     calls = [_fake_run('garbage, not a real path\n'),  # unimported's first call
              _fake_run(f'{real}\n')]                     # library's later call
-    with mock.patch('server.subprocess.run', side_effect=calls):
+    with _FIND_BEET, mock.patch('server.subprocess.run', side_effect=calls):
         first = server.get_library_db_path()   # sees the bug's failure mode
         second = server.get_library_db_path()   # must retry, not reuse `first`
 

@@ -6,7 +6,7 @@ on:
     branches: [master]
 
 jobs:
-  test_importsession:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,6 +14,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -24,16 +28,48 @@ jobs:
         # run here should mean "this PR broke something," not "beets
         # shipped a new release." See .github/workflows/beets-canary.yml
         # for the latter.
-        run: pip install beets==2.13.1 flask
+        run: pip install beets==2.13.1 flask playwright
 
-      - name: Run test_importsession.py
-        run: python test_importsession.py
+      - name: Install Playwright's Chromium
+        # --with-deps pulls the system libraries Chromium needs on a bare
+        # runner (fonts, codecs, etc.) — without it, test_smoke.py fails
+        # to launch the browser, not to find a bug.
+        run: playwright install --with-deps chromium
 
-      - name: Run test_transcode.py
-        run: python test_transcode.py
+      # Cheapest/most self-contained first; test_smoke.py (real browser,
+      # real import, real server) last since it's the slowest by far.
+      - name: Run test_libops.py
+        run: python test_libops.py
+
+      - name: Run test_config_path.py
+        run: python test_config_path.py
+
+      - name: Run test_filter.py
+        run: python test_filter.py
+
+      - name: Run test_queue.py
+        run: python test_queue.py
+
+      - name: Run test_scope.py
+        run: python test_scope.py
+
+      - name: Run test_traktor.py
+        run: python test_traktor.py
 
       - name: Run test_jobs.py
         run: python test_jobs.py
 
       - name: Run test_playback.py
         run: python test_playback.py
+
+      - name: Run test_transcode.py
+        run: python test_transcode.py
+
+      - name: Run test_importsession.py
+        run: python test_importsession.py
+
+      - name: Run test_usb_mirror.py
+        run: python test_usb_mirror.py
+
+      - name: Run test_smoke.py
+        run: python test_smoke.py
