@@ -2049,8 +2049,20 @@ function playAt(i){queueIdx=i;playCurrent();}
 function playCurrent(){
   const a=document.getElementById('player-audio'),t=queue[queueIdx];
   if(!t)return stopPlayback();
-  a.src='/stream/'+t.id;
-  a.play().catch(()=>{});  // a failed load reports itself through the error event
+  const url='/stream/'+t.id;
+  // A tiny ranged check before handing the URL to <audio>: its error event
+  // carries a generic MediaError code, not the server's actual reason, so a
+  // 404 ("file is missing from disk") used to get reported as "no decoder"
+  // — true for a codec gap, misleading for everything else. A genuine decode
+  // failure still reaches <audio>'s own 'error' listener below unchanged.
+  fetch(url,{headers:{Range:'bytes=0-0'}}).then(r=>{
+    if(r.ok){ a.src=url; a.play().catch(()=>{}); return; }
+    return r.json().catch(()=>({})).then(d=>{
+      const m=document.getElementById('player-meta');
+      m.className='player-meta err';
+      m.textContent='Cannot play this '+(t.format||'file')+' — '+(d.error||('HTTP '+r.status));
+    });
+  });
   setNowPlaying(t);
   renderPlayer();
 }
