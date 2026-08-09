@@ -188,60 +188,96 @@ def list_volumes() -> list:
 
 
 @functools.lru_cache(maxsize=1)
+def _resolve_config_path() -> str:
+    """The real work behind get_config_path() — raises on any failure so
+    lru_cache never remembers a bad answer (see get_config_path() for why
+    that matters). Only a path this function actually returns is trusted
+    enough to cache for the process's lifetime.
+    """
+    r = subprocess.run(
+        [find_beet(), 'config', '--path'],
+        capture_output=True, text=True, timeout=5
+    )
+    # beets >= 2.13 can run one-time schema migrations as a side effect of
+    # ANY invocation against a library that hasn't been opened this way
+    # before (including a brand-new one — every fresh beetsGUI install hits
+    # this on its very first request) — and prints "Created database
+    # backup at: ..." lines to *stdout*, not stderr, ahead of the path.
+    # `.strip()` alone doesn't drop them; take the first line only, and
+    # verify it's a real file before trusting it (#12).
+    lines = r.stdout.splitlines()
+    path = lines[0].strip() if lines else ''
+    if r.returncode != 0 or not path or not os.path.isfile(path):
+        raise RuntimeError(
+            f'beet config --path did not return a usable path: '
+            f'rc={r.returncode} stdout={r.stdout!r} stderr={r.stderr!r}')
+    return path
+
+
 def get_config_path() -> str:
     """Find the beets config file via 'beet config --path'.
 
-    Cached for the life of the process: this used to shell out on every
-    /library request (~700ms measured — `beet` is a Python CLI wrapper that
-    imports the whole beets package plus every enabled plugin on each
-    invocation), which dwarfed the actual query time (~6ms) by two orders
-    of magnitude. The config path doesn't move while this server is
-    running, same assumption `importsession.get_library()` already makes
-    about the Library object itself.
+    The successful result is cached for the life of the process: this used
+    to shell out on every /library request (~700ms measured — `beet` is a
+    Python CLI wrapper that imports the whole beets package plus every
+    enabled plugin on each invocation), which dwarfed the actual query time
+    (~6ms) by two orders of magnitude. The config path doesn't move while
+    this server is running, same assumption `importsession.get_library()`
+    already makes about the Library object itself.
+
+    A *failed* resolution is deliberately never cached (see
+    _resolve_config_path()) — retried on every call instead, at the ~700ms
+    cost, until it succeeds. The alternative (this app's actual behavior
+    until #12 found it live) is worse: one noisy first call permanently
+    misdirects every /library-family read to ~/.config/beets — the user's
+    real library — for the rest of the server's life, with no error, just
+    quietly wrong or empty results.
     """
     try:
-        r = subprocess.run(
-            [find_beet(), 'config', '--path'],
-            capture_output=True, text=True, timeout=5
-        )
-        if r.returncode == 0:
-            return r.stdout.strip()
+        return _resolve_config_path()
     except Exception:
-        pass
-    return os.path.expanduser('~/.config/beets/config.yaml')
+        return os.path.expanduser('~/.config/beets/config.yaml')
 
 
-@functools.lru_cache(maxsize=1)
+@functools.lru_cache(maxsize=2)  # two keys read this way: library, directory
+def _resolve_config_key(key: str) -> str:
+    """A top-level `key: value` line from config.yaml — raises on failure,
+    same contract as _resolve_config_path() and for the same reason: this
+    reads *through* _resolve_config_path() directly, never through
+    get_config_path()'s swallowed fallback, so a config.yaml that hasn't
+    resolved correctly yet can't get misread as `~/.config/beets/config.yaml`
+    (which may well exist, parse fine, and contain a real — but wrong —
+    `library:`/`directory:` line of its own) and have *that* wrong answer
+    cached forever by this function's own lru_cache.
+    """
+    config_path = _resolve_config_path()
+    for line in Path(config_path).read_text().splitlines():
+        m = re.match(rf'^{key}:\s*(.+)$', line.strip())
+        if m:
+            return os.path.expanduser(m.group(1).strip().strip('\'"'))
+    raise ValueError(f'no {key}: key in {config_path}')
+
+
 def get_library_db_path() -> str:
     """Find the beets library.db path from the 'library:' key in config.yaml.
 
-    Cached alongside get_config_path() for the same reason — same process
-    lifetime, same "doesn't move while we're running" assumption.
+    Retried until _resolve_config_key() actually succeeds, same as
+    get_config_path() — see that docstring for why a failure must never be
+    cached here.
     """
-    config_path = get_config_path()
     try:
-        for line in Path(config_path).read_text().splitlines():
-            m = re.match(r'^library:\s*(.+)$', line.strip())
-            if m:
-                return os.path.expanduser(m.group(1).strip().strip('\'"'))
+        return _resolve_config_key('library')
     except Exception:
-        pass
-    return os.path.expanduser('~/.config/beets/library.db')
+        return os.path.expanduser('~/.config/beets/library.db')
 
 
-@functools.lru_cache(maxsize=1)
 def get_library_directory() -> str:
     """The beets `directory:` key from config.yaml — same parse as
     get_library_db_path(), same cache lifetime assumption."""
-    config_path = get_config_path()
     try:
-        for line in Path(config_path).read_text().splitlines():
-            m = re.match(r'^directory:\s*(.+)$', line.strip())
-            if m:
-                return os.path.expanduser(m.group(1).strip().strip('\'"'))
+        return _resolve_config_key('directory')
     except Exception:
-        pass
-    return os.path.expanduser('~/Music')
+        return os.path.expanduser('~/Music')
 
 
 def resolve_item_path(raw) -> str:
