@@ -533,6 +533,11 @@ def test_unicode_and_edge_case_metadata():
     string through the real pipeline — tags -> /unimported -> import
     decision (asis, so the tag is what lands) -> /library free-text search.
     """
+    import locale, sys as _sys
+    print(f'DEBUG env: fsenc={_sys.getfilesystemencoding()!r} '
+          f'prefenc={locale.getpreferredencoding()!r} '
+          f'LANG={os.environ.get("LANG")!r} LC_ALL={os.environ.get("LC_ALL")!r}',
+          flush=True)
     tmp = Path(tempfile.mkdtemp(prefix='beetsgui-unicode-'))
     beetsdir = tmp / 'beets'
     beetsdir.mkdir()
@@ -582,6 +587,7 @@ def test_unicode_and_edge_case_metadata():
                     decide(event, choice='asis')
 
             rows = albums_in(beetsdir)
+            print(f'DEBUG {label}: artist={artist!r} rows={rows!r}', flush=True)
             assert (artist, album) in rows, (label, artist, album, rows)
 
             # /library free-text search must find it by a substring of the
@@ -590,6 +596,7 @@ def test_unicode_and_edge_case_metadata():
                     f'{BASE}/library?q={urllib.parse.quote(needle)}',
                     timeout=30) as r:
                 found = json.load(r)
+            print(f'DEBUG {label}: needle={needle!r} found={found!r}', flush=True)
             assert found['ok'], (label, found)
             assert any(a['albumartist'] == artist for a in found['albums']), \
                 (label, needle, found['albums'])
