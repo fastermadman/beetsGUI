@@ -10,17 +10,39 @@ Local web app for [beets](https://beets.io) as a Safari Web App on macOS.
 `server.py` (Flask, port 1612) + `beetsgui.html` (single file, no build
 step, no npm). Never assume a build/bundle step exists — there isn't one.
 
-## Local beets version must match CI's pin (#47)
+## Local dev environment must match CI's pins (#47, #85)
 
-CI (`.github/workflows/test.yml`) pins `beets==2.13.1` deliberately — "a red
-run here should mean this PR broke something, not beets shipped a new
-release." Check your local install matches before trusting any local test
-result: `pipx runpip beets show beets`. This bit hard once already: an
-entire session's worth of local "all green" runs were against beets 2.11.0,
-and merging on that basis shipped a real bug (#12/config-path, below) that
-only exists on 2.13+. If a local run and CI disagree, assume the version
-mismatch first, not a flaky test. To reinstall the pinned version:
-`pipx runpip beets install beets==2.13.1`.
+CI (`.github/workflows/test.yml`) pins `beets==2.13.1` and Python `3.12`
+deliberately — "a red run here should mean this PR broke something, not
+beets shipped a new release." Check both before trusting any local test
+result:
+
+```
+pipx list                              # look for "beets 2.13.1, installed using Python 3.12.x"
+```
+
+If either is off, rebuild rather than patch around it — the venv holds
+nothing but installed packages, so this is safe and cheap:
+
+```
+pipx uninstall beets
+pipx install --python python3.12 beets==2.13.1
+pipx inject beets flask playwright
+~/.local/pipx/venvs/beets/bin/python -m playwright install chromium
+```
+
+This bit hard, twice, in the same session:
+1. An entire session's worth of local "all green" runs were against beets
+   2.11.0 (pipx had silently drifted to whatever `python3` was newest at
+   install time). Merging on that basis shipped a real bug (#12/config-path,
+   below) that only exists on 2.13+.
+2. `pipx runpip beets install beets==X` (upgrading the package without
+   `pipx install`/`pipx reinstall`) changes what's actually installed but
+   leaves `pipx list`'s own version label stale — don't trust that label
+   alone; `pipx runpip beets show beets` reads the real installed version.
+
+If a local run and CI disagree, assume the version mismatch first, not a
+flaky test.
 
 ## Non-negotiable safety rule
 
@@ -110,25 +132,42 @@ mocked reproduction; it doesn't depend on real migration timing.
   actual call sites (read the onclick handler through to the fetch/postJSON
   call) before concluding something is unused.
 - A local test suite that's all green proves nothing if it ran against the
-  wrong beets version — see the pin note above. This shipped a real bug to
-  `master` for about 20 minutes before CI caught it.
+  wrong beets/Python version — see the pin note above. This shipped a real
+  bug to `master` for about 20 minutes before CI caught it.
+- `find_beet()` in `server.py` checks hardcoded macOS/Homebrew/pipx paths
+  first, falling back to a `which beet` subprocess call only if none of
+  them exist. That fallback is dead weight on a dev Mac (one of the
+  hardcoded paths always exists) but is exactly what runs on a bare Ubuntu
+  CI box. If you mock `subprocess.run` broadly in a test that goes through
+  `find_beet()` (directly or via `get_config_path()`), that fallback call
+  silently consumes one of your staged mock responses on CI while never
+  running at all locally — a test can pass on every dev machine and still
+  fail in CI for a reason that has nothing to do with the thing being
+  tested (`test_config_path.py`'s own history). Patch `server.find_beet`
+  directly in tests that mock `subprocess.run` near it, don't rely on
+  local PATH/candidate-file layout to keep the mock call count predictable.
+- A CI failure's traceback and your own `print(..., flush=True)` debug
+  lines can appear **out of chronological order** in `gh run view --log` —
+  stdout and stderr are two different streams that the log collector
+  interleaves by arrival time, not execution order. Don't debug based on
+  the apparent print order in the log; trust call counts/values, not
+  sequence, unless everything is on the same stream.
 
 ## Testing
 
 12 suites, all `test_*.py` at repo root, each runnable standalone:
 `~/.local/pipx/venvs/beets/bin/python test_<name>.py`. Most need `ffmpeg`
-on PATH; check your beets version matches CI's pin first (see above).
-`test_smoke.py` drives a real headless Chromium via Playwright
-(`pipx inject beets playwright && playwright install chromium`) — it's the
-only one that exercises `beetsgui.html`'s actual DOM/JS rather than the
-HTTP API, and it has already caught a bug (a format preset referencing a
-field that doesn't exist) that every API-level test missed. If you touch
-UI behavior, extend this one, not just the API-level tests.
+on PATH; check your beets/Python version matches CI's pin first (see
+above). `test_smoke.py` drives a real headless Chromium via Playwright —
+it's the only one that exercises `beetsgui.html`'s actual DOM/JS rather
+than the HTTP API, and it has already caught a bug (a format preset
+referencing a field that doesn't exist) that every API-level test missed.
+If you touch UI behavior, extend this one, not just the API-level tests.
 
-CI only runs `test_importsession.py`/`test_transcode.py`/`test_jobs.py`/
-`test_playback.py` (`.github/workflows/test.yml`) — the other 8, including
-`test_smoke.py`, are local-only. A change that only breaks one of those
-won't go red in CI; run the full set locally before trusting a PR.
+All 12 run in CI (`.github/workflows/test.yml`, since #85/#86) — cheapest/
+most self-contained first, `test_smoke.py` last (real browser + real
+import + real server, by far the slowest). If you add a 13th `test_*.py`,
+add its step to that workflow too, or it silently won't gate merges.
 
 No `fd` or `xld` dependency — both were removed from what the app actually
 calls; don't reintroduce a shell-out to either without a documented reason.
