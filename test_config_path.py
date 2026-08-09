@@ -60,9 +60,13 @@ def test_unusable_output_is_not_cached_as_success(tmp_path):
 
     calls = [_fake_run('/does/not/exist/config.yaml\n'),  # first: unusable
              _fake_run(f'{good}\n')]                        # second: real
-    with mock.patch('server.subprocess.run', side_effect=calls):
+    with mock.patch('server.subprocess.run', side_effect=calls) as m:
         first = server.get_config_path()
+        print(f'DEBUG after first call: subprocess.run call_count={m.call_count} '
+              f'first={first!r}', flush=True)
         second = server.get_config_path()
+        print(f'DEBUG after second call: subprocess.run call_count={m.call_count} '
+              f'second={second!r}', flush=True)
 
     # The bug: first (bad) call would get cached and returned forever, so
     # `second` would equal `first` instead of the real path. `first`'s
