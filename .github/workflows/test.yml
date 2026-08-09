@@ -53,6 +53,9 @@ jobs:
       - name: Run test_scope.py
         run: python test_scope.py
 
+      - name: Run test_pick.py
+        run: python test_pick.py
+
       - name: Run test_traktor.py
         run: python test_traktor.py
 

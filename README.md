@@ -105,6 +105,10 @@ tags as-is; duplicates use `K`/`S`/`M`/`R` for keep/skip/merge/replace). One
 import runs at a time; closing the tab mid-import is safe — reopening the app
 rejoins whatever is still running.
 
+Drag a folder (or zip/tar) from Finder anywhere onto the "Scan for new music"
+or "Music path" section to fill its path field — no dedicated drop box, the
+whole section is the target.
+
 Duplicates are ranked by quality before you're ever asked: a lossy copy of an
 album already in the library is skipped automatically, a lossless copy
 recommends replacing the existing one, and equal-quality duplicates still ask
