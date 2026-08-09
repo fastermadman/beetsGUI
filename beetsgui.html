@@ -500,9 +500,9 @@
             <button class="btn btn-primary" onclick="runWrite()">Check tags to write</button>
           </div>
           <div class="btn-row">
-            <button class="btn" onclick="startSync('mbsync')">mbsync <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Network call per track/album — can be slow on a real library.</span></span></button>
-            <button class="btn" onclick="startSync('bpsync')">bpsync</button>
-            <button class="btn" onclick="showMissing()">missing</button>
+            <button class="btn" onclick="startSync('mbsync')">Re-fetch from MusicBrainz <span class="mono">(mbsync)</span> <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Network call per track/album — can be slow on a real library.</span></span></button>
+            <button class="btn" onclick="startSync('bpsync')">Re-fetch from Beatport <span class="mono">(bpsync)</span></button>
+            <button class="btn" onclick="showMissing()">Find tracks missing from albums <span class="mono">(missing)</span></button>
           </div>
         </div>
       </details>
