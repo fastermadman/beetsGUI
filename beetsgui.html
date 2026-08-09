@@ -40,11 +40,27 @@
       --red-bg:#fce8e8; --yellow-bg:#fdf5e0; --green-bg:#e8f4ec;
     }
   }
+  /* Explicit Light/Dark from the Appearance setting (#71) — outranks the OS
+     preference above by selector specificity ([data-theme] beats :root),
+     so it wins in both directions regardless of what "system" is set to.
+     "System" leaves data-theme unset and falls through to the @media rule. */
+  html[data-theme="light"] {
+    --bg:#f5f4f0; --bg2:#eceae4; --bg3:#e2e0d8; --bg4:#d8d6ce;
+    --text:#1a1918; --text2:#5a5856; --text3:#8a8886;
+    --border:#d0cec6; --border2:#c4c2ba;
+    --red-bg:#fce8e8; --yellow-bg:#fdf5e0; --green-bg:#e8f4ec;
+  }
+  html[data-theme="dark"] {
+    --bg:#0f0f0f; --bg2:#1a1a1a; --bg3:#252525; --bg4:#2e2e2e;
+    --text:#e8e6e1; --text2:#a09e99; --text3:#6a6866;
+    --border:#2e2e2e; --border2:#3a3a3a;
+    --red-bg:#2a1515; --yellow-bg:#252010; --green-bg:#152a1e;
+  }
   html,body { height:100%; background:var(--bg); color:var(--text); font-family:var(--font-ui); font-weight:400; font-size:13px; line-height:1.6; }
   .app { display:flex; flex-direction:column; height:100vh; max-width:860px; margin:0 auto; }
   .app-header { display:flex; align-items:baseline; gap:0.75rem; padding:1rem 1.25rem 0; border-bottom:1px solid var(--border); flex-shrink:0; }
   .job-queue-badge { align-self:center; margin-left:auto; font-size:11px; color:var(--text3); border:1px solid var(--border); border-radius:999px; padding:0.15rem 0.6rem; }
-  .prefs-btn { align-self:center; background:none; border:none; color:var(--text3); cursor:pointer; font-size:15px; margin-left:0.5rem; padding:0.2rem 0.3rem; transition:color 0.1s; }
+  .prefs-btn { align-self:center; background:none; border:none; color:var(--text3); cursor:pointer; font-size:15px; margin-left:auto; padding:0.2rem 0.3rem; transition:color 0.1s; }
   .job-queue-panel { padding:0.4rem 1.25rem; border-top:1px solid var(--border); font-size:11px; color:var(--text3); flex-shrink:0; }
   .job-queue-row { display:flex; align-items:center; gap:0.4rem; padding:0.15rem 0; }
   .job-queue-row .kind { flex:1; }
@@ -153,6 +169,15 @@
   .action-scope { color:var(--text2); flex-basis:100%; font-size:11px; letter-spacing:0.04em; }
   .action-scope b { color:var(--accent); font-weight:500; }
   .lib-row-link:hover .lib-row-title { color:var(--accent); }
+  /* Context menu (#71) — one floating element, reused by every row type.
+     The bar down the left of .ctx-target is the same promise the scope line
+     makes: what the menu is about to touch is visible while it's open. */
+  .ctx-menu { position:fixed; z-index:120; min-width:190px; padding:0.25rem 0; background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius); box-shadow:0 8px 28px rgba(0,0,0,0.4); }
+  .ctx-menu button { display:block; width:100%; text-align:left; background:none; border:none; color:var(--text2); cursor:pointer; font-family:inherit; font-size:12px; padding:0.35rem 0.9rem; }
+  .ctx-menu button:hover { background:var(--bg3); color:var(--text); }
+  .ctx-menu button.danger:hover { color:var(--red); }
+  .ctx-menu hr { border:none; border-top:1px solid var(--border); margin:0.25rem 0; }
+  .lib-row.ctx-target { box-shadow:inset 2px 0 0 var(--accent); }
   /* Player: a sibling of .content, so playback survives a tab switch. The
      <audio> keeps its native controls — that transport is the seek bar,
      the volume slider and the elapsed/total readout, for no code. It's
@@ -171,8 +196,11 @@
   .player-queue .lib-row:hover { background:var(--bg3); }
   @media (prefers-color-scheme:light) {
     .player audio { color-scheme:light; }
-    .player-queue { box-shadow:0 8px 28px rgba(0,0,0,0.18); }
+    .player-queue,.ctx-menu { box-shadow:0 8px 28px rgba(0,0,0,0.18); }
   }
+  html[data-theme="light"] .player audio { color-scheme:light; }
+  html[data-theme="dark"] .player audio { color-scheme:dark; }
+  html[data-theme="light"] .player-queue,html[data-theme="light"] .ctx-menu { box-shadow:0 8px 28px rgba(0,0,0,0.18); }
   /* Indeterminate progress cue for a running background job — the app can't
      show a real percentage (mbsync/bpsync don't report counts at all), so
      this signals "still alive" rather than "how far along." */
@@ -222,6 +250,15 @@
   #splash img { width:96px;height:96px;border-radius:20px;box-shadow:0 4px 24px rgba(0,0,0,0.4); }
   #splash .splash-title { font-size:18px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:var(--accent); }
 </style>
+<script>
+// Applied before <body> paints anything, so a Dark/Light choice never
+// flashes the OS default first. "system" (or nothing saved yet) leaves
+// data-theme unset — the @media(prefers-color-scheme) rule takes it from there.
+(function(){
+  var t=localStorage.getItem('theme');
+  if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;
+})();
+</script>
 </head>
 <body>
 <div id="splash">
@@ -656,6 +693,14 @@
     </div>
     <div class="prefs-body">
       <div class="section">
+        <div class="section-title">Appearance</div>
+        <div class="check-group" style="flex-direction:row;gap:1.1rem;">
+          <label class="radio-item"><input type="radio" name="theme" value="system" onchange="setTheme(this.value)"><span>System</span></label>
+          <label class="radio-item"><input type="radio" name="theme" value="light" onchange="setTheme(this.value)"><span>Light</span></label>
+          <label class="radio-item"><input type="radio" name="theme" value="dark" onchange="setTheme(this.value)"><span>Dark</span></label>
+        </div>
+      </div>
+      <div class="section">
         <div class="section-title">Library</div>
         <div class="field"><label>directory — library path</label><input type="text" id="cfg-dir" placeholder="~/Music/Library" oninput="buildConfig()"></div>
         <div class="field"><label>library — database file</label><input type="text" id="cfg-lib" placeholder="~/Music/library.db" oninput="buildConfig()"></div>
@@ -834,6 +879,7 @@
     </div>
   </div>
 
+  <div class="ctx-menu" id="ctx-menu" style="display:none"></div>
   <div class="player-queue" id="player-queue" style="display:none"></div>
   <div class="player" id="player-bar" style="display:none">
     <div class="player-now">
@@ -867,6 +913,18 @@ function switchTab(name,btn){
   activeTab=name;
   if(name==='library'){buildLibCmd();loadLibrary();}
   if(name==='recover'){loadTraktor();}
+}
+// ⌘O's target. The filter has no single search box — it has condition rows —
+// so "the search input" is the first row's value, or its field when the row is
+// still blank. No rows at all means there is nothing to type into yet.
+function focusFilter(){
+  if(activeTab!=='library')
+    switchTab('library',document.querySelector('.tab-btn[onclick*="library"]'));
+  if(!libFilter.rows.length)addFilterRow();
+  const row=document.querySelector('#filter-rows .filter-row');
+  if(!row)return;
+  const f=row.querySelector('.f-field'),el=f.value?row.querySelector('.f-value'):f;
+  el.focus();el.select();
 }
 
 // ── Recover: most-played tracks from old Traktor files (#42) ────────────────
@@ -946,13 +1004,25 @@ function renderTraktor(data){
          escapeHtml(s.error||s.status)+'</div></div></div>').join('')
       :'<div class="lib-empty">Every source file was read.</div>');
 }
+// ── Appearance (#71) ─────────────────────────────────────────────────────────
+function setTheme(t){
+  if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;
+  else delete document.documentElement.dataset.theme;
+  localStorage.setItem('theme',t);
+}
 function openPrefs(){
   buildConfig();
+  const saved=localStorage.getItem('theme')||'system';
+  document.querySelector('input[name="theme"][value="'+saved+'"]').checked=true;
   document.getElementById('prefs-dialog').showModal();
 }
 function closePrefs(){document.getElementById('prefs-dialog').close();}
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key===','){e.preventDefault();openPrefs();}
+  // ⌘O — jump to the Library filter from any tab (#71). Not ⌘F: find-in-page
+  // stays the browser's, and ⌘O is the key this user already reaches for to
+  // search in Obsidian.
+  if((e.metaKey||e.ctrlKey)&&(e.key==='o'||e.key==='O')){e.preventDefault();focusFilter();}
 });
 function setCmd(cmd){document.getElementById('cmd-out').value=cmd;}
 function copyCmd(){
@@ -1659,19 +1729,28 @@ function currentQuery(){return libFilterRaw.trim();}
 // and Artists views have no item id to send.
 let libSel=new Set();
 
+// Right-clicking a row outside the selection makes that row the scope (#71),
+// so the sections a menu item opens are talking about the same thing the menu
+// named. It outranks the selection while it lasts, and lasts until the user
+// ticks a checkbox or the list reloads.
+let rowScope=null;   // {item:{ids|query}, album:{ids|query}|null, label:'…'}
+
 function scopeBody(){
+  if(rowScope)return {scope:rowScope.item};
   return libSel.size?{scope:{ids:[...libSel]}}:{scope:{query:currentQuery()}};
 }
 // Cover art is the one album-level action. A track selection maps to the
 // albums those tracks belong to, which is both what the user means and the
 // only reading that agrees with the Albums view (which groups the same way).
 function albumScopeBody(){
+  if(rowScope)return {scope:rowScope.album};
   if(!libSel.size)return {scope:{query:currentQuery()}};
   const ids=[...new Set(libTracks.filter(t=>libSel.has(t.id))
                                  .map(t=>t.album_id).filter(Boolean))];
   return {scope:{ids}};
 }
 function scopeLabel(){
+  if(rowScope)return rowScope.label;
   if(libSel.size)return libSel.size+' selected track'+(libSel.size===1?'':'s');
   return currentQuery()?'everything matching the filter':'your whole library';
 }
@@ -1681,7 +1760,16 @@ function renderScope(){
   document.querySelectorAll('.scope-line').forEach(el=>el.innerHTML=label);
 }
 function toggleSel(id,on){
+  // Touching a checkbox says "the selection is what I mean" — that outranks
+  // whatever row was last right-clicked.
+  setRowScope(null);
   if(on)libSel.add(id); else libSel.delete(id);
+  renderScope();
+}
+function setRowScope(s,el){
+  rowScope=s;
+  document.querySelectorAll('.lib-row.ctx-target').forEach(r=>r.classList.remove('ctx-target'));
+  if(s&&el)el.classList.add('ctx-target');
   renderScope();
 }
 function openAction(id){
@@ -1726,7 +1814,7 @@ const LIB_MODES={
   artists:{url:'/library/artists', key:'artists', noun:'artist',
            sorts:[['artist','Name'],['tracks','Track count'],['added','Date added']]},
 };
-let libMode='albums',libDir='asc',libLoadSeq=0,libTracks=[];
+let libMode='albums',libDir='asc',libLoadSeq=0,libTracks=[],libAlbums=[];
 
 function setLibMode(){
   libMode=document.querySelector('input[name="lib-mode"]:checked').value;
@@ -1772,6 +1860,7 @@ function loadLibrary(){
   // Selection is per-result-set: ids from a list the user can no longer see
   // would be a scope nothing on screen explains.
   libSel.clear();
+  rowScope=null;
   renderScope();
   const mode=LIB_MODES[libMode],seq=++libLoadSeq;
   fetch(mode.url+'?q='+encodeURIComponent(q)+'&limit=200'+
@@ -1782,7 +1871,7 @@ function loadLibrary(){
 }
 function renderLibrary(data,q,mode){
   const el=document.getElementById('lib-results'),count=document.getElementById('lib-count');
-  libTracks=[];
+  libTracks=[];libAlbums=[];
   if(!data.ok){
     count.textContent='';
     // The advanced query box can now produce a query beets rejects, so a
@@ -1801,11 +1890,12 @@ function renderLibrary(data,q,mode){
   }
   count.textContent=data.total+' '+mode.noun+(data.total===1?'':'s');
   if(libMode==='tracks')libTracks=rows;
+  if(libMode==='albums')libAlbums=rows;
   el.innerHTML=rows.map(libMode==='albums'?albumRow:libMode==='tracks'?trackRow:artistRow).join('');
   markPlayingRow();
 }
-function albumRow(a){
-  return '<div class="lib-row">'+
+function albumRow(a,i){
+  return '<div class="lib-row" oncontextmenu="albumMenu(event,'+i+')">'+
     '<div class="lib-row-title" style="flex:1;min-width:0;"><span class="lib-row-artist">'+escapeHtml(a.albumartist||'Unknown artist')+'</span>'+
     ' — '+escapeHtml(a.album||'Untitled')+
     (a.year?' <span class="lib-row-year">('+a.year+')</span>':'')+'</div>'+
@@ -1816,7 +1906,7 @@ function albumRow(a){
     '</div></div>';
 }
 function trackRow(t,i){
-  return '<div class="lib-row" data-track="'+t.id+'">'+
+  return '<div class="lib-row" data-track="'+t.id+'" oncontextmenu="trackMenu(event,'+i+')">'+
     '<input class="lib-row-check" type="checkbox" title="Select for actions" '+
       'onchange="toggleSel('+t.id+',this.checked)">'+
     '<div class="lib-row-title" style="flex:1;min-width:0;"><span class="lib-row-artist">'+escapeHtml(t.artist||'Unknown artist')+'</span>'+
@@ -1834,6 +1924,89 @@ function artistRow(a){
     '<div class="lib-row-meta">'+a.albums+' album'+(a.albums===1?'':'s')+' · '+a.tracks+' track'+(a.tracks===1?'':'s')+'</div>'+
     '</div>';
 }
+// ── Context menus (#71) ───────────────────────────────────────────────────────
+// One reused element for every row type. Items are [label, fn] pairs — a third
+// truthy element marks a destructive one, null is a separator. Every item calls
+// a function that already existed: right-click is a second way to reach the
+// actions, never a second implementation of them.
+function showMenu(e,items){
+  e.preventDefault();
+  const m=document.getElementById('ctx-menu');
+  m.innerHTML=items.map((it,i)=>it
+    ?'<button data-i="'+i+'"'+(it[2]?' class="danger"':'')+'>'+escapeHtml(it[0])+'</button>'
+    :'<hr>').join('');
+  m.onclick=ev=>{
+    const b=ev.target.closest('button');
+    if(!b)return;
+    closeMenu();
+    items[+b.dataset.i][1]();
+  };
+  m.style.left='0';m.style.top='0';m.style.display='block';
+  // Placed after it's laid out, so a menu opened near the right or bottom
+  // edge grows back towards the cursor instead of off-screen.
+  const r=m.getBoundingClientRect();
+  m.style.left=Math.max(4,Math.min(e.clientX,window.innerWidth-r.width-4))+'px';
+  m.style.top=Math.max(4,Math.min(e.clientY,window.innerHeight-r.height-4))+'px';
+}
+function closeMenu(){document.getElementById('ctx-menu').style.display='none';}
+
+function trackMenu(e,i){
+  const t=libTracks[i];
+  if(!t)return;
+  // Finder semantics: right-clicking inside the selection acts on the whole
+  // selection, a row outside it becomes the scope on its own.
+  setRowScope(libSel.has(t.id)?null:{
+    item:{ids:[t.id]},
+    album:t.album_id?{ids:[t.album_id]}:null,
+    label:trackLabel(t),
+  },e.currentTarget);
+  const items=[
+    ['Fix field…',()=>openAction('sec-meta')],
+    ['Re-fetch from MusicBrainz',()=>startSync('mbsync')],
+  ];
+  // Cover art is album-level: a track beets has filed under no album has
+  // nothing to fetch art for.
+  if(!rowScope||rowScope.album)items.push(['Fetch art',()=>startArtwork('fetch')]);
+  items.push(null,
+    ['Copy path',()=>copyText(t.path,'path')],
+    ['Copy "Artist – Title"',()=>copyText(trackLabel(t),'name')],
+    ['Reveal in Finder',()=>revealTrack(t.id)],
+    null,
+    ['Remove…',()=>doRemove(false),true]);
+  showMenu(e,items);
+}
+function albumMenu(e,i){
+  const a=libAlbums[i];
+  if(!a)return;
+  // An album row has no checkbox to be part of a selection, so the row is
+  // always the scope. Album-level actions take the album id; track-level ones
+  // take the items in it — `album_id:` is a fast numeric query in beets.
+  setRowScope({
+    item:{query:'album_id:'+a.id},
+    album:{ids:[a.id]},
+    label:(a.albumartist||'Unknown artist')+' — '+(a.album||'Untitled'),
+  },e.currentTarget);
+  showMenu(e,[
+    ['Fetch art',()=>startArtwork('fetch')],
+    ['Fix field…',()=>openAction('sec-meta')],
+    ['Re-fetch from MusicBrainz',()=>startSync('mbsync')],
+    null,
+    ['Remove…',()=>doRemove(false),true],
+  ]);
+}
+function copyText(text,what){
+  if(!text){renderResult('<div class="lib-empty">Nothing to copy.</div>');return;}
+  navigator.clipboard.writeText(text)
+    .then(()=>renderResult('<div class="alert alert-green">Copied '+what+': '+escapeHtml(text)+'</div>'))
+    .catch(()=>renderResult('<div class="lib-empty">Could not copy to the clipboard.</div>'));
+}
+function revealTrack(id){
+  fetch('/reveal/'+id,{method:'POST'})
+    .then(r=>r.json())
+    .then(d=>{ if(!d.ok)renderResult('<div class="lib-empty">'+escapeHtml(d.error||'Could not reveal the file.')+'</div>'); })
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
+}
+
 function searchArtist(name){
   document.querySelector('input[name="lib-mode"][value="albums"]').checked=true;
   libMode='albums';
@@ -1890,6 +2063,45 @@ function stopPlayback(){
 }
 function toggleQueue(){queueOpen=!queueOpen;renderPlayer();}
 
+// ── Queue editing (#71) ──────────────────────────────────────────────────────
+// The first thing in the app that changes the queue after it's built — until
+// now the only way to remove anything was stopPlayback(), which clears all of
+// it. queueIdx follows the track it points at: what's playing must not change
+// because something else moved.
+function queueMove(i,d){
+  const j=i+d;
+  if(j<0||j>=queue.length)return;   // one step at a time, so this is a swap
+  const [t]=queue.splice(i,1);
+  queue.splice(j,0,t);
+  if(queueIdx===i)queueIdx=j; else if(queueIdx===j)queueIdx=i;
+  renderPlayer();
+}
+function queuePlayNext(i){
+  if(i===queueIdx)return;
+  const [t]=queue.splice(i,1);
+  if(i<queueIdx)queueIdx--;
+  queue.splice(queueIdx+1,0,t);
+  renderPlayer();
+}
+function queueRemove(i){
+  queue.splice(i,1);
+  if(!queue.length)return stopPlayback();
+  if(i!==queueIdx){ if(i<queueIdx)queueIdx--; renderPlayer(); return; }
+  // Removed the track that was playing: the next one takes its place, or the
+  // last one does if that was the end of the queue.
+  if(queueIdx>=queue.length)queueIdx=queue.length-1;
+  playCurrent();
+}
+function queueMenu(e,i){
+  showMenu(e,[
+    ['Play next',()=>queuePlayNext(i)],
+    ['Move up',()=>queueMove(i,-1)],
+    ['Move down',()=>queueMove(i,1)],
+    null,
+    ['Remove from queue',()=>queueRemove(i),true],
+  ]);
+}
+
 // ── macOS media keys / Now Playing (Control Center, Touch Bar, notch
 // widgets like Boring Notch) ─────────────────────────────────────────────
 // All of it runs through the Media Session API — the browser is what talks
@@ -1920,7 +2132,8 @@ function renderPlayer(){
   qEl.style.bottom=(window.innerHeight-bar.getBoundingClientRect().top)+'px';
   qEl.style.display=queueOpen?'block':'none';
   qEl.innerHTML=queue.map((q,i)=>
-    '<div class="lib-row'+(i===queueIdx?' playing':'')+'" onclick="playAt('+i+')">'+
+    '<div class="lib-row'+(i===queueIdx?' playing':'')+'" onclick="playAt('+i+')" '+
+      'oncontextmenu="queueMenu(event,'+i+')">'+
       '<div class="lib-row-title" style="flex:1;min-width:0;">'+escapeHtml(trackLabel(q))+'</div>'+
       '<div class="lib-row-meta">'+fmtDuration(q.length)+'</div></div>').join('');
   markPlayingRow();
@@ -1946,11 +2159,20 @@ document.addEventListener('DOMContentLoaded',function(){
   document.addEventListener('click',function(e){
     if(!queueOpen)return;
     const qEl=document.getElementById('player-queue'),btn=document.getElementById('queue-btn');
-    if(qEl.contains(e.target)||btn.contains(e.target))return;
+    // A context menu opened *from* a queue row counts as inside it — picking
+    // "Move up" shouldn't also dismiss the list you're reordering.
+    if(qEl.contains(e.target)||btn.contains(e.target)||
+       document.getElementById('ctx-menu').contains(e.target))return;
     queueOpen=false;renderPlayer();
   });
+  // Any click, Escape or scroll dismisses the context menu — it's fixed to the
+  // viewport, so a scrolled list would leave it pointing at a different row.
+  document.addEventListener('click',closeMenu);
+  window.addEventListener('scroll',closeMenu,true);
   document.addEventListener('keydown',function(e){
-    if(e.key==='Escape'&&queueOpen){queueOpen=false;renderPlayer();}
+    if(e.key!=='Escape')return;
+    closeMenu();
+    if(queueOpen){queueOpen=false;renderPlayer();}
   });
   window.addEventListener('resize',function(){ if(queueOpen)renderPlayer(); });
 
