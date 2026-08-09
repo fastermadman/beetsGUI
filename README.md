@@ -137,8 +137,10 @@ curl -s -X POST localhost:1612/import/<id>/decide -H 'Content-Type: application/
      -d '{"decision_id":"<from the event>","choice":"apply","candidate":0}'
 ```
 
-`POST /import/<id>/abort` cancels cleanly, and `GET /import/current` returns the
-running import plus its waiting decision, so a reloaded page can rejoin.
+`POST /jobs/<id>/abort` cancels cleanly, and `GET /jobs/current` returns the
+running job plus an import's waiting decision, so a reloaded page can rejoin.
+This route is shared across every job type (import, convert, artwork, sync,
+Traktor scan) — not import-specific despite the old name it used to have.
 An unanswered decision times out after 15 minutes (`BEETSGUI_DECISION_TIMEOUT`)
 and aborts the import rather than blocking the server forever.
 
