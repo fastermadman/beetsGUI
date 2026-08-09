@@ -111,6 +111,16 @@
   .drop-zone.drag-over { background:var(--bg3); border-color:var(--accent2); color:var(--text2); }
   .drop-zone .drop-icon { font-size:20px; margin-bottom:0.25rem; display:block; }
   .drop-zone .drop-hint { font-size:10px; color:var(--text3); margin-top:0.3rem; }
+  label .drop-hint { text-transform:none; letter-spacing:normal; font-weight:400; }
+  /* Section-wide drop targets (#77 follow-up) — no permanent box, just a
+     border that appears and pulses while a file is dragged over. */
+  .drop-target { position:relative; border-radius:var(--radius-lg); transition:background 0.15s; }
+  .drop-target.drag-over { background:var(--bg3); }
+  .drop-target.drag-over::after {
+    content:''; position:absolute; inset:-0.5rem; border:1.5px dashed var(--accent2);
+    border-radius:var(--radius-lg); pointer-events:none; animation:dropPulse 1s ease-in-out infinite;
+  }
+  @keyframes dropPulse { 0%,100% { opacity:0.45; } 50% { opacity:1; } }
   .btn { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); cursor:pointer; font-family:inherit; font-weight:500; font-size:11px; letter-spacing:0.06em; padding:0.4rem 0.75rem; text-transform:uppercase; transition:background 0.1s,border-color 0.1s; white-space:nowrap; }
   .btn:hover { background:var(--bg4); border-color:var(--accent2); }
   .btn-primary { background:var(--accent2); border-color:var(--accent); color:var(--text); }
@@ -127,7 +137,7 @@
   .tip-wrap { position:relative; display:inline-block; }
   .tip-icon { color:var(--text3); cursor:help; font-style:normal; font-size:11px; margin-left:0.3rem; }
   .tip-icon:hover + .tip-box,.tip-icon:focus + .tip-box { display:block; }
-  .tip-box { display:none; position:absolute; bottom:calc(100% + 6px); left:0; z-index:100; background:var(--bg4); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text2); font-size:11px; line-height:1.5; max-width:280px; padding:0.5rem 0.65rem; white-space:normal; pointer-events:none; }
+  .tip-box { display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:100; background:var(--bg4); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text2); font-size:11px; line-height:1.5; max-width:280px; padding:0.5rem 0.65rem; white-space:normal; pointer-events:none; }
   .pre-out { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--accent); font-family:var(--font-mono); font-size:11px; line-height:1.7; max-height:380px; overflow:auto; padding:1rem; white-space:pre; margin-bottom:0.6rem; }
   .lib-results { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); max-height:420px; overflow:auto; margin-bottom:0.6rem; }
   .lib-row { display:flex; align-items:baseline; justify-content:space-between; gap:0.75rem; padding:0.55rem 0.85rem; border-bottom:1px solid var(--border); font-size:12px; }
@@ -278,18 +288,17 @@
     <!-- INBOX -->
     <div id="tab-inbox" class="tab-panel active">
       <div id="first-run-banner" style="display:none;"></div>
-      <div class="section">
+      <div class="section drop-target" id="scan-section">
         <div class="section-title">
           <span>Scan for new music</span>
           <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Matches each file's artist/title against your library — works no matter where a previous copy or move import put the files.</span></span>
         </div>
-        <div class="drop-zone" id="scan-drop"><span class="drop-icon">🔍</span><span>Drag folder here</span><div class="drop-hint">Or type the path below</div></div>
         <div class="field">
-          <label>Path</label>
+          <label>Path <span class="drop-hint">— or drag a folder anywhere in this section</span></label>
           <div class="field-row">
             <div class="field" style="margin-bottom:0"><input type="text" id="scan-path" placeholder="/Volumes/Harddisk/Music"></div>
             <button class="btn btn-sm" onclick="setPath('scan-path','~/Music')">~/Music</button>
-            <button class="btn btn-sm" onclick="promptVolume('scan-path')">Volumes/…</button>
+            <button class="btn btn-sm" onclick="browsePath('scan-path','folder')">Browse…</button>
           </div>
         </div>
         <div class="check-row" id="scan-excl">
@@ -315,24 +324,19 @@
       <hr class="divider">
 
       <div id="import-setup">
-        <div class="section">
+        <div class="section drop-target" id="import-section">
           <div class="section-title">
             <span>Music path</span>
             <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Beets can import .zip and .tar archives directly — no need to unpack manually.</span></span>
           </div>
-          <div class="drop-zone" id="import-drop">
-            <span class="drop-icon">📂</span>
-            <span>Drag folder or zip/tar here</span>
-            <div class="drop-hint">Or type the path below</div>
-          </div>
           <div class="field">
-            <label>Path</label>
+            <label>Path <span class="drop-hint">— or drag a folder/zip/tar anywhere in this section</span></label>
             <div class="field-row">
               <div class="field" style="margin-bottom:0">
                 <input type="text" id="import-path" placeholder="/Volumes/Harddisk/Music" oninput="checkiCloud(this.value)">
               </div>
               <button class="btn btn-sm" onclick="setPath('import-path','~/Music')">~/Music</button>
-              <button class="btn btn-sm" onclick="promptVolume('import-path')">Volumes/…</button>
+              <button class="btn btn-sm" onclick="browsePath('import-path','folder')">Browse…</button>
             </div>
           </div>
           <div id="import-warnings"></div>
@@ -368,7 +372,12 @@
             <label class="check-item"><input type="checkbox" id="import-log" onchange="toggleLog()"><span>Log to file</span></label>
           </div>
           <div id="log-path-wrap" style="display:none; margin-top:0.5rem;">
-            <div class="field"><label>Log file path</label><input type="text" id="import-log-path" value="~/beets-import.log"></div>
+            <div class="field"><label>Log file path</label>
+              <div class="field-row">
+                <div class="field" style="margin-bottom:0"><input type="text" id="import-log-path" value="~/beets-import.log"></div>
+                <button class="btn btn-sm" onclick="browsePath('import-log-path','save')">Browse…</button>
+              </div>
+            </div>
           </div>
         </details>
         <div class="section">
@@ -545,7 +554,12 @@
           <div class="section-title">Find audio files (fd)</div>
           <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">Uses <span class="mono">fd</span> — ignores .Spotlight-V100, .Trashes and other hidden system folders automatically.</div>
           <div class="drop-zone" id="find-drop2"><span class="drop-icon">📁</span><span>Drag folder here</span><div class="drop-hint">Or type the path</div></div>
-          <div class="field"><label>Path</label><input type="text" id="conv-src" placeholder="/Volumes/Harddisk"></div>
+          <div class="field"><label>Path</label>
+            <div class="field-row">
+              <div class="field" style="margin-bottom:0"><input type="text" id="conv-src" placeholder="/Volumes/Harddisk"></div>
+              <button class="btn btn-sm" onclick="browsePath('conv-src','folder')">Browse…</button>
+            </div>
+          </div>
           <div class="btn-row">
             <button class="btn" onclick="findFormat('wav')"><span>Find WAV</span></button>
             <button class="btn" onclick="findFormat('aiff')"><span>Find AIFF</span></button>
@@ -635,7 +649,12 @@
       <div class="section">
         <div class="section-title">Playlists → Lexicon / Traktor</div>
         <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Run this <b>before</b> importing with move — exports your folders as .m3u files so Lexicon and Traktor can relocate them.</div>
-        <div class="field"><label>Path to playlist folders</label><input type="text" id="pl-path" placeholder="/Volumes/Harddisk/OldPlaylists"></div>
+        <div class="field"><label>Path to playlist folders</label>
+          <div class="field-row">
+            <div class="field" style="margin-bottom:0"><input type="text" id="pl-path" placeholder="/Volumes/Harddisk/OldPlaylists"></div>
+            <button class="btn btn-sm" onclick="browsePath('pl-path','folder')">Browse…</button>
+          </div>
+        </div>
         <div class="btn-row">
           <button class="btn btn-primary" onclick="exportPlaylists()"><span>Export folders → .m3u</span></button>
           <button class="btn" onclick="exportM3u('~/Desktop/beets_alle_tracks.txt')"><span>Save tracklist (for Traktor relocation)</span></button>
@@ -650,7 +669,7 @@
           <label>Destination (USB drive)</label>
           <div class="field-row">
             <div class="field" style="margin-bottom:0"><input type="text" id="usb-dest" placeholder="/Volumes/USB"></div>
-            <button class="btn btn-sm" onclick="promptVolume('usb-dest')">Volumes/…</button>
+            <button class="btn btn-sm" onclick="browsePath('usb-dest','folder')">Browse…</button>
           </div>
         </div>
         <div class="field">
@@ -697,7 +716,10 @@
         </div>
         <div class="field">
           <label for="traktor-roots">Folders to search</label>
-          <input type="text" id="traktor-roots" placeholder="~/Documents" value="~/Documents">
+          <div class="field-row">
+            <div class="field" style="margin-bottom:0"><input type="text" id="traktor-roots" placeholder="~/Documents" value="~/Documents"></div>
+            <button class="btn btn-sm" onclick="browsePath('traktor-roots','folders')">Browse…</button>
+          </div>
           <div class="drop-hint">Comma-separated. Add an external drive here later and re-scan — results build up rather than starting over.</div>
         </div>
         <div class="btn-row">
@@ -745,8 +767,18 @@
       </div>
       <div class="section">
         <div class="section-title">Library</div>
-        <div class="field"><label>directory — library path</label><input type="text" id="cfg-dir" placeholder="~/Music/Library" oninput="buildConfig()"></div>
-        <div class="field"><label>library — database file</label><input type="text" id="cfg-lib" placeholder="~/Music/library.db" oninput="buildConfig()"></div>
+        <div class="field"><label>directory — library path</label>
+          <div class="field-row">
+            <div class="field" style="margin-bottom:0"><input type="text" id="cfg-dir" placeholder="~/Music/Library" oninput="buildConfig()"></div>
+            <button class="btn btn-sm" onclick="browsePath('cfg-dir','folder')">Browse…</button>
+          </div>
+        </div>
+        <div class="field"><label>library — database file</label>
+          <div class="field-row">
+            <div class="field" style="margin-bottom:0"><input type="text" id="cfg-lib" placeholder="~/Music/library.db" oninput="buildConfig()"></div>
+            <button class="btn btn-sm" onclick="browsePath('cfg-lib','save')">Browse…</button>
+          </div>
+        </div>
       </div>
       <div class="section">
         <div class="section-title">Import strategy</div>
@@ -1062,10 +1094,17 @@ document.addEventListener('keydown',e=>{
 });
 function setupDrop(zoneId,targetId,onDrop){
   const zone=document.getElementById(zoneId);if(!zone)return;
-  zone.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';zone.classList.add('drag-over');});
-  zone.addEventListener('dragleave',()=>zone.classList.remove('drag-over'));
+  // dragenter/dragleave counter, not a plain add/remove on dragover/dragleave —
+  // once the zone is a whole section (multiple child elements) rather than one
+  // small box, moving the cursor between children fires dragleave on the zone
+  // even though the drag never left it, and a plain toggle flickers the
+  // drag-over highlight on every child boundary crossed.
+  let depth=0;
+  zone.addEventListener('dragenter',e=>{e.preventDefault();depth++;zone.classList.add('drag-over');});
+  zone.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';});
+  zone.addEventListener('dragleave',()=>{depth--;if(depth<=0){depth=0;zone.classList.remove('drag-over');}});
   zone.addEventListener('drop',e=>{
-    e.preventDefault();zone.classList.remove('drag-over');
+    e.preventDefault();depth=0;zone.classList.remove('drag-over');
     const item=e.dataTransfer.items&&e.dataTransfer.items[0];
     if(item&&item.kind==='file'){
       const file=item.getAsFile(),path=file.path||'';
@@ -1079,15 +1118,22 @@ function setupDrop(zoneId,targetId,onDrop){
     }
   });
 }
-setupDrop('import-drop','import-path',p=>checkiCloud(p));
-setupDrop('scan-drop','scan-path');
+setupDrop('import-section','import-path',p=>checkiCloud(p));
+setupDrop('scan-section','scan-path');
 setupDrop('find-drop2','conv-src');
 document.body.addEventListener('dragover',e=>e.preventDefault());
 document.body.addEventListener('drop',e=>e.preventDefault());
 
 function toggleLog(){document.getElementById('log-path-wrap').style.display=document.getElementById('import-log').checked?'block':'none';}
 function setPath(fieldId,value){document.getElementById(fieldId).value=value;}
-function promptVolume(fieldId){fieldId=fieldId||'import-path';const name=prompt('Disk name (e.g. Harddisk):');if(name){document.getElementById(fieldId).value='/Volumes/'+name;}}
+function browsePath(fieldId,kind){
+  postJSON('/pick',{kind}).then(data=>{
+    if(!data.ok||!data.path)return;
+    const el=document.getElementById(fieldId);
+    el.value=data.path;
+    el.dispatchEvent(new Event('input'));
+  });
+}
 function checkiCloud(path){
   const warn=document.getElementById('import-warnings');
   if(path.includes('Mobile Documents')||path.toLowerCase().includes('icloud'))warn.innerHTML='<div class="alert alert-red">'+'⚠ WARNING: This path is inside iCloud! This can corrupt your Traktor/Lexicon collection. Move music to a local folder or external drive before importing.'+'</div>';

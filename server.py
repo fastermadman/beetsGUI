@@ -574,6 +574,37 @@ def reveal(item_id):
     return jsonify({'ok': True, 'path': path})
 
 
+_PICK_SCRIPTS = {
+    'folder': 'POSIX path of (choose folder)',
+    'file': 'POSIX path of (choose file)',
+    'save': 'POSIX path of (choose file name)',
+    'folders': (
+        'set thePaths to {}\n'
+        'repeat with f in (choose folder with multiple selections allowed)\n'
+        '    set end of thePaths to POSIX path of f\n'
+        'end repeat\n'
+        'set AppleScript\'s text item delimiters to ","\n'
+        'thePaths as text'
+    ),
+}
+
+
+@app.route('/pick', methods=['POST'])
+def pick_path():
+    """Native Finder panel for a path field (#77) — same 'shell out for OS
+    integration' pattern as /reveal's `open -R`. 'folders' is for
+    traktor-roots, the one comma-separated multi-path field.
+    """
+    data = request.get_json(silent=True) or {}
+    script = _PICK_SCRIPTS.get(data.get('kind'))
+    if script is None:
+        return jsonify({'ok': False, 'error': 'bad kind'}), 400
+    r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
+    if r.returncode != 0:
+        return jsonify({'ok': False})  # user hit Cancel — AppleScript raises, not an error state
+    return jsonify({'ok': True, 'path': r.stdout.strip()})
+
+
 @app.route('/art/<int:album_id>')
 def album_art(album_id):
     """Cover art for an album, if beets has any on disk. Same id-only
