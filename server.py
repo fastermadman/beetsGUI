@@ -940,6 +940,24 @@ def list_playlists():
         return jsonify({'ok': False, 'error': str(e)})
 
 
+@app.route('/playlists/resolve', methods=['POST'])
+def resolve_playlists():
+    """Item ids listed by one or more .m3u playlists — used by USB Mirror
+    (#43) to scope a convert job to a playlist. Body: {"dir": "~/Playlister",
+    "names": ["My Playlist"]}. Not beets' own `playlist:` query — see
+    libops.playlist_item_ids's docstring for why."""
+    data = request.get_json(silent=True) or {}
+    names = data.get('names')
+    if not isinstance(names, list) or not names or not all(
+            isinstance(n, str) and n for n in names):
+        return jsonify({'ok': False, 'error': 'names must be a non-empty list of strings'}), 400
+    try:
+        ids = libops.playlist_item_ids(data.get('dir') or '~/Playlister', names)
+    except UserError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    return jsonify({'ok': True, 'ids': ids})
+
+
 @app.route('/export/m3u', methods=['POST'])
 def export_m3u():
     """Write matching tracks' paths, one per line, to `dest` — same content
