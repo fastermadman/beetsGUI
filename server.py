@@ -221,11 +221,10 @@ def get_library_directory() -> str:
 def resolve_item_path(raw) -> str:
     """Decode a path column (items.path / albums.artpath) to an absolute path.
 
-    beets always stores absolute paths — that's supposed to be true by
-    construction. This library's data doesn't hold that invariant for most
-    rows (relative paths, cause not yet root-caused — see beetsGUI#78), so
-    every route that turns a stored path into a real filesystem path goes
-    through here rather than assuming the column is already absolute.
+    Since beets 2.11 (upstream beetbox/beets#6460) paths under `directory:`
+    are stored relative to it, and a one-time `relative_path` migration
+    rewrote the existing rows — so relative is the normal form, not damage.
+    Rows outside `directory:` stay absolute, so both forms occur.
     """
     path = os.fsdecode(raw) if isinstance(raw, bytes) else raw
     if not path:
