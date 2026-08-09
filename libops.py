@@ -188,14 +188,18 @@ def apply_modify(field, value, query):
 # Both beets internals already take a `pretend` flag — reused directly.
 
 def update(query, pretend):
-    """Returns the printed diff lines (deleted files, changed fields)."""
+    """Resync the library from what's actually on disk: catches files
+    edited or moved outside this app (Traktor, Swinsian, Finder). Returns
+    the printed diff lines (deleted files, changed fields)."""
     lib = get_library()
     return _capture(_update_items, lib, split_query(query), False, False,
                      pretend, None)
 
 
 def write(query, pretend):
-    """Returns the printed diff lines (tags that would be/were written)."""
+    """Push the database's metadata out to the files' tags — the reverse of
+    update(). Returns the printed diff lines (tags that would be/were
+    written)."""
     lib = get_library()
     return _capture(_write_items, lib, split_query(query), pretend, False)
 
@@ -264,15 +268,25 @@ def matching_ids(query):
     Measured at 5,000 albums / 40,000 items (#12): ~630ms for a free-text
     search, ~280ms for a field match, against ~5ms for the unfiltered list.
     Still under the 1s the issue asks for, so it stays. The upgrade, when it
-    stops being fine, is to splice beets' own `Query.clause()` into the
-    list SQL — which
-    needs the custom SQL functions (regexp, bytelower) that the read-only
-    connection in server.py deliberately doesn't register.
+    stops being fine, is to splice beets' own `Query.clause()` into the list
+    SQL — which needs the custom SQL functions (regexp, bytelower) that the
+    read-only connection in server.py deliberately doesn't register.
     """
     lib = get_library()
     items = list(lib.items(split_query(query)))
     return ([i.id for i in items],
             sorted({i.album_id for i in items if i.album_id}))
+
+
+def render_format(fmt, query):
+    """One rendered line per matching item, beets template syntax (`$artist`,
+    `$bpm`, `$path`, ...) — the same engine `preview_modify`'s replacement
+    value goes through. This is what the Library tab's format presets (was:
+    a `beet ls -f` string to copy-paste) now render server-side instead."""
+    lib = get_library()
+    template = functemplate.template(fmt)
+    return [item.evaluate_template(template)
+            for item in lib.items(split_query(query))]
 
 
 def fields():

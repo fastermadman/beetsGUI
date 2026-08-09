@@ -93,15 +93,6 @@
   .content { flex:1; overflow-y:auto; padding:1.25rem; padding-bottom:0; }
   .tab-panel { display:none; }
   .tab-panel.active { display:block; }
-  .cmd-box { flex-shrink:0; border-top:1px solid var(--border); background:var(--bg); }
-  .cmd-box summary { cursor:pointer; color:var(--text3); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; padding:0.5rem 1.25rem; user-select:none; }
-  .cmd-box summary:hover { color:var(--text2); }
-  .cmd-box[open] summary { border-bottom:1px solid var(--border); }
-  .cmd-box-body { display:flex; align-items:center; gap:0.5rem; padding:0.6rem 1.25rem; }
-  .cmd-field { flex:1; background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius); color:var(--accent); font-family:var(--font-mono); font-size:12px; padding:0.5rem 0.75rem; outline:none; overflow-x:auto; white-space:nowrap; }
-  .btn-copy { background:var(--accent); border:none; border-radius:var(--radius); color:var(--bg); cursor:pointer; font-family:inherit; font-size:11px; font-weight:700; letter-spacing:0.08em; padding:0.45rem 1rem; text-transform:uppercase; transition:opacity 0.1s; white-space:nowrap; }
-  .btn-copy:hover { opacity:0.85; }
-  .btn-copy.copied { background:var(--green); }
   label { color:var(--text2); font-weight:500; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; }
   input[type="text"],input[type="password"],input[type="number"],select,textarea { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); font-family:var(--font-mono); font-size:12px; padding:0.4rem 0.6rem; outline:none; width:100%; transition:border-color 0.1s; }
   input:focus,select:focus,textarea:focus { border-color:var(--accent2); }
@@ -470,21 +461,25 @@
         <div class="lib-results" id="lib-results"><div class="lib-empty">Loading…</div></div>
       </div>
       <div class="section">
-        <div class="section-title">Command</div>
+        <div class="section-title">Export formatted list</div>
         <div class="field">
-          <label><span>Output format</span> <span class="mono">-f</span>
-            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Use $artist, $album, $year, $title, $format, $bitrate, $path etc. to shape output.</span></span>
+          <label><span>Format</span>
+            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Use $artist, $album, $year, $title, $format, $bitrate, $path etc. to shape each line.</span></span>
           </label>
-          <input type="text" id="lib-format" placeholder="" oninput="buildLibCmd()">
+          <input type="text" id="lib-format" placeholder="">
         </div>
         <div class="btn-row">
           <button class="btn btn-sm" onclick="setFormat('$artist - $album ($year)')"><span>artist · album · year</span></button>
           <button class="btn btn-sm" onclick="setFormat('[$format] $bitrate $artist - $title')">format · bitrate</button>
           <button class="btn btn-sm" onclick="setFormat('$path')"><span>path</span></button>
-          <button class="btn btn-sm" onclick="setFormat('$artist - $title | BPM: $bpm | Key: $key')">BPM + Key</button>
+          <button class="btn btn-sm" onclick="setFormat('$artist - $title | BPM: $bpm | Key: $initial_key')">BPM + Key</button>
         </div>
         <div class="field">
-          <label class="check-item"><input type="checkbox" id="lib-export" onchange="buildLibCmd()"><span>Export to file</span> <span class="mono">&gt; ~/Desktop/library.txt</span></label>
+          <label>Save to</label>
+          <input type="text" id="lib-export-dest" value="~/Desktop/library.txt">
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary btn-sm" onclick="exportFormat()"><span>Export</span></button>
         </div>
       </div>
       <hr class="divider">
@@ -941,13 +936,6 @@
     <button class="row-btn" onclick="stopPlayback()" title="Stop and clear queue">✕</button>
   </div>
 
-  <details class="cmd-box" id="cmd-box">
-    <summary>Command</summary>
-    <div class="cmd-box-body">
-      <input type="text" class="cmd-field" id="cmd-out" readonly value="beet import ~/Music">
-      <button class="btn-copy" id="copy-btn" onclick="copyCmd()">Copy</button>
-    </div>
-  </details>
 
 </div>
 <script>
@@ -959,7 +947,7 @@ function switchTab(name,btn){
   document.getElementById('tab-'+name).classList.add('active');
   if(btn)btn.classList.add('active');
   activeTab=name;
-  if(name==='library'){buildLibCmd();loadLibrary();}
+  if(name==='library'){loadLibrary();}
   if(name==='recover'){loadTraktor();}
 }
 // ⌘O's target. The filter has no single search box — it has condition rows —
@@ -1072,16 +1060,6 @@ document.addEventListener('keydown',e=>{
   // search in Obsidian.
   if((e.metaKey||e.ctrlKey)&&(e.key==='o'||e.key==='O')){e.preventDefault();focusFilter();}
 });
-function setCmd(cmd){document.getElementById('cmd-out').value=cmd;}
-function copyCmd(){
-  const v=document.getElementById('cmd-out').value;
-  navigator.clipboard.writeText(v).then(()=>{
-    const b=document.getElementById('copy-btn');
-    b.textContent='Copied!';b.classList.add('copied');
-    setTimeout(()=>{b.textContent='Copy';b.classList.remove('copied');},1800);
-  });
-}
-
 function setupDrop(zoneId,targetId,onDrop){
   const zone=document.getElementById(zoneId);if(!zone)return;
   zone.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';zone.classList.add('drag-over');});
@@ -1771,7 +1749,6 @@ function showFilterNote(msg){
   el.style.display=msg?'':'none';
 }
 function afterFilterChange(){
-  buildLibCmd();
   loadLibrary();
 }
 function currentQuery(){return libFilterRaw.trim();}
@@ -1832,24 +1809,22 @@ function openAction(id){
   el.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-function buildLibCmd(){
-  const q=currentQuery();
-  // Same Albums/Tracks/Artists choice that drives the results panel — beet
-  // ls has no "list artists" mode, so Artists falls back to plain track
-  // listing here, same as the default.
-  const type=libMode==='albums'?'-a':'';
-  const fmt=document.getElementById('lib-format').value.trim();
-  const exp=document.getElementById('lib-export').checked;
-  let parts=['beet ls'];
-  if(type)parts.push(type);
-  // Single quotes, not double: every format preset is beets template syntax
-  // (`$artist`), which a shell would expand to nothing inside "…".
-  if(fmt)parts.push('-f '+shellQuote(fmt));
-  if(q)parts.push(q);
-  if(exp)parts.push('> ~/Desktop/library.txt');
-  setCmd(parts.join(' '));
+function setFormat(f){document.getElementById('lib-format').value=f;}
+// Renders the current filter's matches through a beets template
+// ($artist, $bpm, ...) server-side and writes the result to a file —
+// replaces the old "beet ls -f ... > dest" copy-paste command (#12).
+function exportFormat(){
+  const format=document.getElementById('lib-format').value.trim();
+  const dest=document.getElementById('lib-export-dest').value.trim();
+  if(!format){renderResult('<div class="lib-empty">Enter a format first.</div>');return;}
+  if(!dest){renderResult('<div class="lib-empty">Enter a destination file.</div>');return;}
+  renderResult('<div class="lib-empty">Exporting…</div>');
+  postJSON('/library/export',{format,dest,...scopeBody()})
+    .then(data=>renderResult(data.ok
+      ?'<div class="alert alert-green">Wrote '+data.count+' line'+(data.count===1?'':'s')+' to '+escapeHtml(data.path)+'</div>'
+      :'<div class="lib-empty">'+escapeHtml(data.error||'Failed.')+'</div>'))
+    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
-function setFormat(f){document.getElementById('lib-format').value=f;buildLibCmd();}
 
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1876,7 +1851,6 @@ function setLibMode(){
   libMode=document.querySelector('input[name="lib-mode"]:checked').value;
   fillLibSorts();
   loadLibrary();
-  buildLibCmd();
 }
 // The Tracks sort dropdown also offers every other real metadata column
 // (bpm, initial_key, genres, label, ...) — fetched once from /info/fields
@@ -2834,11 +2808,6 @@ function toggleBp4Method(){
   document.getElementById('bp4-token-wrap').style.display=isUp?'none':'block';
   buildConfig();
 }
-(function(){
-  const box=document.getElementById('cmd-box');
-  if(localStorage.getItem('cmdBoxOpen')==='1')box.open=true;
-  box.addEventListener('toggle',()=>localStorage.setItem('cmdBoxOpen',box.open?'1':'0'));
-})();
 // Gnomon's TOTD/DIST are real OpenType variable axes the font itself draws
 // a sundial shadow with — not a CSS trick. .face stays at DIST=0 (the plain
 // letterform) at the same TOTD as .shadow, so both layers share identical

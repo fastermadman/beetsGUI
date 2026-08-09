@@ -12,9 +12,33 @@ reached, rather than just asserting the (still-empty) result.
 
 Run: ~/.local/pipx/venvs/beets/bin/python test_libops.py
 """
+import re
+from pathlib import Path
+
+from beets.library import Item
 from beets.ui import UserError
 
 import libops
+
+HTML = Path(__file__).parent / 'beetsgui.html'
+
+
+def test_export_format_presets_use_real_fields():
+    """Every Library-tab format preset must name fields beets actually has
+    (#12). `$key` isn't one — the real field is `$initial_key` — so that
+    preset silently rendered an empty string for every track. render_format()
+    doesn't validate (a typo'd field renders blank, same as `beet ls -f`
+    would), so nothing else would have caught this; only checking the
+    literal preset strings does.
+    """
+    presets = re.findall(r"setFormat\('([^']*)'\)", HTML.read_text())
+    assert len(presets) >= 4, 'expected at least the 4 known format presets'
+    known = Item.all_keys()
+    for preset in presets:
+        for field in re.findall(r'\$(\w+)', preset):
+            assert field in known, (
+                f'preset {preset!r} references ${field}, which is not a '
+                f'real beets field')
 
 
 def test_split_query_apostrophes():
@@ -40,6 +64,7 @@ def test_split_query_apostrophes():
 
 
 def main():
+    test_export_format_presets_use_real_fields()
     test_split_query_apostrophes()
 
     libops.get_library = lambda: (_ for _ in ()).throw(

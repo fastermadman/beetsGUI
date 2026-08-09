@@ -1000,6 +1000,35 @@ def export_m3u():
     return jsonify({'ok': True, 'count': len(items), 'path': str(path)})
 
 
+@app.route('/library/export', methods=['POST'])
+def library_export():
+    """Write one rendered beets-template line per matching item to `dest`.
+    Body: {"scope": {...}, "format": "$artist - $title", "dest": "..."}.
+
+    Replaces the Library tab's old "beet ls -f ... > dest" copy-paste
+    string (#12): same beets template engine, same 4 format presets, but
+    rendered and written here instead of by a shell the user had to paste
+    into. `scope` is the shared filter, same as every other Library action.
+    """
+    if busy := _busy_response():
+        return busy
+    data = request.get_json(silent=True) or {}
+    fmt = (data.get('format') or '').strip()
+    dest = (data.get('dest') or '').strip()
+    if not fmt:
+        return jsonify({'ok': False, 'error': 'format is required'}), 400
+    if not dest:
+        return jsonify({'ok': False, 'error': 'dest is required'}), 400
+    try:
+        lines = libops.render_format(fmt, libops.scope_query(data))
+    except UserError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    path, error = _write_list(dest, lines)
+    if error:
+        return jsonify({'ok': False, 'error': error}), 400
+    return jsonify({'ok': True, 'count': len(lines), 'path': str(path)})
+
+
 @app.route('/export/playlists', methods=['POST'])
 def export_playlists():
     """Write one .m3u per immediate subfolder of `src` into
