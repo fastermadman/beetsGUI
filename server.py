@@ -203,6 +203,37 @@ def get_library_db_path() -> str:
     return os.path.expanduser('~/.config/beets/library.db')
 
 
+@functools.lru_cache(maxsize=1)
+def get_library_directory() -> str:
+    """The beets `directory:` key from config.yaml — same parse as
+    get_library_db_path(), same cache lifetime assumption."""
+    config_path = get_config_path()
+    try:
+        for line in Path(config_path).read_text().splitlines():
+            m = re.match(r'^directory:\s*(.+)$', line.strip())
+            if m:
+                return os.path.expanduser(m.group(1).strip().strip('\'"'))
+    except Exception:
+        pass
+    return os.path.expanduser('~/Music')
+
+
+def resolve_item_path(raw) -> str:
+    """Decode a path column (items.path / albums.artpath) to an absolute path.
+
+    beets always stores absolute paths — that's supposed to be true by
+    construction. This library's data doesn't hold that invariant for most
+    rows (relative paths, cause not yet root-caused — see beetsGUI#78), so
+    every route that turns a stored path into a real filesystem path goes
+    through here rather than assuming the column is already absolute.
+    """
+    path = os.fsdecode(raw) if isinstance(raw, bytes) else raw
+    if not path:
+        return ''
+    if os.path.isabs(path):
+        return path
+    return os.path.join(get_library_directory(), path)
+
 
 def open_app_when_ready():
     """Open the Safari Web App (or Safari) once the server is ready."""
@@ -388,8 +419,7 @@ def library_tracks():
         tracks = []
         for r in rows:
             t = dict(r)
-            # beets stores paths as BLOBs of raw filesystem bytes.
-            t['path'] = os.fsdecode(t['path']) if t['path'] else ''
+            t['path'] = resolve_item_path(t['path'])
             tracks.append(t)
         return jsonify({'ok': True, 'tracks': tracks, 'total': total})
     except sqlite3.Error as e:
@@ -454,8 +484,7 @@ def stream(item_id):
     if not row:
         return jsonify({'ok': False, 'error': 'no such track'}), 404
 
-    # beets stores paths as BLOBs of raw filesystem bytes.
-    path = os.fsdecode(row['path'])
+    path = resolve_item_path(row['path'])
     if not os.path.isfile(path):
         return jsonify({'ok': False, 'error': 'file is missing from disk'}), 404
     return send_file(path, conditional=True,
@@ -477,7 +506,7 @@ def reveal(item_id):
     con.close()
     if not row:
         return jsonify({'ok': False, 'error': 'no such track'}), 404
-    path = os.fsdecode(row['path'])
+    path = resolve_item_path(row['path'])
     if not os.path.isfile(path):
         return jsonify({'ok': False, 'error': 'file is missing from disk'}), 404
     subprocess.run(['open', '-R', path], check=False)
@@ -496,7 +525,7 @@ def album_art(album_id):
     con.close()
     if not row or not row['artpath']:
         return jsonify({'ok': False, 'error': 'no art'}), 404
-    path = os.fsdecode(row['artpath'])
+    path = resolve_item_path(row['artpath'])
     if not os.path.isfile(path):
         return jsonify({'ok': False, 'error': 'art file is missing from disk'}), 404
     return send_file(path, conditional=True)

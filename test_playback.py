@@ -205,6 +205,42 @@ def main():
     assert get('/stream/1').status_code == 404
     assert get('/art/1').status_code == 404
 
+    # ── relative paths (beetsGUI#78) ────────────────────────────────────────
+    # This user's library has items.path/albums.artpath stored relative
+    # rather than absolute (root cause not yet found) — /stream and /art
+    # must resolve them against `directory:` rather than assume they're
+    # already absolute, or every one of those rows 404s as "missing from
+    # disk" and the player blames it on "no decoder" instead.
+    rel_tmp = tempfile.TemporaryDirectory()
+    rel_root = Path(rel_tmp.name)
+    (rel_root / 'sub').mkdir()
+    rel_audio = rel_root / 'sub' / 'archangel.wav'
+    make_wav(rel_audio)
+    rel_art = rel_root / 'sub' / 'cover.jpg'
+    rel_art.write_bytes(b'\xff\xd8\xff\xe0fake jpeg')
+    rel_db = rel_root / 'rel-library.db'
+    con = sqlite3.connect(rel_db)
+    con.executescript('''
+        CREATE TABLE albums (id INTEGER PRIMARY KEY, artpath BLOB);
+        CREATE TABLE items (id INTEGER PRIMARY KEY, path BLOB);
+    ''')
+    con.execute('INSERT INTO albums VALUES (1,?)', (b'sub/cover.jpg',))
+    con.execute('INSERT INTO items VALUES (1,?)', (b'sub/archangel.wav',))
+    con.commit()
+    con.close()
+
+    server.get_library_db_path = lambda: str(rel_db)
+    server.get_library_directory = lambda: str(rel_root)
+
+    r = get('/stream/1')
+    assert r.status_code == 200, r.status_code
+    assert r.data == rel_audio.read_bytes(), 'relative item path did not resolve'
+
+    r = get('/art/1')
+    assert r.status_code == 200, r.status_code
+    assert r.data == rel_art.read_bytes(), 'relative artpath did not resolve'
+
+    rel_tmp.cleanup()
     tmp.cleanup()
     print('test_playback: all checks passed')
 
