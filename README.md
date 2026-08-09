@@ -28,10 +28,9 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
   ```bash
   brew install ffmpeg
   ```
-- [fd](https://github.com/sharkdp/fd) (required for Inbox's Utilities section and Library's Formats/WAV-AIFF finder — the unimported-music scan itself doesn't need it):
-  ```bash
-  brew install fd
-  ```
+
+No `fd` needed: the scans that once shelled out to it (Inbox's Utilities,
+Library's Formats/WAV-AIFF finder) walk the tree in Python instead.
 
 ## Setup
 
@@ -138,8 +137,10 @@ curl -s -X POST localhost:1612/import/<id>/decide -H 'Content-Type: application/
      -d '{"decision_id":"<from the event>","choice":"apply","candidate":0}'
 ```
 
-`POST /import/<id>/abort` cancels cleanly, and `GET /import/current` returns the
-running import plus its waiting decision, so a reloaded page can rejoin.
+`POST /jobs/<id>/abort` cancels cleanly, and `GET /jobs/current` returns the
+running job plus an import's waiting decision, so a reloaded page can rejoin.
+This route is shared across every job type (import, convert, artwork, sync,
+Traktor scan) — not import-specific despite the old name it used to have.
 An unanswered decision times out after 15 minutes (`BEETSGUI_DECISION_TIMEOUT`)
 and aborts the import rather than blocking the server forever.
 
@@ -147,6 +148,15 @@ Test it end to end (needs ffmpeg; runs against a throwaway library):
 
 ```bash
 ~/.local/pipx/venvs/beets/bin/python test_importsession.py
+```
+
+`test_smoke.py` drives the real UI in a headless browser against the same
+throwaway-library harness — needs Playwright, once:
+
+```bash
+pipx inject beets playwright
+~/.local/pipx/venvs/beets/bin/playwright install chromium
+~/.local/pipx/venvs/beets/bin/python test_smoke.py
 ```
 
 ## DJ workflow notes

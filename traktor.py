@@ -152,8 +152,8 @@ def request_download(path):
 # ── Source discovery and classification ───────────────────────────────────
 
 def find_sources(roots):
-    """Every .nml/.m3u under `roots`. stdlib walk, so no `fd` dependency for
-    a core feature (the README only requires fd for the Inbox utilities)."""
+    """Every .nml/.m3u under `roots`. stdlib walk, like every other scan
+    here — nothing in this app shells out to `fd`."""
     found = []
     for root in roots:
         root = os.path.expanduser(root)

@@ -70,6 +70,9 @@ SAFARI_APP_NAME = 'BeetsGUI'
 app = Flask(__name__)
 
 
+LOCAL_ORIGINS = (f'http://localhost:{PORT}', f'http://127.0.0.1:{PORT}')
+
+
 @app.before_request
 def _reject_foreign_host():
     """Block DNS-rebinding: only serve requests addressed to this loopback
@@ -78,6 +81,29 @@ def _reject_foreign_host():
     every endpoint here, CORS preflight or not."""
     if request.host not in (f'localhost:{PORT}', f'127.0.0.1:{PORT}'):
         return jsonify({'ok': False, 'error': 'bad host'}), 403
+
+
+@app.before_request
+def _reject_foreign_origin():
+    """Block cross-site requests from a page the user merely visited.
+
+    The Host check above does not see these: a POST from evil.example to
+    localhost still carries `Host: localhost:<port>`. Missing CORS headers
+    only stop the attacker *reading* the reply — with a CORS-safelisted
+    content type (text/plain) the browser sends the request without a
+    preflight and the side effect happens anyway. Every mutating endpoint
+    reads its body with get_json(silent=True), so such a request arrives as
+    an empty dict and each one has to defend itself; /import/start did not,
+    and started an import of the server's working directory (#12).
+
+    Only requests that *declare* a foreign origin are refused. A browser
+    always sends Origin cross-origin, so the attack shape is covered; curl
+    and the test suite send none, and CSRF is not a threat model they are
+    part of.
+    """
+    origin = request.headers.get('Origin')
+    if origin and origin not in LOCAL_ORIGINS:
+        return jsonify({'ok': False, 'error': 'cross-origin request refused'}), 403
 
 
 @app.errorhandler(UserError)
@@ -972,6 +998,35 @@ def export_m3u():
     if error:
         return jsonify({'ok': False, 'error': error}), 400
     return jsonify({'ok': True, 'count': len(items), 'path': str(path)})
+
+
+@app.route('/library/export', methods=['POST'])
+def library_export():
+    """Write one rendered beets-template line per matching item to `dest`.
+    Body: {"scope": {...}, "format": "$artist - $title", "dest": "..."}.
+
+    Replaces the Library tab's old "beet ls -f ... > dest" copy-paste
+    string (#12): same beets template engine, same 4 format presets, but
+    rendered and written here instead of by a shell the user had to paste
+    into. `scope` is the shared filter, same as every other Library action.
+    """
+    if busy := _busy_response():
+        return busy
+    data = request.get_json(silent=True) or {}
+    fmt = (data.get('format') or '').strip()
+    dest = (data.get('dest') or '').strip()
+    if not fmt:
+        return jsonify({'ok': False, 'error': 'format is required'}), 400
+    if not dest:
+        return jsonify({'ok': False, 'error': 'dest is required'}), 400
+    try:
+        lines = libops.render_format(fmt, libops.scope_query(data))
+    except UserError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    path, error = _write_list(dest, lines)
+    if error:
+        return jsonify({'ok': False, 'error': error}), 400
+    return jsonify({'ok': True, 'count': len(lines), 'path': str(path)})
 
 
 @app.route('/export/playlists', methods=['POST'])

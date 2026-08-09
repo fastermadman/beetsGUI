@@ -12,12 +12,61 @@ reached, rather than just asserting the (still-empty) result.
 
 Run: ~/.local/pipx/venvs/beets/bin/python test_libops.py
 """
+import re
+from pathlib import Path
+
+from beets.library import Item
 from beets.ui import UserError
 
 import libops
 
+HTML = Path(__file__).parent / 'beetsgui.html'
+
+
+def test_export_format_presets_use_real_fields():
+    """Every Library-tab format preset must name fields beets actually has
+    (#12). `$key` isn't one — the real field is `$initial_key` — so that
+    preset silently rendered an empty string for every track. render_format()
+    doesn't validate (a typo'd field renders blank, same as `beet ls -f`
+    would), so nothing else would have caught this; only checking the
+    literal preset strings does.
+    """
+    presets = re.findall(r"setFormat\('([^']*)'\)", HTML.read_text())
+    assert len(presets) >= 4, 'expected at least the 4 known format presets'
+    known = Item.all_keys()
+    for preset in presets:
+        for field in re.findall(r'\$(\w+)', preset):
+            assert field in known, (
+                f'preset {preset!r} references ${field}, which is not a '
+                f'real beets field')
+
+
+def test_split_query_apostrophes():
+    """An apostrophe is a letter here, not an unclosed quote (#12).
+
+    shlex reads `Don't` as the start of a quoted string and raises, which
+    used to surface as a 400 from /library?q= — for a search term that is
+    entirely ordinary in a music library. Balanced quoting still has to keep
+    working, because that is what the UI itself generates.
+    """
+    for q, expected in [
+        ("O'Brien", ["O'Brien"]),
+        ("Don't Stop", ["Don't", 'Stop']),
+        ("Guns N' Roses", ['Guns', "N'", 'Roses']),
+        ("artist:O'Brien year:2020..", ["artist:O'Brien", 'year:2020..']),
+        # What the UI compiles is balanced and must be unquoted, not split.
+        ("artist:'it'\\''s here'", ['artist:it\'s here']),
+        ('album:"a quoted bit"', ['album:a quoted bit']),
+        ('', []),
+    ]:
+        assert libops.split_query(q) == expected, (
+            f'split_query({q!r}) == {libops.split_query(q)!r}, want {expected!r}')
+
 
 def main():
+    test_export_format_presets_use_real_fields()
+    test_split_query_apostrophes()
+
     libops.get_library = lambda: (_ for _ in ()).throw(
         AssertionError('should not reach the library'))
 
