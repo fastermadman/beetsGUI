@@ -510,6 +510,11 @@ def start(path=None, mode='interactive', paths=None, handling='copy',
         raise ValueError(f'handling must be one of {list(HANDLING)}')
     if paths is None:
         paths = [path]
+    # A missing path is missing, not the empty string: `[None]` is a
+    # non-empty list, and _resolve_path('') is os.path.abspath('') — the
+    # server's own working directory, which exists, so the import would
+    # quietly run against it instead of failing here (#12).
+    paths = [p for p in paths if p and str(p).strip()]
     if not paths:
         raise ValueError('no path specified')
     resolved = [_resolve_path(p) for p in paths]

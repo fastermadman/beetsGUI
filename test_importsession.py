@@ -948,6 +948,69 @@ def test_kill_minus_9_mid_decision_recovery():
     print('kill -9 mid-decision recovery: ok')
 
 
+def test_cross_site_post_is_refused():
+    """A page the user merely visited must not be able to act (#12).
+
+    The #28 host check does not see this one: a POST from evil.example to
+    localhost still carries `Host: localhost:<port>`. The other half of the
+    argument — "JSON content type forces a preflight the server never
+    answers" — has a hole, because `text/plain` is CORS-safelisted and gets
+    no preflight, and every endpoint reads its body with
+    get_json(silent=True), so it arrives as an empty dict rather than being
+    rejected. 19 of the 22 mutating endpoints happened to reject that empty
+    dict on their own; /import/start did not, and started an import of the
+    server's own working directory.
+
+    Both halves are asserted: the origin guard in front, and the missing
+    path behind it, so neither one silently becomes the only thing holding.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix='beetsgui-csrf-'))
+    beetsdir = tmp / 'beets'
+    beetsdir.mkdir()
+    (beetsdir / 'config.yaml').write_text(
+        f'directory: {tmp / "library"}\n'
+        f'library: {beetsdir / "library.db"}\n'
+        'import:\n    write: no\n')
+
+    proc = start_server(beetsdir)
+    try:
+        def post_raw(path, headers):
+            req = urllib.request.Request(BASE + path, data=b'', method='POST',
+                                         headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    return r.status, json.load(r)
+            except urllib.error.HTTPError as e:
+                return e.code, json.load(e)
+
+        # The exact request a malicious page can make with no preflight.
+        for route in ('/import/start', '/library/remove', '/convert/start',
+                      '/duplicates/delete'):
+            status, body = post_raw(route, {'Content-Type': 'text/plain',
+                                            'Origin': 'https://evil.example'})
+            assert status == 403, (route, status, body)
+            assert 'cross-origin' in body.get('error', ''), (route, body)
+
+        # The app's own origin still gets through (this is what would break
+        # if the guard were written too tightly to be usable).
+        status, body = post_raw('/library/count',
+                                {'Content-Type': 'application/json',
+                                 'Origin': f'http://127.0.0.1:{PORT}'})
+        assert status == 200 and body['ok'], body
+
+        # And with the guard passed, a body with no path is still refused —
+        # os.path.abspath('') is the server's working directory, so this
+        # used to start a real import of wherever server.py was launched.
+        status, body = post_raw('/import/start',
+                                {'Content-Type': 'application/json'})
+        assert status == 400, (status, body)
+        assert 'no path specified' in body.get('error', ''), body
+    finally:
+        stop_server(proc)
+        shutil.rmtree(tmp, ignore_errors=True)
+    print('cross-site POST refused, empty import path refused: ok')
+
+
 if __name__ == '__main__':
     main()
     test_quality_rank_real_encoders()
@@ -956,4 +1019,5 @@ if __name__ == '__main__':
     test_missing_ffmpeg_dependency()
     test_scale_library_endpoints()
     test_kill_minus_9_mid_decision_recovery()
+    test_cross_site_post_is_refused()
     print('all #12 stress/correctness checks passed')
