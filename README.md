@@ -61,9 +61,31 @@ With http://localhost:1612 open in Safari:
 
 The server will now open the standalone app automatically on next launch.
 
-### 4. Create a launcher (Automator)
+### 4. Keep the server running
 
-Open **Automator → New → Application → Run Shell Script**:
+The Safari Web App has no code of its own to start the server — it's just a
+bookmark-like shortcut to `http://localhost:1612/`. Something else has to
+have the server up before you click it.
+
+**Option A — LaunchAgent (recommended):** starts the server at login and
+keeps it running, restarting it if it ever crashes. No separate app to
+click, ever.
+
+```bash
+./scripts/install-launchagent.sh
+```
+
+Logs land at `~/Library/Logs/beetsgui-server.log`. To undo:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.beetsgui.server.plist
+rm ~/Library/LaunchAgents/com.beetsgui.server.plist
+```
+
+**Option B — Automator launcher:** if you'd rather start the server
+manually each time (e.g. it only makes sense running while an external
+drive holding your library is mounted), open **Automator → New →
+Application → Run Shell Script**:
 
 ```bash
 /path/to/python server.py
