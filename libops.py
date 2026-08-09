@@ -10,15 +10,18 @@ confirm), so remove gets its own preview step here instead; same for
 modify, which beets only exposes via its interactive `modify_items`.
 """
 import io
+import os
 import re
 import shlex
 import threading
 from contextlib import redirect_stdout
+from pathlib import Path
 
 from platform import python_version
 
 import beets
 from beets import library, plugins
+from beets.dbcore.query import OrQuery, PathQuery
 from beets.ui import UserError
 from beets.ui.commands.remove import remove_items as _remove_items
 from beets.ui.commands.update import update_items as _update_items
@@ -302,6 +305,40 @@ def missing_albums():
                 'album': album.album, 'have': have, 'total': total,
             })
     return result
+
+
+# ── playlist scoping (#43) ──────────────────────────────────────────────
+# beets' own `playlist` plugin (playlist:name queries) can't be reused
+# here: PlaylistQuery builds absolute paths and compares them with a plain
+# InQuery, which never calls dbcore.pathutils.normalize_path_for_db — so it
+# silently matches nothing against a library whose paths were migrated to
+# be relative to `directory:` (mandatory since beets 2.11, same migration
+# server.py's resolve_item_path handles on the read side). PathQuery does
+# normalize, so this resolves the .m3u itself and queries by path instead.
+
+def playlist_item_ids(playlist_dir, names):
+    """Item ids listed by one or more .m3u playlists (by stem, under
+    playlist_dir — same files /playlists already lists for the picker).
+
+    Lines are resolved the way beets' own importfeeds plugin writes them:
+    absolute as-is, otherwise relative to the library directory.
+    """
+    lib = get_library()
+    library_dir = beets.config['directory'].as_filename()
+    ids = set()
+    for name in names:
+        m3u = Path(os.path.expanduser(playlist_dir)) / f'{name}.m3u'
+        if not m3u.is_file():
+            raise UserError(f'no such playlist: {name}')
+        lines = [ln.strip() for ln in
+                 m3u.read_text(errors='surrogateescape').splitlines()]
+        paths = [ln if os.path.isabs(ln) else os.path.join(library_dir, ln)
+                 for ln in lines if ln and not ln.startswith('#')]
+        if not paths:
+            continue
+        query = OrQuery([PathQuery('path', p) for p in paths])
+        ids.update(i.id for i in lib.items(query))
+    return sorted(ids)
 
 
 # ── remove ───────────────────────────────────────────────────────────────

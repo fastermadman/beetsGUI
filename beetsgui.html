@@ -574,9 +574,26 @@
   formats:
     alac:
       command: ffmpeg -i $source -c:a alac -map_metadata 0 $dest
-      extension: m4a</pre>
+      extension: m4a
+    mp3_320:
+      command: ffmpeg -i $source -y -vn -c:a libmp3lame -b:a 320k $dest
+      extension: mp3</pre>
+            <div style="margin-top:0.3rem;">"format" above is only the config default — the dropdown below overrides it per run, for any format you pick.</div>
           </div>
           <div class="lib-count scope-line"></div>
+          <div class="field"><label>Format (blank = convert.format from config)</label>
+            <select id="beet-conv-fmt" style="width:auto;">
+              <option value="">config default</option>
+              <option value="alac">ALAC (lossless)</option>
+              <option value="flac">FLAC (lossless)</option>
+              <option value="mp3_320">MP3 320kbps (LAME)</option>
+              <option value="mp3">MP3 VBR ~190</option>
+              <option value="aac">AAC 256kbps</option>
+              <option value="opus">Opus 96kbps</option>
+              <option value="ogg">Ogg Vorbis</option>
+              <option value="wma">WMA</option>
+            </select>
+          </div>
           <div class="field"><label>Destination (blank = convert.dest from config)</label><input type="text" id="beet-conv-dest" placeholder="~/Music/Converted"></div>
           <div class="btn-row">
             <button class="btn btn-primary" onclick="startConvert()">Check what would convert</button>
@@ -633,15 +650,46 @@
         <div class="alert alert-yellow" style="font-size:10px;">1. In Traktor: Right-click <b>Track Collection</b> → <b>Check Consistency</b><br>2. Select ALL missing tracks (<b>Cmd+A</b>)<br>3. Click <b>Relocate</b> → navigate to your Beets library folder<br>4. ⚠ Select multiple files at a time — avoids Traktor 4.2 freeze<br>5. Cues and grids follow automatically</div>
       </div>
       <div class="section">
-        <div class="section-title">Playlists on this Mac (USB mirror)</div>
+        <div class="section-title">USB Mirror<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Mirrors the library to a USB drive as MP3/AAC using beets' own convert plugin. Run again — already-converted tracks are skipped, so only new ones get copied.</span></span></div>
+        <div class="field">
+          <label>Destination (USB drive)</label>
+          <div class="field-row">
+            <div class="field" style="margin-bottom:0"><input type="text" id="usb-dest" placeholder="/Volumes/USB"></div>
+            <button class="btn btn-sm" onclick="promptVolume('usb-dest')">Volumes/…</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Format</label>
+          <select id="usb-fmt" style="width:auto;">
+            <option value="mp3_320">MP3 320kbps (LAME)</option>
+            <option value="mp3">MP3 VBR ~190</option>
+            <option value="aac">AAC 256kbps</option>
+            <option value="alac">ALAC (lossless)</option>
+            <option value="flac">FLAC (lossless)</option>
+            <option value="opus">Opus 96kbps</option>
+            <option value="ogg">Ogg Vorbis</option>
+            <option value="wma">WMA</option>
+          </select>
+        </div>
         <div class="field">
           <label>Playlist folder</label>
           <div class="field-row">
-            <div class="field" style="margin-bottom:0"><input type="text" id="usb-dir" placeholder="~/Playlister" value="~/Playlister"></div>
-            <button class="btn btn-sm btn-primary" onclick="listPlaylists()">List playlists</button>
+            <div class="field" style="margin-bottom:0"><input type="text" id="usb-pl-dir" placeholder="~/Playlister" value="~/Playlister"></div>
+            <button class="btn btn-sm" onclick="findUsbPlaylists()">Find playlists</button>
           </div>
         </div>
-        <div class="lib-results" id="usb-results"></div>
+        <div id="usb-pl-panel" style="display:none;margin-bottom:0.75rem;">
+          <div class="section-title" style="margin-bottom:0.4rem;">Select playlists</div>
+          <div class="check-group" id="usb-pl-list"></div>
+          <label class="check-item" style="margin-top:0.5rem;">
+            <input type="checkbox" id="usb-all" checked onchange="toggleUsbAll(this)">
+            <span>Entire library (no filter)</span>
+          </label>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="startUsbSync()">Check what would sync</button>
+        </div>
+        <div class="alert alert-yellow" style="font-size:10px;margin-top:0.5rem;">Requires the <span class="mono">convert</span> plugin and <span class="mono">ffmpeg</span> — enable convert in Preferences → Plugins. Playlist scoping reads the .m3u directly (no <span class="mono">playlist</span> plugin needed).</div>
       </div>
     </div>
 
@@ -2541,8 +2589,9 @@ function countFormats(exts){
 let pendingConvert=null;
 function startConvert(){
   const dest=document.getElementById('beet-conv-dest').value.trim();
-  pendingConvert={dest:dest||null,scope:scopeBody()};
-  startJob('/convert/start',{pretend:true,dest:pendingConvert.dest,...pendingConvert.scope},
+  const fmt=document.getElementById('beet-conv-fmt').value;
+  pendingConvert={dest:dest||null,format:fmt||null,scope:scopeBody()};
+  startJob('/convert/start',{pretend:true,dest:pendingConvert.dest,format:pendingConvert.format,...pendingConvert.scope},
     (ev,el)=>{
       if(!ev.total)return;
       el.innerHTML+='<div class="btn-row"><button class="btn btn-warn btn-sm" onclick="runConvert()">Convert '+
@@ -2551,7 +2600,7 @@ function startConvert(){
 }
 function runConvert(){
   if(!pendingConvert)return;
-  startJob('/convert/start',{pretend:false,dest:pendingConvert.dest,...pendingConvert.scope});
+  startJob('/convert/start',{pretend:false,dest:pendingConvert.dest,format:pendingConvert.format,...pendingConvert.scope});
 }
 // Server gives up on a scan after a wall-clock budget (#35) rather than
 // running forever on a huge dir — say so, or a partial count/list quietly
@@ -2648,18 +2697,59 @@ function useForImport(path){
   document.getElementById('import-setup').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-function listPlaylists(){
-  const dir=document.getElementById('usb-dir').value.trim()||'~/Playlister';
-  const el=document.getElementById('usb-results');
-  el.innerHTML='<div class="lib-empty">Loading…</div>';
+function findUsbPlaylists(){
+  const dir=document.getElementById('usb-pl-dir').value.trim()||'~/Playlister';
+  const panel=document.getElementById('usb-pl-panel');
+  const list=document.getElementById('usb-pl-list');
   fetch('/playlists?dir='+encodeURIComponent(dir))
     .then(r=>r.json())
     .then(data=>{
-      if(!data.ok){el.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Could not read that folder.')+'</div>';return;}
-      if(!data.playlists.length){el.innerHTML='<div class="lib-empty">No .m3u playlists found in '+escapeHtml(data.dir)+'.</div>';return;}
-      el.innerHTML=data.playlists.map(p=>'<div class="lib-row"><div class="lib-row-title">'+escapeHtml(p)+'.m3u</div></div>').join('');
+      if(!data.ok){list.innerHTML='<div class="lib-empty">'+escapeHtml(data.error||'Could not read that folder.')+'</div>';}
+      else if(!data.playlists.length){list.innerHTML='<div class="lib-empty">No .m3u playlists found in '+escapeHtml(data.dir)+'.</div>';}
+      else list.innerHTML=data.playlists.map(p=>
+        '<label class="check-item"><input type="checkbox" class="usb-pl" value="'+escapeHtml(p)+'" onchange="document.getElementById(\'usb-all\').checked=false"> '+escapeHtml(p)+'</label>').join('');
+      panel.style.display='block';
     })
-    .catch(()=>{el.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+    .catch(()=>{list.innerHTML='<div class="lib-empty">Could not reach the server.</div>';panel.style.display='block';});
+}
+function toggleUsbAll(cb){
+  if(cb.checked)document.querySelectorAll('.usb-pl').forEach(el=>{el.checked=false});
+}
+// Resolves selected playlists to a {scope:{ids:[...]}} body — NOT a
+// playlist:name query. beets' own `playlist` plugin builds absolute paths
+// and matches them with a plain InQuery, which never normalizes for the
+// beets 2.11 relative-path migration, so playlist:name matches nothing
+// against a library with `directory:` set. /playlists/resolve reads the
+// .m3u itself and resolves it with the (normalizing) path query instead
+// — see libops.playlist_item_ids.
+function usbScope(){
+  if(document.getElementById('usb-all').checked)return Promise.resolve({});
+  const selected=Array.from(document.querySelectorAll('.usb-pl:checked')).map(c=>c.value);
+  if(!selected.length)return Promise.resolve({});
+  return postJSON('/playlists/resolve',{dir:document.getElementById('usb-pl-dir').value.trim()||'~/Playlister',names:selected})
+    .then(data=>{
+      if(!data.ok)throw new Error(data.error||'Could not resolve playlist.');
+      if(!data.ids.length)throw new Error('Selected playlist(s) matched no tracks in the library.');
+      return {scope:{ids:data.ids}};
+    });
+}
+let pendingUsbSync=null;
+function startUsbSync(){
+  const dest=document.getElementById('usb-dest').value.trim();
+  if(!dest){renderResult('<div class="lib-empty">Enter a USB destination path first.</div>');return;}
+  usbScope().then(scope=>{
+    pendingUsbSync={dest,format:document.getElementById('usb-fmt').value,scope};
+    startJob('/convert/start',{pretend:true,dest:pendingUsbSync.dest,format:pendingUsbSync.format,...pendingUsbSync.scope},
+      (ev,el)=>{
+        if(!ev.total)return;
+        el.innerHTML+='<div class="btn-row"><button class="btn btn-warn btn-sm" onclick="runUsbSync()">Sync '+
+          ev.total+' track'+(ev.total===1?'':'s')+' to USB</button></div>';
+      });
+  }).catch(e=>renderResult('<div class="lib-empty">'+escapeHtml(e.message)+'</div>'));
+}
+function runUsbSync(){
+  if(!pendingUsbSync)return;
+  startJob('/convert/start',{pretend:false,dest:pendingUsbSync.dest,format:pendingUsbSync.format,...pendingUsbSync.scope});
 }
 
 function updatePathPreview(){
@@ -2694,7 +2784,7 @@ function buildConfig(){
   if(plugins.includes('embedart'))y+='embedart:\n  auto: yes\n  if_empty: yes\n\n';
   if(plugins.includes('chroma'))y+='chroma:\n  auto: yes\n\n';
   if(plugins.includes('lastgenre'))y+='lastgenre:\n  auto: yes\n  source: album\n  count: 1\n  min_weight: 10\n  fallback: Electronic\n\n';
-  if(plugins.includes('convert'))y+='convert:\n  format: alac\n  never_convert_lossy_files: yes\n  formats:\n    alac:\n      command: ffmpeg -i $source -c:a alac -map_metadata 0 $dest\n      extension: m4a\n\n';
+  if(plugins.includes('convert'))y+='convert:\n  format: alac\n  never_convert_lossy_files: yes\n  formats:\n    alac:\n      command: ffmpeg -i $source -c:a alac -map_metadata 0 $dest\n      extension: m4a\n    mp3_320:\n      command: ffmpeg -i $source -y -vn -c:a libmp3lame -b:a 320k $dest\n      extension: mp3\n\n';
   if(plugins.includes('musicbrainz')){y+='musicbrainz:\n  data_source_mismatch_penalty: 0.4\n';if(mbUser)y+='  user: "'+mbUser+'"\n';if(mbPass)y+='  pass: "'+mbPass+'"\n';y+='\n';}
   if(plugins.includes('discogs')){y+='discogs:\n  data_source_mismatch_penalty: 0.5\n';if(discogsMethod==='token'&&discogsToken)y+='  user_token: "'+discogsToken+'"\n';y+='\n';}
   if(plugins.includes('beatport4')){y+='beatport4:\n';if(bp4Method==='userpass'&&bp4User){y+='  username: "'+bp4User+'"\n';if(bp4Pass)y+='  password: "'+bp4Pass+'"\n';}y+='  art: '+(bp4Art?'yes':'no')+'\n  data_source_mismatch_penalty: '+bp4Prio+'\n\n';}
