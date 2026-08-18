@@ -554,6 +554,13 @@
             <button class="btn" onclick="startSync('bpsync')">Re-fetch from Beatport <span class="mono">(bpsync)</span></button>
             <button class="btn" onclick="showMissing()">Find tracks missing from albums <span class="mono">(missing)</span></button>
           </div>
+          <div class="btn-row">
+            <button class="btn" onclick="startFingerprint()">Compute fingerprints <span class="mono">(chroma)</span> <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Local audio fingerprint only — no network call. Backfills tracks imported before the chroma plugin was enabled, so duplicate detection can compare audio instead of just tags. Needs pyacoustid (pipx inject beets pyacoustid) and chroma enabled.</span></span></button>
+          </div>
+          <hr class="divider">
+          <div class="btn-row">
+            <button class="btn" onclick="startRetag()">Preview re-tag <span class="mono">(AcoustID + MusicBrainz)</span> <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Dry-run only — proposes candidates for albums/tracks whose tags may be wrong (e.g. a record label sitting in the artist field), nothing is written until you accept a candidate. Network call per album/track — can be slow on a real library.</span></span></button>
+          </div>
         </div>
       </details>
 
@@ -941,6 +948,17 @@
         </div>
       </div>
       <hr class="divider">
+      <div class="section">
+        <div class="section-title">Duplicate detection</div>
+        <div class="alert alert-yellow" id="dedup-coverage" style="font-size:11px;">Loading…</div>
+        <div class="field-row">
+          <div class="field" style="max-width:160px;"><label>Fingerprint match threshold</label><input type="number" id="dedup-threshold" min="0.5" max="1" step="0.01"></div>
+          <button class="btn btn-sm" style="align-self:flex-end;" onclick="saveDedupThreshold()">Save</button>
+        </div>
+        <div class="drop-hint" style="margin-top:0.3rem;">How similar two tracks' local audio fingerprints (0–1) must be to count as the same recording during import duplicate detection — audio identity, not tags. Falls back to matching on track title when a fingerprint isn't available on either side.</div>
+        <div id="dedup-save-result"></div>
+      </div>
+      <hr class="divider">
       <div class="section-title" style="margin-bottom:0.5rem;">Note: beet version</div>
       <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;"><b>beet version</b> (not --plugins) shows active plugins.<br>Plugins only activate when listed under <span class="mono">plugins:</span> in config.yaml.<br>⚠ Never run <span class="mono">beet config -e</span> while the GUI is editing.</div>
       <div class="btn-row">
@@ -1100,6 +1118,33 @@ function openPrefs(){
       ?'Currently active — directory: '+data.directory+' · config: '+data.config_path
       :'Could not read the active config.';
   }).catch(()=>{el.textContent='Could not reach the server.';});
+  loadDedupSettings();
+}
+function loadDedupSettings(){
+  const cov=document.getElementById('dedup-coverage');
+  cov.textContent='Loading…';
+  fetch('/dedup/settings').then(r=>r.json()).then(data=>{
+    if(!data.ok){cov.textContent='Could not load duplicate-detection settings.';return;}
+    document.getElementById('dedup-threshold').value=data.dedup_fingerprint_threshold;
+    if(!data.chroma_available){
+      cov.className='alert alert-yellow';
+      cov.textContent='pyacoustid is not installed — duplicate detection falls back to title-matching only. pipx inject beets pyacoustid';
+    } else {
+      cov.className='alert alert-green';
+      cov.textContent=data.fingerprinted+' of '+data.total+' tracks fingerprinted'+
+        (data.fingerprinted<data.total?' — run "Compute fingerprints" under Library → Metadata to backfill the rest.':'.');
+    }
+  }).catch(()=>{cov.textContent='Could not reach the server.';});
+}
+function saveDedupThreshold(){
+  const el=document.getElementById('dedup-threshold');
+  const value=parseFloat(el.value);
+  const out=document.getElementById('dedup-save-result');
+  postJSON('/dedup/settings',{dedup_fingerprint_threshold:value}).then(data=>{
+    out.innerHTML=data.ok
+      ?'<div class="alert alert-green" style="font-size:10px;margin-top:0.3rem;">Saved.</div>'
+      :'<div class="alert alert-red" style="font-size:10px;margin-top:0.3rem;">'+escapeHtml(data.error||'Could not save.')+'</div>';
+  }).catch(()=>{out.innerHTML='<div class="alert alert-red" style="font-size:10px;margin-top:0.3rem;">Could not reach the server.</div>';});
 }
 function closePrefs(){document.getElementById('prefs-dialog').close();}
 document.addEventListener('keydown',e=>{
@@ -1405,8 +1450,11 @@ function renderDuplicateDecision(d){
   let html='<div class="decision-head"><div class="decision-current">Possible duplicate</div></div>';
   html+='<div class="dup-compare">';
   const titleList=t=>t&&t.length?'<div class="lib-row-meta">'+t.map(escapeHtml).join(', ')+'</div>':'';
+  const matchBadge=e=>e.matched_by==='fingerprint'
+    ?'<span class="rec-badge" title="Matched by comparing local audio fingerprints, not tags">🎵 audio match</span>'
+    :'<span class="lib-row-meta" title="No fingerprint on one or both sides — matched by track title instead">🏷 title match</span>';
   html+='<div class="dup-side"><div class="lib-row-meta">Already in library</div>'+
-    d.existing.map(e=>'<div class="candidate-card">'+escapeHtml(e.artist||'')+' — '+escapeHtml(e.name||'')+
+    d.existing.map(e=>'<div class="candidate-card">'+escapeHtml(e.artist||'')+' — '+escapeHtml(e.name||'')+' '+matchBadge(e)+
       '<div class="lib-row-meta">'+e.tracks+' track'+(e.tracks===1?'':'s')+' · '+escapeHtml(qualityLabel(e))+'</div>'+titleList(e.track_titles)+'</div>').join('')+
     '</div>';
   html+='<div class="dup-side"><div class="lib-row-meta">Incoming'+(rec==='remove'?' <span class="rec-badge">recommended</span>':'')+'</div>'+
@@ -1578,6 +1626,7 @@ function jobSummary(ev){
   // encoded (beets skips existing targets silently), so don't claim it.
   if(ev.sent!=null)parts.push(ev.sent+(ev.pretend?' previewed':' sent to the converter'));
   if(ev.skipped)parts.push(ev.skipped+' skipped');
+  if(ev.fingerprinted!=null)parts.push(ev.fingerprinted+' fingerprinted');
   // mbsync/bpsync report no counts at all (coarse-progress job, see
   // sync.py) — say so plainly rather than a misleading "nothing to do".
   const body=parts.length?parts.join(', ')+(ev.total!=null?' of '+ev.total:'')
@@ -1590,6 +1639,8 @@ function handleJobEvent(ev){
   if(ev.type==='status'){
     const status=document.getElementById('job-status');
     if(status)status.textContent=ev.message;
+  } else if(ev.type==='proposal'){
+    retagProposals.push(ev);
   } else if(ev.type==='error'){
     running.innerHTML='<div class="alert alert-red">'+escapeHtml(ev.message)+'</div>';
   } else if(ev.type==='done'){
@@ -1638,6 +1689,78 @@ function runArtwork(){
 }
 function startSync(kind){
   startJob('/sync/start',{kind:kind,...scopeBody()});
+}
+function startFingerprint(){
+  startJob('/fingerprint/start',scopeBody());
+}
+
+// ── Retag preview (#90) ──────────────────────────────────────────────────────
+// Proposals stream in via 'proposal' SSE events (handleJobEvent below) but
+// aren't rendered until the scan is done — the status line already shows
+// live progress (job-status, same as every other job), and rebuilding a
+// growing candidate list on every event would reset scroll position and
+// flicker mid-review. retagLastDoneEvent+retagProposals together are what
+// applyRetagCandidate() re-renders from after removing an applied one.
+let retagProposals=[];
+let retagLastDoneEvent=null;
+function startRetag(){
+  retagProposals=[];retagLastDoneEvent=null;
+  startJob('/retag/start',scopeBody(),renderRetagResult);
+}
+function retagSummaryHtml(ev){
+  if(!ev)return'';
+  const cls=ev.aborted?'alert-yellow':'alert-green';
+  const label=ev.aborted?'Aborted — ':'Scan finished — ';
+  let scanned='';
+  if(ev.albums_scanned!=null){
+    scanned=' (of '+ev.albums_scanned+' album'+(ev.albums_scanned===1?'':'s')+
+      (ev.items_scanned?' and '+ev.items_scanned+' singleton'+(ev.items_scanned===1?'':'s'):'')+' scanned)';
+  }
+  return '<div class="alert '+cls+'">'+label+retagProposals.length+' candidate'+(retagProposals.length===1?'':'s')+' to review'+scanned+'.</div>';
+}
+function renderRetagList(){
+  if(!retagProposals.length)return '<div class="lib-empty">No candidates left to review.</div>';
+  return retagProposals.map((p,pi)=>renderRetagProposal(p,pi)).join('');
+}
+function renderRetagResult(ev,el){
+  retagLastDoneEvent=ev;
+  el.innerHTML=retagSummaryHtml(ev)+renderRetagList();
+}
+function retagCandidateCard(c,ci,pi,cur,kind){
+  const curArtist=cur.artist,curTitle=kind==='album'?cur.album:cur.title;
+  const renamed=(c.tracks||[]).filter(t=>t.current!==t.new);
+  const trackNote=c.tracks&&c.tracks.length
+    ?c.tracks.length+' track'+(c.tracks.length===1?'':'s')+(renamed.length?', '+renamed.length+' renamed':'')
+    :'';
+  return '<div class="candidate-card">'+
+    '<div class="candidate-head">'+
+      '<span class="candidate-index">'+(ci+1)+'</span>'+
+      '<div class="candidate-title">'+fieldDiff(c.title,curTitle)+' <span class="lib-row-year">'+(c.year||'')+'</span></div>'+
+      '<div class="candidate-sim">'+c.similarity+'%</div>'+
+    '</div>'+
+    '<div class="candidate-artist">'+fieldDiff(c.artist,curArtist)+'</div>'+
+    '<div class="candidate-meta">'+[c.label,c.country,c.media,c.albumtype].filter(Boolean).map(escapeHtml).join(' · ')+'</div>'+
+    (trackNote?'<div class="lib-row-meta">'+trackNote+'</div>':'')+
+    '<button class="btn btn-primary btn-sm" onclick="applyRetagCandidate('+pi+','+ci+')">Apply</button>'+
+  '</div>';
+}
+function renderRetagProposal(p,pi){
+  const cur=p.kind==='album'?(p.current.artist+' — '+p.current.album):(p.current.artist+' — '+p.current.title);
+  return '<div class="section" style="margin-bottom:0.75rem;">'+
+    '<div class="lib-row-meta">Currently: <b>'+escapeHtml(cur)+'</b> · '+p.item_count+' track'+(p.item_count===1?'':'s')+'</div>'+
+    '<div class="candidate-list">'+p.candidates.map((c,ci)=>retagCandidateCard(c,ci,pi,p.current,p.kind)).join('')+'</div>'+
+  '</div>';
+}
+function applyRetagCandidate(pi,ci){
+  const p=retagProposals[pi];
+  if(!p||!jobRunner.id)return;
+  postJSON('/retag/'+jobRunner.id+'/apply',{kind:p.kind,target_id:p.target_id,candidate:ci})
+    .then(data=>{
+      if(!data.ok){alert('Could not apply: '+data.error);return;}
+      retagProposals.splice(pi,1);
+      renderResult(retagSummaryHtml(retagLastDoneEvent)+renderRetagList());
+    })
+    .catch(()=>alert('Could not reach the server.'));
 }
 
 // ── Filter (#64) ──────────────────────────────────────────────────────────────

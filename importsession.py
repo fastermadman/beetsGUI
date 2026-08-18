@@ -21,6 +21,7 @@ import threading
 import uuid
 
 from beets import config, context, plugins, ui
+from beets import logging as beets_logging
 try:
     from beets.autotag.match import AlbumMatch   # beets >= 2.13
 except ImportError:
@@ -32,7 +33,22 @@ except ImportError:
 from beets.importer import Action, ImportAbortError, ImportSession
 from beets.util import displayable_path
 
+# Local-only fingerprint comparison (#90) — acoustid.compare_fingerprints()
+# never touches the network, unlike the AcoustID *lookup* the chroma
+# plugin's `auto: yes` also does. Both come from pyacoustid
+# (`pipx inject beets pyacoustid`); if it isn't installed, dedup falls back
+# to the title-overlap heuristic below unconditionally.
+try:
+    import acoustid
+    from beetsplug import chroma
+except ImportError:
+    acoustid = None
+    chroma = None
+
 import jobs
+import settings
+
+_dedup_log = beets_logging.getLogger('beetsgui.dedup')
 
 # A blocked decision gives up after this long, so a closed browser tab
 # cannot pin an importer thread forever.
@@ -160,6 +176,47 @@ def quality_rank(items):
     if not items:
         return (0, 0, 0, 0)
     return min(_track_quality(i) for i in items)
+
+
+def _incoming_fingerprints(items):
+    """Local chromaprint fingerprints for the items being imported.
+
+    Computed live, here — that's cheap and expected: the file is already
+    being read for import. `fingerprint_item` caches on the Item object
+    (in-memory), so calling this once per _decide_duplicate() call and
+    reusing the result across every duplicate candidate costs one fpcalc
+    run per item, not one per candidate.
+    """
+    if acoustid is None:
+        return []
+    return [fp for fp in
+            (chroma.fingerprint_item(_dedup_log, i, write=False, quiet=True)
+             for i in items)
+            if fp]
+
+
+def _fingerprint_match(incoming_fps, dup_items, threshold):
+    """True/False if fingerprint comparison against `dup_items` is decisive,
+    None if neither side has a fingerprint to compare (caller falls back to
+    title overlap).
+
+    The *existing* side's fingerprint is read as stored — never computed
+    live here. That's fingerprint.py's backfill job, meant to run ahead of
+    time (#90): this decision has to stay fast regardless of library size,
+    and an existing item's audio file may not even be on a currently
+    mounted volume.
+    """
+    if not incoming_fps:
+        return None
+    existing_fps = [i.acoustid_fingerprint for i in dup_items if i.acoustid_fingerprint]
+    if not existing_fps:
+        return None
+    for fp in incoming_fps:
+        for efp in existing_fps:
+            score = acoustid.compare_fingerprints((0, fp.encode()), (0, efp.encode()))
+            if score >= threshold:
+                return True
+    return False
 
 
 def _summarize(obj, is_album):
@@ -387,10 +444,36 @@ class WebImportSession(ImportSession):
             dup_items = dup.items() if task.is_album else [dup]
             dup_titles = {i.title.strip().lower() for i in dup_items if i.title}
             return not incoming_titles or not dup_titles or bool(incoming_titles & dup_titles)
-        found_duplicates = [d for d in found_duplicates if _titles_overlap(d)]
+
+        # Fingerprint identity is the actual audio, not the tag, so it
+        # overrides the title-overlap guess above whenever both sides have
+        # one to compare (#90) — this both rescues a false positive (same
+        # album name, different song, coincidentally same title too) and
+        # catches a false negative title-overlap alone would miss (same
+        # recording, retagged differently). Falls back to title overlap
+        # per-candidate when a fingerprint isn't available on either side.
+        threshold = settings.load()['dedup_fingerprint_threshold']
+        incoming_fps = _incoming_fingerprints(items)
+        match_reason = {}
+        fingerprint_excluded = False
+        def _is_duplicate(dup):
+            nonlocal fingerprint_excluded
+            dup_items = dup.items() if task.is_album else [dup]
+            fp_match = _fingerprint_match(incoming_fps, dup_items, threshold)
+            if fp_match is True:
+                match_reason[id(dup)] = 'fingerprint'
+                return True
+            if fp_match is False:
+                fingerprint_excluded = True
+                return False
+            match_reason[id(dup)] = 'title'
+            return _titles_overlap(dup)
+        found_duplicates = [d for d in found_duplicates if _is_duplicate(d)]
         if not found_duplicates:
-            self.job.emit('status', message=(
-                'Auto-keep: same album name, different track — not a duplicate'))
+            message = ('Auto-keep: title matches but audio fingerprint differs — '
+                       'not a duplicate') if fingerprint_excluded else (
+                'Auto-keep: same album name, different track — not a duplicate')
+            self.job.emit('status', message=message)
             return 'keep'
 
         new_rank = quality_rank(items)
@@ -429,7 +512,9 @@ class WebImportSession(ImportSession):
         payload = {
             'kind':      'duplicate',
             'is_album':  task.is_album,
-            'existing':  [_summarize(d, task.is_album) for d in found_duplicates],
+            'existing':  [{**_summarize(d, task.is_album),
+                          'matched_by': match_reason.get(id(d), 'title')}
+                         for d in found_duplicates],
             'new': {
                 'artist': chosen.get('artist'),
                 'name':   chosen.get('album') if task.is_album else chosen.get('title'),
