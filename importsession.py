@@ -172,6 +172,11 @@ def _summarize(obj, is_album):
             'name':   obj.album,
             'tracks': len(items),
             'format': first.format if first else None,
+            # Duplicate *candidates* only match on (albumartist, album) —
+            # beets' own find_duplicates() ignores track title entirely —
+            # so a 1-track "album" here may share its name with a
+            # completely different song. Show what it actually contains.
+            'track_titles': [i.title for i in items] if len(items) <= 20 else None,
         }
     else:
         first = obj
@@ -366,6 +371,28 @@ class WebImportSession(ImportSession):
         items = task.imported_items()
         chosen = task.chosen_info()
 
+        # beets' own find_duplicates() matches candidates on (albumartist,
+        # album) alone — never track title (see ImportTask.find_duplicates
+        # in beets/importer.py). Two different songs that happen to share
+        # an album name (common here: many source releases import as one
+        # 1-track "album" per file) are "duplicate candidates" purely by
+        # coincidence. Trusting quality_rank on those isn't dedup, it's a
+        # coin flip that can silently auto-skip a real, different song
+        # just because its bitdepth/bitrate is lower than the unrelated
+        # track it collided with. Only compare quality against duplicates
+        # that actually share at least one track title with the incoming
+        # item(s) — anything else isn't a duplicate at all.
+        incoming_titles = {i.title.strip().lower() for i in items if i.title}
+        def _titles_overlap(dup):
+            dup_items = dup.items() if task.is_album else [dup]
+            dup_titles = {i.title.strip().lower() for i in dup_items if i.title}
+            return not incoming_titles or not dup_titles or bool(incoming_titles & dup_titles)
+        found_duplicates = [d for d in found_duplicates if _titles_overlap(d)]
+        if not found_duplicates:
+            self.job.emit('status', message=(
+                'Auto-keep: same album name, different track — not a duplicate'))
+            return 'keep'
+
         new_rank = quality_rank(items)
         existing_ranks = [
             quality_rank(d.items() if task.is_album else [d])
@@ -382,6 +409,23 @@ class WebImportSession(ImportSession):
                 'Auto-skip: an existing copy is higher quality'))
             return 'skip'
 
+        # Quiet mode must never block. Title overlap is already confirmed
+        # at this point, so a tie here means the same recording at the
+        # same quality — re-importing it would just duplicate the file on
+        # disk for no reason, so skip it. A strictly-better new copy still
+        # can't be auto-*removed* unattended, so it's kept alongside the
+        # existing one instead; the 'remove' recommendation can be acted
+        # on by hand later. Interactive/fast/timid modes are unaffected —
+        # they still ask below, same as before.
+        if config['import']['quiet']:
+            if new_rank == existing_rank:
+                self.job.emit('status', message=(
+                    'Auto-skip: identical duplicate already in library'))
+                return 'skip'
+            self.job.emit('status', message=(
+                'Auto-keep: new copy is better quality, quiet mode'))
+            return 'keep'
+
         payload = {
             'kind':      'duplicate',
             'is_album':  task.is_album,
@@ -391,6 +435,7 @@ class WebImportSession(ImportSession):
                 'name':   chosen.get('album') if task.is_album else chosen.get('title'),
                 'tracks': len(items),
                 'format': items[0].format if items else None,
+                'track_titles': [i.title for i in items] if len(items) <= 20 else None,
                 **_quality_fields(items[0] if items else None),
             },
         }
