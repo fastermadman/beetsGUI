@@ -154,6 +154,25 @@
   .lib-row.playing .lib-row-title,.lib-row.playing .lib-row-artist { color:var(--accent); }
   .lib-row-link { cursor:pointer; }
   .lib-row-check { flex-shrink:0; margin:0; }
+  /* Track table view (#93) — one column per chosen ID3 field, instead of
+     the fixed single-line .lib-row. Lives in the same #lib-results
+     scroll container, so only the sticky-header math is new here. */
+  .lib-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .lib-table th { position:sticky; top:0; background:var(--bg3); color:var(--text2); text-align:left; font-weight:500; font-size:10px; letter-spacing:0.04em; text-transform:uppercase; padding:0.5rem 0.6rem; border-bottom:1px solid var(--border); cursor:pointer; white-space:nowrap; user-select:none; }
+  .lib-table th:hover { color:var(--text); }
+  .lib-table th.sorted { color:var(--accent); }
+  .lib-table td { padding:0.4rem 0.6rem; border-bottom:1px solid var(--border); color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:22rem; }
+  .lib-table tr:last-child td { border-bottom:none; }
+  .lib-table tr:hover td { background:var(--bg3); }
+  .lib-table tr.playing td { color:var(--accent); }
+  .lib-table td.lib-row-check-cell,.lib-table th.lib-col-check { width:1.6rem; padding-right:0; }
+  .lib-table td.lib-row-actions-cell { white-space:nowrap; }
+  .lib-columns-popover { position:relative; display:inline-block; }
+  .lib-columns-panel { display:none; position:absolute; z-index:80; top:calc(100% + 4px); right:0; min-width:220px; max-width:min(280px, calc(100vw - 2rem)); max-height:280px; overflow:auto; background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius); box-shadow:0 8px 28px rgba(0,0,0,0.4); padding:0.4rem; }
+  .lib-columns-panel.open { display:block; }
+  .lib-columns-panel label { display:flex; align-items:center; gap:0.4rem; font-size:12px; color:var(--text2); padding:0.2rem 0.3rem; cursor:pointer; white-space:nowrap; }
+  .lib-columns-panel label:hover { color:var(--text); }
+  .lib-columns-panel input { margin:0; }
   /* Filter rows (#64) — field · operator · value, one row per condition. */
   .filter-row { display:flex; gap:0.4rem; align-items:center; margin-bottom:0.4rem; }
   .filter-row select { flex:0 0 8.5rem; }
@@ -466,6 +485,10 @@
             <input type="text" list="lib-sort-list" id="lib-sort" onchange="loadLibrary()" autocomplete="off"><datalist id="lib-sort-list"></datalist>
           </div>
           <button class="btn btn-sm" id="lib-dir" onclick="toggleLibDir()">↑ Asc</button>
+          <div class="lib-columns-popover" id="lib-columns-wrap" style="display:none;align-self:flex-end;">
+            <button class="btn btn-sm" onclick="toggleColumnsPanel(event)">Columns…</button>
+            <div class="lib-columns-panel" id="lib-columns-panel"></div>
+          </div>
         </div>
         <div class="action-bar">
           <span class="action-scope" id="action-scope"></span>
@@ -2073,6 +2096,98 @@ function fillLibSorts(){
     if(extra.includes(prev))inp.value=prev;
   });
 }
+// ── Track table columns (#93) ────────────────────────────────────────────────
+// Which real item fields show as columns in Tracks mode, and in what order
+// (the order they were added — no drag-to-reorder yet, see #93). Persisted
+// per-browser like the theme, not through settings.py/config.yaml: this is
+// a display preference, not library data or shared beets config.
+const TRACK_COLUMN_LABELS={
+  artist:'Artist', title:'Title', album:'Album', albumartist:'Album artist',
+  length:'Time', bpm:'BPM', initial_key:'Key', year:'Year', format:'Format',
+  genres:'Genre', label:'Label', bitrate:'Bitrate', track:'Track #',
+  disc:'Disc', added:'Added', comments:'Comments', catalognum:'Catalog #',
+};
+function columnLabel(f){
+  return TRACK_COLUMN_LABELS[f]||f.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
+const DEFAULT_TRACK_COLUMNS=['artist','title','length','bpm','initial_key'];
+let trackColumns=(function(){
+  try{
+    const saved=JSON.parse(localStorage.getItem('trackColumns'));
+    if(Array.isArray(saved)&&saved.length)return saved;
+  }catch(e){}
+  return DEFAULT_TRACK_COLUMNS.slice();
+})();
+function toggleColumn(field,on){
+  if(on&&!trackColumns.includes(field))trackColumns.push(field);
+  else if(!on)trackColumns=trackColumns.filter(f=>f!==field);
+  localStorage.setItem('trackColumns',JSON.stringify(trackColumns));
+  loadLibrary();
+}
+function toggleColumnsPanel(e){
+  e.stopPropagation();
+  const panel=document.getElementById('lib-columns-panel');
+  const open=!panel.classList.contains('open');
+  if(open)renderColumnsPanel();
+  panel.classList.toggle('open',open);
+}
+function renderColumnsPanel(){
+  const panel=document.getElementById('lib-columns-panel');
+  panel.innerHTML='<div class="lib-empty" style="padding:0.5rem;">Loading fields…</div>';
+  loadFieldOptions().then(cols=>{
+    const known=new Set(['id','path','album_id']);
+    const fields=cols.filter(c=>!known.has(c)).slice().sort();
+    panel.innerHTML=fields.map(f=>
+      '<label><input type="checkbox" '+(trackColumns.includes(f)?'checked':'')+
+      ' onchange="toggleColumn(\''+f+'\',this.checked)"><span>'+escapeHtml(columnLabel(f))+'</span></label>'
+    ).join('');
+  });
+}
+function formatColumnValue(field,val){
+  if(val==null||val==='')return '';
+  if(field==='length')return fmtDuration(val);
+  if(field==='added'||field==='mtime'){
+    const d=new Date(val*1000);
+    return isNaN(d)?'':d.toLocaleDateString();
+  }
+  if(field==='bitrate')return Math.round(val/1000)+'kbps';
+  return String(val);
+}
+function renderTrackTable(rows){
+  const sortField=document.getElementById('lib-sort').value;
+  const head=trackColumns.map(f=>
+    '<th class="'+(f===sortField?'sorted':'')+'" onclick="sortByColumn(\''+f+'\')">'+
+    escapeHtml(columnLabel(f))+(f===sortField?(libDir==='asc'?' ↑':' ↓'):'')+'</th>'
+  ).join('');
+  const body=rows.map((t,i)=>trackTableRow(t,i)).join('');
+  return '<table class="lib-table"><thead><tr><th class="lib-col-check"></th>'+head+
+    '<th></th></tr></thead><tbody>'+body+'</tbody></table>';
+}
+function trackTableRow(t,i){
+  const cells=trackColumns.map(f=>'<td>'+escapeHtml(formatColumnValue(f,t[f]))+'</td>').join('');
+  return '<tr class="lib-row" data-track="'+t.id+'" oncontextmenu="trackMenu(event,'+i+')">'+
+    '<td class="lib-row-check-cell"><input class="lib-row-check" type="checkbox" title="Select for actions" '+
+      'onchange="toggleSel('+t.id+',this.checked)"></td>'+
+    cells+
+    '<td class="lib-row-actions-cell"><div class="lib-row-actions">'+
+      '<button class="row-btn" onclick="playFromResults('+i+')" title="Play from here">▶</button>'+
+      '<button class="row-btn" onclick="addToQueue([libTracks['+i+']])" title="Add to queue">+</button>'+
+    '</div></td></tr>';
+}
+// Clicking a column header sorts by it (reusing the existing lib-sort/
+// lib-dir mechanism — #93 doesn't add a second sort implementation),
+// toggling direction on a second click of the same header.
+function sortByColumn(field){
+  const inp=document.getElementById('lib-sort');
+  if(inp.value===field){
+    toggleLibDir();
+    return;
+  }
+  inp.value=field;
+  libDir='asc';
+  document.getElementById('lib-dir').textContent='↑ Asc';
+  loadLibrary();
+}
 function toggleLibDir(){
   libDir=libDir==='asc'?'desc':'asc';
   document.getElementById('lib-dir').textContent=libDir==='asc'?'↑ Asc':'↓ Desc';
@@ -2095,6 +2210,7 @@ function loadLibrary(){
 function renderLibrary(data,q,mode){
   const el=document.getElementById('lib-results'),count=document.getElementById('lib-count');
   libTracks=[];libAlbums=[];
+  document.getElementById('lib-columns-wrap').style.display=libMode==='tracks'?'inline-block':'none';
   if(!data.ok){
     count.textContent='';
     // The advanced query box can now produce a query beets rejects, so a
@@ -2114,7 +2230,8 @@ function renderLibrary(data,q,mode){
   count.textContent=data.total+' '+mode.noun+(data.total===1?'':'s');
   if(libMode==='tracks')libTracks=rows;
   if(libMode==='albums')libAlbums=rows;
-  el.innerHTML=rows.map(libMode==='albums'?albumRow:libMode==='tracks'?trackRow:artistRow).join('');
+  el.innerHTML=libMode==='tracks'?renderTrackTable(rows)
+    :rows.map(libMode==='albums'?albumRow:artistRow).join('');
   markPlayingRow();
 }
 function albumRow(a,i){
@@ -2128,18 +2245,6 @@ function albumRow(a,i){
     '<div class="lib-row-actions">'+
       '<button class="row-btn" onclick="playAlbum('+a.id+',false)" title="Play album">▶</button>'+
       '<button class="row-btn" onclick="playAlbum('+a.id+',true)" title="Add album to queue">+</button>'+
-    '</div></div>';
-}
-function trackRow(t,i){
-  return '<div class="lib-row" data-track="'+t.id+'" oncontextmenu="trackMenu(event,'+i+')">'+
-    '<input class="lib-row-check" type="checkbox" title="Select for actions" '+
-      'onchange="toggleSel('+t.id+',this.checked)">'+
-    '<div class="lib-row-title" style="flex:1;min-width:0;"><span class="lib-row-artist">'+escapeHtml(t.artist||'Unknown artist')+'</span>'+
-    ' — '+escapeHtml(t.title||'Untitled')+'</div>'+
-    '<div class="lib-row-meta">'+escapeHtml(t.format||'')+' · '+fmtDuration(t.length)+'</div>'+
-    '<div class="lib-row-actions">'+
-      '<button class="row-btn" onclick="playFromResults('+i+')" title="Play from here">▶</button>'+
-      '<button class="row-btn" onclick="addToQueue([libTracks['+i+']])" title="Add to queue">+</button>'+
     '</div></div>';
 }
 function artistRow(a){
@@ -2401,6 +2506,12 @@ document.addEventListener('DOMContentLoaded',function(){
     if(qEl.contains(e.target)||btn.contains(e.target)||
        document.getElementById('ctx-menu').contains(e.target))return;
     queueOpen=false;renderPlayer();
+  });
+  // Columns panel (#93): closes on an outside click, same as the queue popover.
+  document.addEventListener('click',function(e){
+    const panel=document.getElementById('lib-columns-panel');
+    if(!panel.classList.contains('open')||panel.contains(e.target))return;
+    panel.classList.remove('open');
   });
   // Any click, Escape or scroll dismisses the context menu — it's fixed to the
   // viewport, so a scrolled list would leave it pointing at a different row.
