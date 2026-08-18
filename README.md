@@ -11,9 +11,10 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
 ## Features
 
 - **Inbox** — scan a folder for music not yet in your library (matches on artist/title, not path, so it's correct however previous imports were copied or moved), then import with a keyboard-driven decision queue for matches and duplicates
-- **Library** — search and browse your collection by album, track or artist with a sort control, play tracks in the app with a queue and a seekable transport, manage duplicates, cover art and metadata, convert WAV/AIFF/FLAC to ALAC, remove tracks
+- **Library** — search and browse your collection by album, track or artist; tracks show as a spreadsheet-style table with a column picker (any real ID3 field — BPM, key, genre, label, ...) and click-to-sort headers; play tracks in the app with a queue and a seekable transport, manage duplicates, cover art and metadata, convert WAV/AIFF/FLAC to ALAC, remove tracks
+- **Fix wrong tags** — dry-run AcoustID/MusicBrainz re-tag review for tracks whose tags are wrong (e.g. a record label sitting in the artist field): proposes candidates without writing anything until you accept one, per track or album
 - **Export** — playlists and tracklists for Lexicon/Traktor, USB mirror
-- **Preferences** (⚙ in the header, or ⌘,) — library/import/plugin config with a live `config.yaml` preview, and Discogs/MusicBrainz/Beatport4 credentials
+- **Preferences** (⚙ in the header, or ⌘,) — library/import/plugin config with a live `config.yaml` preview, Discogs/MusicBrainz/Beatport4 credentials, and the duplicate-detection fingerprint threshold
 - Dark + light mode (follows macOS system preference)
 
 ## Requirements
@@ -27,6 +28,11 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
 - ffmpeg (optional, for lossless → ALAC conversion):
   ```bash
   brew install ffmpeg
+  ```
+- pyacoustid + the `chroma` plugin (optional, for fingerprint-based duplicate
+  detection and the re-tag review — falls back to tag-only matching without it):
+  ```bash
+  pipx inject beets pyacoustid
   ```
 
 No `fd` needed: the scans that once shelled out to it (Inbox's Utilities,
@@ -113,6 +119,12 @@ Duplicates are ranked by quality before you're ever asked: a lossy copy of an
 album already in the library is skipped automatically, a lossless copy
 recommends replacing the existing one, and equal-quality duplicates still ask
 with no recommendation either way. See `quality_rank()` in `importsession.py`.
+Whether something even counts as a duplicate prefers local AcoustID/chroma
+fingerprint comparison over tag matching when a fingerprint is available on
+both sides (falls back to title matching otherwise) — run "Compute
+fingerprints" under Library → Metadata once to backfill existing tracks, and
+tune the match threshold in Preferences. See `_decide_duplicate()` in
+`importsession.py`.
 
 The underlying endpoints also work with `curl` alone, for scripting or
 debugging:
