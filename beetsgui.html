@@ -330,6 +330,7 @@
           <label class="check-item"><input type="checkbox" value="One Shots"> One Shots</label>
         </div>
         <div class="btn-row"><button class="btn btn-primary" onclick="scanUnimported()">Scan for unimported music</button></div>
+        <div class="lib-results" id="scan-unimported-results" style="display:none;"></div>
         <div class="field-row" style="margin-top:0.6rem;">
           <div class="field" style="margin-bottom:0"><input type="text" id="scan-ext" placeholder="Filter by extension, e.g. aiff or wav,aiff"></div>
           <button class="btn btn-sm" onclick="scanListByExt()">List matching files →</button>
@@ -3013,25 +3014,34 @@ function scanItunesLibrary(){
     .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 
+// #100: renders inline in #scan-section (its own .lib-results box), not
+// via renderResult() into the docked activity panel — the Import → handoff
+// below needs to be a short scroll from the field it fills, not a jump
+// between layout layers. See #87's decision comment for why.
+function renderScanResult(html){
+  const el=document.getElementById('scan-unimported-results');
+  el.style.display=html?'block':'none';
+  el.innerHTML=html;
+}
 function scanUnimported(){
   const dir=document.getElementById('scan-path').value.trim();
   const excl=Array.from(document.querySelectorAll('#scan-excl input:checked')).map(c=>c.value).join(',');
-  if(!dir){renderResult('<div class="lib-empty">Enter a path to scan.</div>');return;}
-  renderResult('<div class="lib-empty">Scanning…</div>');
+  if(!dir){renderScanResult('<div class="lib-empty">Enter a path to scan.</div>');return;}
+  renderScanResult('<div class="lib-empty">Scanning…</div>');
   checkiCloud(dir);
   fetch('/unimported?dir='+encodeURIComponent(dir)+(excl?'&exclude='+encodeURIComponent(excl):''))
     .then(r=>r.json())
     .then(data=>renderUnimported(data))
-    .catch(()=>renderResult('<div class="lib-empty">Could not reach the server.</div>'));
+    .catch(()=>renderScanResult('<div class="lib-empty">Could not reach the server.</div>'));
 }
 function renderUnimported(data){
-  if(!data.ok){renderResult('<div class="lib-empty">'+escapeHtml(data.error)+'</div>');return;}
+  if(!data.ok){renderScanResult('<div class="lib-empty">'+escapeHtml(data.error)+'</div>');return;}
   if(!data.folders.length){
-    renderResult('<div class="lib-empty">Nothing new — everything here is already in your library.</div>');
+    renderScanResult('<div class="lib-empty">Nothing new — everything here is already in your library.</div>');
     return;
   }
   const count='<div class="lib-count">'+data.total_files+' unimported file'+(data.total_files===1?'':'s')+' in '+data.folders.length+' folder'+(data.folders.length===1?'':'s')+'</div>';
-  renderResult(count+data.folders.map(f=>
+  renderScanResult(count+data.folders.map(f=>
     '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f.path)+'</div>'+
     '<div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">'+
       '<span class="lib-row-meta">'+f.count+' file'+(f.count===1?'':'s')+'</span>'+

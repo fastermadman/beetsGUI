@@ -83,6 +83,16 @@ def _import_one_album(tmp):
             decide(event, choice='asis')
 
 
+def _make_unimported_album(tmp):
+    """A real audio file on disk that never went through import — /unimported
+    (the real endpoint) needs something genuine to find. Deliberately not
+    _import_one_album's helper: that one lands in the library, which is
+    exactly what must NOT show up here."""
+    folder = tmp / 'incoming' / 'unscanned'
+    make_album(folder, 'Scan Test Artist', 'Scan Test Album', ['Scan Test Track'])
+    return folder
+
+
 def main():
     if not shutil.which('ffmpeg'):
         raise SystemExit('ffmpeg needed to generate test audio — skipping')
@@ -93,6 +103,7 @@ def main():
 
     try:
         _import_one_album(tmp)
+        unimported_dir = _make_unimported_album(tmp)
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
@@ -191,6 +202,24 @@ def main():
             assert disclosure['ambiguousHighlightsDecider'], disclosure
             assert disclosure['weakUnchanged'], disclosure
             assert not errors, f'console errors during import decision panel test: {errors}'
+
+            # Scan results render inline in #scan-section, not the docked
+            # activity panel (#100) — real /unimported call against a real
+            # file on disk, end to end through Import ->.
+            page.locator('#scan-path').fill(str(unimported_dir))
+            page.get_by_role('button', name='Scan for unimported music').click()
+            page.wait_for_timeout(500)
+            scan_results = page.locator('#scan-unimported-results')
+            assert scan_results.get_by_text(str(unimported_dir)).first.is_visible(), \
+                'scan result did not render inside #scan-section'
+            assert page.locator('#job-queue-panel').is_hidden(), \
+                'scan result leaked into the docked activity panel instead of staying in #scan-section'
+
+            scan_results.get_by_role('button', name='Import →').click()
+            page.wait_for_timeout(200)
+            assert page.locator('#import-path').input_value() == str(unimported_dir), \
+                'Import -> did not fill Music path with the scanned folder'
+            assert not errors, f'console errors during scan/import handoff: {errors}'
 
             # Library tab shows the album that was actually just imported —
             # end to end: real import -> real library.db -> real /library
