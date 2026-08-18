@@ -28,7 +28,7 @@ jobs:
         # run here should mean "this PR broke something," not "beets
         # shipped a new release." See .github/workflows/beets-canary.yml
         # for the latter.
-        run: pip install beets==2.13.1 flask playwright
+        run: pip install beets==2.13.1 flask playwright pyacoustid
 
       - name: Install Playwright's Chromium
         # --with-deps pulls the system libraries Chromium needs on a bare
@@ -70,6 +70,15 @@ jobs:
 
       - name: Run test_importsession.py
         run: python test_importsession.py
+
+      - name: Run test_fingerprint.py
+        run: python test_fingerprint.py
+
+      - name: Run test_dedup_fingerprint.py
+        run: python test_dedup_fingerprint.py
+
+      - name: Run test_retag.py
+        run: python test_retag.py
 
       - name: Run test_usb_mirror.py
         run: python test_usb_mirror.py

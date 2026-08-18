@@ -29,9 +29,12 @@ except ImportError:
 try:
     import artwork
     import duplicates
+    import fingerprint
     import importsession
     import jobs
     import libops
+    import retag
+    import settings
     import sync
     import traktor
     import transcode
@@ -1231,6 +1234,106 @@ def sync_start():
     except RuntimeError as e:
         return jsonify({'ok': False, 'error': str(e)}), 409
     return jsonify({'ok': True, **job.summary()})
+
+
+@app.route('/fingerprint/start', methods=['POST'])
+def fingerprint_start():
+    """Backfill AcoustID/chromaprint fingerprints for items that don't have
+    one yet (#90) — local-only, no network call. Prerequisite for
+    fingerprint-based duplicate detection in importsession.py. Body:
+    {"scope": {...}}. Progress streams on /jobs/<id>/events."""
+    data = request.get_json(silent=True) or {}
+    try:
+        job = fingerprint.start(query=libops.scope_query(data))
+    except RuntimeError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 409
+    return jsonify({'ok': True, **job.summary()})
+
+
+def _chroma_available():
+    try:
+        import acoustid   # noqa: F401 — presence check only
+        return True
+    except ImportError:
+        return False
+
+
+@app.route('/dedup/settings')
+def dedup_settings():
+    """Fingerprint-based duplicate-detection settings (#90) — the threshold
+    plus how much of the library actually has a fingerprint to compare
+    against, so the number in Preferences means something rather than
+    being tuned blind."""
+    con = _library_con()
+    total = fingerprinted = 0
+    if con is not None:
+        total = con.execute('SELECT COUNT(*) FROM items').fetchone()[0]
+        fingerprinted = con.execute(
+            "SELECT COUNT(*) FROM items WHERE acoustid_fingerprint != ''"
+        ).fetchone()[0]
+        con.close()
+    return jsonify({'ok': True, **settings.load(),
+                    'total': total, 'fingerprinted': fingerprinted,
+                    'chroma_available': _chroma_available()})
+
+
+@app.route('/dedup/settings', methods=['POST'])
+def dedup_settings_save():
+    """Body: {"dedup_fingerprint_threshold": 0.95}. The score two
+    fingerprints (acoustid.compare_fingerprints(), 0..1) must reach to
+    count as the same recording in importsession._decide_duplicate."""
+    data = request.get_json(silent=True) or {}
+    threshold = data.get('dedup_fingerprint_threshold')
+    try:
+        threshold = float(threshold)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False,
+                        'error': 'dedup_fingerprint_threshold must be a number'}), 400
+    if not 0 < threshold <= 1:
+        return jsonify({'ok': False,
+                        'error': 'dedup_fingerprint_threshold must be between 0 and 1'}), 400
+    return jsonify({'ok': True, **settings.save({'dedup_fingerprint_threshold': threshold})})
+
+
+@app.route('/retag/start', methods=['POST'])
+def retag_start():
+    """Dry-run AcoustID/MusicBrainz re-tag preview (#90) — proposes
+    candidates for albums/singletons whose *tags* may be wrong, writes
+    nothing. Body: {"scope": {...}}. Progress streams on
+    /jobs/<id>/events, one 'proposal' event per album/item that got a
+    candidate; review and apply each individually via /retag/<id>/apply
+    once the job is done (applying is gated by _busy_response() below, so
+    it waits for the scan itself to finish first)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        job = retag.start(query=libops.scope_query(data))
+    except RuntimeError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 409
+    return jsonify({'ok': True, **job.summary()})
+
+
+@app.route('/retag/<job_id>/apply', methods=['POST'])
+def retag_apply(job_id):
+    """Apply one previewed candidate. Body: {"kind": "album"|"item",
+    "target_id": 123, "candidate": 0}. Writes tags to the file and
+    updates the library — the only place a retag preview actually
+    changes anything."""
+    if busy := _busy_response():
+        return busy
+    data = request.get_json(silent=True) or {}
+    kind = data.get('kind')
+    if kind not in ('album', 'item'):
+        return jsonify({'ok': False, 'error': 'kind must be "album" or "item"'}), 400
+    try:
+        target_id = int(data.get('target_id'))
+        candidate = int(data.get('candidate', 0))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False,
+                        'error': 'target_id and candidate must be integers'}), 400
+    error = retag.apply(job_id, kind, target_id, candidate)
+    if error:
+        return jsonify({'ok': False, 'error': error}), 409
+    return jsonify({'ok': True})
 
 
 @app.route('/traktor/scan/start', methods=['POST'])
