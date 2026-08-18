@@ -427,7 +427,14 @@ def library():
             SELECT a.id, a.albumartist, a.album, a.year,
                    (SELECT format FROM items i WHERE i.album_id = a.id LIMIT 1) AS format,
                    (SELECT COUNT(*) FROM items i WHERE i.album_id = a.id) AS track_count,
-                   (SELECT COALESCE(SUM(length), 0) FROM items i WHERE i.album_id = a.id) AS duration
+                   (SELECT COALESCE(SUM(length), 0) FROM items i WHERE i.album_id = a.id) AS duration,
+                   -- A 1-track "album" is often really just a single song
+                   -- filed under its own release title (common when the
+                   -- source files aren't tagged with a track total) — the
+                   -- album name alone can't distinguish it from any other
+                   -- song on the same nominal album. Surface the track
+                   -- title too so the list isn't a wall of identical rows.
+                   (SELECT title FROM items i WHERE i.album_id = a.id LIMIT 1) AS single_track_title
             FROM albums a
             WHERE {where}
             ORDER BY {_order_by(ALBUM_SORTS, 'artist')}
@@ -1138,13 +1145,17 @@ def serve_assets(filename):
 
 @app.route('/status')
 def status():
-    """Server status, beet path and mounted volumes. Used by the test suite
-    to poll for server readiness; the UI itself never calls it."""
+    """Server status, beet path, mounted volumes and the active config's
+    resolved paths. Polled by the test suite for server readiness, and by
+    the Preferences tab to show which library/config is actually active."""
     return jsonify({
-        'ok':      True,
-        'beet':    find_beet(),
-        'volumes': list_volumes(),
-        'port':    PORT,
+        'ok':          True,
+        'beet':        find_beet(),
+        'volumes':     list_volumes(),
+        'port':        PORT,
+        'config_path': get_config_path(),
+        'directory':   get_library_directory(),
+        'library_db':  get_library_db_path(),
     })
 
 
