@@ -111,6 +111,87 @@ def main():
                 page.wait_for_timeout(150)
             assert not errors, f'console errors while switching tabs: {errors}'
 
+            # Import decision panel: confidence-driven disclosure (#99).
+            # Driving a real 'strong'/'none'-recommendation match through
+            # the stub metadata source isn't worth the fixture complexity —
+            # decisionConfidence()/candidateCard()/candidateSummary() are
+            # pure functions of the decision payload, so exercise the real
+            # DOM/JS the same way #96's own verification did: feed
+            # renderDecision() a synthetic payload and read the rendered
+            # DOM back. Still on the Inbox tab from the loop above.
+            disclosure = page.evaluate('''() => {
+                const out = {};
+                const realFetch = window.fetch;
+                window.fetch = () => Promise.resolve({json:()=>Promise.resolve({ok:true})});
+
+                const confident = {
+                    decision_id:'t1', kind:'album', item_count:10,
+                    current:{artist:'A', album:'B'}, recommendation:'strong',
+                    candidates:[
+                        {similarity:99, artist:'A', title:'B', year:2000, tracks:[]},
+                        {similarity:60, artist:'A', title:'B2', year:2001, tracks:[]},
+                    ],
+                };
+                importState.decision = confident; importState.selected = 0; importState.expanded = false;
+                renderDecision();
+                out.confidentCollapsed = document.querySelectorAll('.candidate-list').length === 0;
+                out.confidentBadge = (document.querySelector('.rec-badge') || {}).textContent;
+
+                // number key still reaches a candidate hidden by the collapse
+                window.__calls = [];
+                window.fetch = (url, opts) => {
+                    window.__calls.push(JSON.parse(opts.body));
+                    return Promise.resolve({json:()=>Promise.resolve({ok:true})});
+                };
+                document.dispatchEvent(new KeyboardEvent('keydown', {key:'2', bubbles:true}));
+                out.numberKeyAppliesHiddenCandidate = window.__calls.length === 1
+                    && window.__calls[0].candidate === 1;
+
+                // M expands the collapsed card into the full list
+                importState.decision = confident; importState.selected = 0; importState.expanded = false;
+                renderDecision();
+                document.dispatchEvent(new KeyboardEvent('keydown', {key:'m', bubbles:true}));
+                out.expandedAfterM = document.querySelectorAll('.candidate-card').length === 2;
+
+                const ambiguous = {
+                    decision_id:'t2', kind:'album', item_count:11,
+                    current:{artist:'2Cellos', album:'Score'}, recommendation:'none',
+                    candidates:[
+                        {similarity:53.6, artist:'2Cellos', title:'Score', year:2017,
+                         label:'Sony Masterworks', country:'US', media:'CD', tracks:[]},
+                        {similarity:53.4, artist:'2Cellos', title:'Score', year:2017,
+                         label:'Sony Classical', country:'EU', media:'Digital Media', tracks:[]},
+                    ],
+                };
+                importState.decision = ambiguous; importState.selected = 0; importState.expanded = false;
+                renderDecision();
+                out.ambiguousShowsBoth = document.querySelectorAll('.candidate-card').length === 2;
+                out.ambiguousHighlightsDecider = Array.from(document.querySelectorAll('.candidate-decider'))
+                    .some(el => el.textContent.includes('Sony Masterworks'));
+
+                const weak = {
+                    decision_id:'t3', kind:'album', item_count:8,
+                    current:{artist:'X', album:'Y'}, recommendation:'low',
+                    candidates:[{similarity:22, artist:'Z', title:'W', year:2005, tracks:[]}],
+                };
+                importState.decision = weak; importState.selected = 0; importState.expanded = false;
+                renderDecision();
+                out.weakUnchanged = document.querySelectorAll('.candidate-list').length === 1
+                    && document.querySelector('.rec-badge') === null;
+
+                importState.decision = null; renderDecision();
+                window.fetch = realFetch;
+                return out;
+            }''')
+            assert disclosure['confidentCollapsed'], disclosure
+            assert disclosure['confidentBadge'] == 'Strong match', disclosure
+            assert disclosure['numberKeyAppliesHiddenCandidate'], disclosure
+            assert disclosure['expandedAfterM'], disclosure
+            assert disclosure['ambiguousShowsBoth'], disclosure
+            assert disclosure['ambiguousHighlightsDecider'], disclosure
+            assert disclosure['weakUnchanged'], disclosure
+            assert not errors, f'console errors during import decision panel test: {errors}'
+
             # Library tab shows the album that was actually just imported —
             # end to end: real import -> real library.db -> real /library
             # query -> real DOM.

@@ -242,6 +242,7 @@
   .candidate-artist { color:var(--text2); font-size:12px; margin-top:0.15rem; }
   .candidate-meta { color:var(--text3); font-size:10px; margin-top:0.25rem; }
   .diff { color:var(--accent); font-weight:700; }
+  .candidate-decider { color:var(--accent); font-weight:700; }
   .track-diff { margin-top:0.4rem; font-size:10px; color:var(--text3); }
   .track-diff summary { cursor:pointer; }
   .track-diff-row { padding:0.15rem 0; }
@@ -1229,7 +1230,7 @@ function checkiCloud(path){
 // Turns the /import/* SSE stream into a decision queue: candidate cards for
 // album/item matches, a compare view for duplicates, and a keyboard-first
 // flow so a 40-album import never needs the mouse.
-let importState={jobId:null,es:null,decision:null,selected:0,decided:0,log:[],running:false};
+let importState={jobId:null,es:null,decision:null,selected:0,expanded:false,decided:0,log:[],running:false};
 
 // A curated file list (e.g. from a format-filtered scan) overrides the plain
 // path field — /import/start already supports {"paths":[...]} for this.
@@ -1271,7 +1272,7 @@ function checkCurrentImport(){
   fetch('/jobs/current').then(r=>r.json()).then(data=>{
     if(!data.id||data.kind!=='import')return;
     attachImport(data.id);
-    if(data.decision){importState.decision=data.decision;importState.selected=0;renderDecision();}
+    if(data.decision){importState.decision=data.decision;importState.selected=0;importState.expanded=false;renderDecision();}
   }).catch(()=>{});
 }
 
@@ -1395,7 +1396,7 @@ function handleImportEvent(ev){
   else if(ev.type==='error'){importLog('Error: '+ev.message);renderImportProgress();}
   else if(ev.type==='decision'){
     if(importState.decision&&importState.decision.decision_id===ev.decision_id)return;
-    importState.decision=ev;importState.selected=0;renderDecision();
+    importState.decision=ev;importState.selected=0;importState.expanded=false;renderDecision();
   } else if(ev.type==='done'){
     importState.decided=ev.decided;importState.decision=null;importState.running=false;
     importLog(ev.aborted?'Import aborted.':'Import finished — '+ev.decided+' decision'+(ev.decided===1?'':'s')+'.');
@@ -1498,7 +1499,7 @@ function fieldDiff(newVal,curVal){
   return '<span class="'+(same?'':'diff')+'">'+escapeHtml(newVal||'—')+'</span>';
 }
 
-function candidateCard(c,i,d){
+function candidateCard(c,i,d,deciders){
   const curArtist=d.current.artist,curTitle=d.kind==='album'?d.current.album:d.current.title;
   const selected=i===importState.selected;
   const renamed=(c.tracks||[]).filter(t=>t.current!==t.new);
@@ -1508,6 +1509,9 @@ function candidateCard(c,i,d){
   const trackDetail=renamed.length?'<details class="track-diff"><summary>Show renamed tracks</summary>'+
       renamed.map(t=>'<div class="track-diff-row">'+escapeHtml(t.current)+' → '+escapeHtml(t.new)+'</div>').join('')+
     '</details>':'';
+  const metaFields=[['label',c.label],['country',c.country],['media',c.media],['albumtype',c.albumtype]]
+    .filter(([,v])=>v)
+    .map(([k,v])=>'<span'+(deciders&&deciders.has(k)?' class="candidate-decider" title="Differs from the other close match">':'')+escapeHtml(v)+'</span>');
   return '<div class="candidate-card'+(selected?' selected':'')+'" onclick="selectCandidate('+i+')">'+
     '<div class="candidate-head">'+
       '<span class="candidate-index">'+(i+1)+'</span>'+
@@ -1515,11 +1519,58 @@ function candidateCard(c,i,d){
       '<div class="candidate-sim">'+c.similarity+'%</div>'+
     '</div>'+
     '<div class="candidate-artist">'+fieldDiff(c.artist,curArtist)+'</div>'+
-    '<div class="candidate-meta">'+[c.label,c.country,c.media,c.albumtype].filter(Boolean).map(escapeHtml).join(' · ')+'</div>'+
+    '<div class="candidate-meta">'+metaFields.join(' · ')+'</div>'+
     (trackNote?'<div class="lib-row-meta">'+trackNote+'</div>'+trackDetail:'')+
     '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();applyCandidate('+i+')">Apply <span class="kbd">'+(i+1)+'</span></button>'+
   '</div>';
 }
+
+// A collapsed one-card view for a clear-winner decision — beets' own
+// `strong` recommendation (min_dist below strong_rec_thresh) already means
+// this is the case `beet import`'s terminal UI applies on a bare Enter, so
+// reusing that signal (already on the wire in d.recommendation) keeps this
+// in sync with whatever thresholds the user configured, including Timid
+// mode (#101), instead of guessing a second numeric cutoff on similarity%.
+function candidateSummary(c,d){
+  const curArtist=d.current.artist,curTitle=d.kind==='album'?d.current.album:d.current.title;
+  const renamed=(c.tracks||[]).filter(t=>t.current!==t.new);
+  const trackNote=c.tracks&&c.tracks.length
+    ?c.tracks.length+' track'+(c.tracks.length===1?'':'s')+(renamed.length?', '+renamed.length+' renamed':'')
+    :'';
+  return '<div class="candidate-card selected">'+
+    '<div class="candidate-head">'+
+      '<span class="rec-badge">Strong match</span>'+
+      '<div class="candidate-title">'+fieldDiff(c.title,curTitle)+' <span class="lib-row-year">'+(c.year||'')+'</span></div>'+
+      '<div class="candidate-sim">'+c.similarity+'%</div>'+
+    '</div>'+
+    '<div class="candidate-artist">'+fieldDiff(c.artist,curArtist)+'</div>'+
+    (trackNote?'<div class="lib-row-meta">'+trackNote+'</div>':'')+
+    '<button class="btn btn-primary btn-sm" onclick="applyCandidate(0)">Apply <span class="kbd">Enter</span></button>'+
+  '</div>';
+}
+
+// beets' own gap check (results[1].distance - min_dist < rec_gap_thresh)
+// is exactly Picard's "flag as ambiguous" rule, and it's what makes
+// task.rec come back 'none' with 2+ candidates present — so that state
+// *is* the near-tie case (e.g. two candidates differing only by
+// label/country/media, #96). Mark whichever of those fields actually
+// differ between the top two so the disambiguator stands out instead of
+// reading as one more line of noise on both cards.
+function decidingFields(c0,c1){
+  const keys=['label','country','media','albumtype'];
+  const out=new Set();
+  keys.forEach(k=>{ if((c0[k]||'')!==(c1[k]||''))out.add(k); });
+  return out;
+}
+
+function decisionConfidence(d){
+  if(!d.candidates||d.candidates.length<1)return'full';
+  if(d.recommendation==='strong')return'confident';
+  if(d.recommendation==='none'&&d.candidates.length>1)return'ambiguous';
+  return'full';
+}
+
+function toggleExpanded(){importState.expanded=!importState.expanded;renderDecision();}
 
 function renderMatchDecision(d){
   const cur=d.kind==='album'?(d.current.artist+' — '+d.current.album):(d.current.artist+' — '+d.current.title);
@@ -1529,9 +1580,16 @@ function renderMatchDecision(d){
       '<button class="btn" onclick="decideImport(\'asis\')"><span class="kbd">A</span>As-is</button>'+
       '<button class="btn btn-danger" onclick="decideImport(\'skip\')"><span class="kbd">S</span>Skip</button>'+
     '</div></div>';
-  html+=d.candidates.length
-    ?'<div class="candidate-list">'+d.candidates.map((c,i)=>candidateCard(c,i,d)).join('')+'</div>'
-    :'<div class="lib-empty">No candidates found.</div>';
+  if(!d.candidates.length)return html+'<div class="lib-empty">No candidates found.</div>';
+  const mode=decisionConfidence(d);
+  if(mode==='confident'&&!importState.expanded){
+    html+=candidateSummary(d.candidates[0],d);
+    if(d.candidates.length>1)
+      html+='<button class="btn btn-sm" onclick="toggleExpanded()">'+(d.candidates.length-1)+' other candidate'+(d.candidates.length===2?'':'s')+' <span class="kbd">M</span></button>';
+    return html;
+  }
+  const deciders=mode==='ambiguous'?decidingFields(d.candidates[0],d.candidates[1]):null;
+  html+='<div class="candidate-list">'+d.candidates.map((c,i)=>candidateCard(c,i,d,deciders)).join('')+'</div>';
   return html;
 }
 
@@ -1559,13 +1617,15 @@ document.addEventListener('keydown',function(e){
   } else if(key==='Enter'){
     if(d.candidates.length)applyCandidate(importState.selected);
   } else if(key==='ArrowDown'){
-    importState.selected=Math.min(importState.selected+1,d.candidates.length-1);renderDecision();e.preventDefault();
+    importState.selected=Math.min(importState.selected+1,d.candidates.length-1);importState.expanded=true;renderDecision();e.preventDefault();
   } else if(key==='ArrowUp'){
-    importState.selected=Math.max(importState.selected-1,0);renderDecision();e.preventDefault();
+    importState.selected=Math.max(importState.selected-1,0);importState.expanded=true;renderDecision();e.preventDefault();
   } else if(key.toLowerCase()==='s'){
     decideImport('skip');
   } else if(key.toLowerCase()==='a'){
     decideImport('asis');
+  } else if(key.toLowerCase()==='m'){
+    toggleExpanded();
   }
 });
 // ── Background jobs (cover art, convert) ─────────────────────────────────────
