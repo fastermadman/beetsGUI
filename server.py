@@ -476,9 +476,14 @@ def library_tracks():
         params.update({'limit': limit, 'offset': offset})
         if album_id:
             where += ' AND i.album_id = :album_id'
+        # Full row, not a curated column list (#93) — the Library tab's
+        # table view lets the user pick any real item field as a column
+        # (bpm, initial_key, genres, label, ...), and picking one shouldn't
+        # need a matching change here. `path` (the only BLOB column) still
+        # gets decoded below same as always; everything else is a plain
+        # TEXT/INTEGER/REAL column, safe to jsonify as-is.
         rows = con.execute(f'''
-            SELECT i.id, i.title, i.artist, i.album, i.albumartist, i.album_id,
-                   i.year, i.length, i.format, i.track, i.disc, i.path
+            SELECT i.*
             FROM items i
             WHERE {where}
             ORDER BY {_order_by(TRACK_SORTS, 'artist', dynamic=(con, 'items', 'i'))}

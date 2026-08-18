@@ -138,6 +138,49 @@ def main():
                 clear_btn.click()
                 page.wait_for_timeout(200)
 
+            # Track table view (#93): real ID3 fields as real table columns,
+            # not just present somewhere in a row's text — and a column the
+            # user picks via the Columns panel actually shows up too.
+            page.locator('input[name="lib-mode"][value="tracks"]').click()
+            page.wait_for_timeout(300)
+            table = page.locator('#lib-results table.lib-table')
+            assert table.is_visible(), 'tracks mode did not render a table'
+            # .lib-table th is styled text-transform:uppercase — Chromium's
+            # inner_text() reflects that rendering, not the literal DOM text.
+            headers = [h.upper() for h in table.locator('thead th').all_inner_texts()]
+            assert any('BPM' in h for h in headers), headers
+            assert any('KEY' in h for h in headers), headers
+            keyed_row = table.locator('tbody tr', has_text='Keyed')
+            assert keyed_row.is_visible(), 'the BPM/key test track is not in the table'
+            row_text = keyed_row.inner_text()
+            assert '126' in row_text, f'BPM column did not render the real value:\n{row_text}'
+            assert '8a' in row_text.lower(), f'Key column did not render the real value:\n{row_text}'
+
+            # A column the user didn't have on: pick "Label" from the panel,
+            # confirm the header actually appears (not just saved to
+            # localStorage without a re-render).
+            page.locator('button', has_text='Columns…').click()
+            page.wait_for_timeout(150)
+            page.locator('#lib-columns-panel').get_by_role('checkbox', name='Label', exact=True).check()
+            page.wait_for_timeout(300)
+            headers = [h.upper() for h in table.locator('thead th').all_inner_texts()]
+            assert any('LABEL' in h for h in headers), \
+                f'checking a column in the panel did not add it to the table: {headers}'
+            assert not errors, f'console errors in the track table view: {errors}'
+            # Close the panel (outside click) before it can intercept the
+            # header click below — it's an absolutely-positioned overlay.
+            page.locator('#lib-count').click()
+            page.wait_for_timeout(150)
+
+            # Clicking a column header sorts by it, through the same
+            # lib-sort/lib-dir mechanism the Sort-by field uses — proven by
+            # the field actually changing, not just "no error was thrown".
+            table.locator('thead th', has_text='BPM').click()
+            page.wait_for_timeout(300)
+            assert page.locator('#lib-sort').input_value() == 'bpm', \
+                'clicking the BPM column header did not set it as the sort field'
+            assert not errors, f'console errors after sorting by a column header: {errors}'
+
             # Export via the real preset button and the real Export button,
             # into a throwaway file — typing a format string by hand would
             # miss the actual bug found live in this issue: the "BPM + Key"
@@ -181,7 +224,8 @@ def main():
         shutil.rmtree(tmp, ignore_errors=True)
 
     print('browser smoke test: all tabs render, apostrophe search works, '
-          'export writes real fields, same-origin POST passes the CSRF guard - ok')
+          'track table columns/sort work, export writes real fields, '
+          'same-origin POST passes the CSRF guard - ok')
 
 
 if __name__ == '__main__':
