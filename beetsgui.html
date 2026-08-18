@@ -383,20 +383,34 @@
           </div>
         </div>
         <div class="section">
+          <div class="section-title">
+            <span>Import mode</span>
+            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Ask about every album unless you have a lot of them — for a big batch, "Auto-accept confident matches" is the one that saves you from confirming 40 albums by hand.</span></span>
+          </div>
+          <div class="check-group">
+            <label class="radio-item"><input type="radio" name="import-mode" value="interactive" checked><span>Ask about every album (default)</span></label>
+            <label class="radio-item">
+              <input type="radio" name="import-mode" value="quiet">
+              <span>Auto-accept confident matches, skip the rest <span class="mono">(recommended for large imports)</span></span>
+              <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Applies a match automatically when beets is confident (a "strong" recommendation) and silently skips anything less certain, rather than asking. Adjust strong_rec_thresh in Settings to change what counts as confident.</span></span>
+            </label>
+            <label class="radio-item">
+              <input type="radio" name="import-mode" value="fast">
+              <span>Skip matching — import as-is</span>
+              <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">No MusicBrainz lookup at all — files are imported with the tags they already have, unchanged.</span></span>
+            </label>
+            <label class="radio-item">
+              <input type="radio" name="import-mode" value="timid">
+              <span>Ask about every album, even an exact match</span>
+              <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Behaves like "Ask about every album" in this app — beets' own docs call timid mode "always confirm all actions." Kept as its own option since it's a distinct beets flag.</span></span>
+            </label>
+          </div>
+        </div>
+        <div class="section">
           <label class="check-item"><input type="checkbox" id="import-incremental"><span>Incremental (skip already imported)</span></label>
         </div>
         <details class="section">
           <summary class="section-title">Advanced</summary>
-          <div class="check-group" style="margin-top:0.6rem;">
-            <label class="radio-item"><input type="radio" name="import-mode" value="interactive" checked><span>Interactive (default)</span></label>
-            <label class="radio-item"><input type="radio" name="import-mode" value="fast"><span>Fast (no prompts)</span></label>
-            <label class="radio-item"><input type="radio" name="import-mode" value="quiet"><span>Quiet</span></label>
-            <label class="radio-item">
-              <input type="radio" name="import-mode" value="timid">
-              <span>Timid</span>
-              <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Only prompts when beets is uncertain about a match. Recommended for electronic music — auto-accepts obvious matches, asks for confirmation on low scores. Adjust strong_rec_thresh in Settings.</span></span>
-            </label>
-          </div>
           <div class="check-group" style="margin-top:0.6rem;">
             <label class="check-item"><input type="checkbox" id="import-singleton"><span>Singleton mode (single tracks, not albums)</span></label>
             <label class="check-item"><input type="checkbox" id="import-log" onchange="toggleLog()"><span>Log to file</span></label>
