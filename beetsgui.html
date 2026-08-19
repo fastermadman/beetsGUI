@@ -22,7 +22,14 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg:#0f0f0f; --bg2:#1a1a1a; --bg3:#252525; --bg4:#2e2e2e;
-    --text:#e8e6e1; --text2:#a09e99; --text3:#6a6866;
+    --text:#e8e6e1; --text2:#a09e99;
+    /* #108: was #6a6866, 3.45:1 against --bg — fails AA (4.5:1) for the
+       ~23 uses of this token, most of which are real informational or
+       actionable text (tab labels, row metadata, similarity scores, a
+       delete-warning sentence), not decorative. Raised to clear AA
+       against both --bg and --bg3 (badges/kbd/candidate-index sit on
+       --bg3, not --bg). Same reasoning applies to the light values below. */
+    --text3:#918f8c;
     --border:#2e2e2e; --border2:#3a3a3a;
     --accent:#c8a96e; --accent2:#8b6f3e;
     --red:#c05c5c; --red-bg:#2a1515;
@@ -35,7 +42,7 @@
   @media (prefers-color-scheme:light) {
     :root {
       --bg:#f5f4f0; --bg2:#eceae4; --bg3:#e2e0d8; --bg4:#d8d6ce;
-      --text:#1a1918; --text2:#5a5856; --text3:#8a8886;
+      --text:#1a1918; --text2:#5a5856; --text3:#5f5d5a;
       --border:#d0cec6; --border2:#c4c2ba;
       --red-bg:#fce8e8; --yellow-bg:#fdf5e0; --green-bg:#e8f4ec;
     }
@@ -46,13 +53,13 @@
      "System" leaves data-theme unset and falls through to the @media rule. */
   html[data-theme="light"] {
     --bg:#f5f4f0; --bg2:#eceae4; --bg3:#e2e0d8; --bg4:#d8d6ce;
-    --text:#1a1918; --text2:#5a5856; --text3:#8a8886;
+    --text:#1a1918; --text2:#5a5856; --text3:#5f5d5a;
     --border:#d0cec6; --border2:#c4c2ba;
     --red-bg:#fce8e8; --yellow-bg:#fdf5e0; --green-bg:#e8f4ec;
   }
   html[data-theme="dark"] {
     --bg:#0f0f0f; --bg2:#1a1a1a; --bg3:#252525; --bg4:#2e2e2e;
-    --text:#e8e6e1; --text2:#a09e99; --text3:#6a6866;
+    --text:#e8e6e1; --text2:#a09e99; --text3:#918f8c;
     --border:#2e2e2e; --border2:#3a3a3a;
     --red-bg:#2a1515; --yellow-bg:#252010; --green-bg:#152a1e;
   }
