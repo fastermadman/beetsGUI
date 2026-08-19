@@ -133,7 +133,10 @@
   .field-row { display:flex; gap:0.5rem; align-items:flex-end; }
   .field-row .field { flex:1; margin-bottom:0; }
   .check-group { display:flex; flex-direction:column; gap:0.3rem; }
-  .check-item,.radio-item { display:flex; align-items:center; gap:0.5rem; font-size:12px; color:var(--text); cursor:pointer; }
+  /* #117: caps is right for short section titles/field labels, wrong for
+     full sentences of option text — was inheriting label{}'s uppercase
+     unintentionally, not by choice. */
+  .check-item,.radio-item { display:flex; align-items:center; gap:0.5rem; font-size:12px; color:var(--text); cursor:pointer; text-transform:none; }
   input[type="checkbox"],input[type="radio"] { width:auto; accent-color:var(--accent); cursor:pointer; }
   .check-row { display:flex; flex-wrap:wrap; gap:0.4rem 1rem; }
   .section { margin-bottom:1.25rem; }
