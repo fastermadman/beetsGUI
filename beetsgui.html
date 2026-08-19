@@ -31,7 +31,11 @@
     --radius:6px; --radius-lg:10px;
     --font-ui:'Jost',-apple-system,BlinkMacSystemFont,sans-serif;
     --font-mono:'Drafting Mono','SF Mono','Menlo',monospace;
+    --focus:0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   }
+  /* #107: single global keyboard-focus indicator — :focus-visible so mouse
+     clicks stay quiet, only keyboard nav shows the ring. */
+  :focus-visible { outline:none; box-shadow:var(--focus); }
   @media (prefers-color-scheme:light) {
     :root {
       --bg:#f5f4f0; --bg2:#eceae4; --bg3:#e2e0d8; --bg4:#d8d6ce;
@@ -107,6 +111,13 @@
   .check-row { display:flex; flex-wrap:wrap; gap:0.4rem 1rem; }
   .section { margin-bottom:1.25rem; }
   .section-title { font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--text2); border-bottom:1px solid var(--border); padding-bottom:0.3rem; margin-bottom:0.75rem; }
+  /* #103: sticky *per section title* was tried first and reverted — this
+     app's sections are short (a title plus a handful of fields), so later
+     controls in the same section scroll up and visually collide with their
+     own still-pinned title before the section ends and hands off. A single
+     "where am I" bar avoids that: one line, updated to whichever section is
+     current, however short that section is. */
+  #section-indicator { position:sticky; top:0; z-index:6; display:none; background:var(--bg); border-bottom:1px solid var(--border); font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); padding:0.5rem 0; margin-bottom:0.5rem; }
   .drop-zone { border:1.5px dashed var(--border2); border-radius:var(--radius-lg); padding:1.25rem; text-align:center; color:var(--text3); cursor:default; transition:background 0.15s,border-color 0.15s; margin-bottom:0.75rem; font-size:12px; }
   .drop-zone.drag-over { background:var(--bg3); border-color:var(--accent2); color:var(--text2); }
   .drop-zone .drop-icon { font-size:20px; margin-bottom:0.25rem; display:block; }
@@ -304,6 +315,7 @@
   </div>
 
   <div class="content">
+    <div id="section-indicator"></div>
 
     <!-- INBOX -->
     <div id="tab-inbox" class="tab-panel active">
@@ -1049,7 +1061,35 @@ function switchTab(name,btn){
   activeTab=name;
   if(name==='library'){loadLibrary();}
   if(name==='recover'){loadTraktor();}
+  updateSectionIndicator();
 }
+// #103: one "where am I" line, not a sticky title per section — this app's
+// sections are short enough that a pinned per-title header collides with its
+// own later fields once you scroll a little way into it. Tracks whichever
+// section-title has scrolled to/past the top of .content, per the active tab.
+function updateSectionIndicator(){
+  const ind=document.getElementById('section-indicator');
+  const panel=document.querySelector('.tab-panel.active');
+  if(!panel){ind.style.display='none';return;}
+  const contentTop=document.querySelector('.content').getBoundingClientRect().top;
+  const titles=[...panel.querySelectorAll('.section-title')]
+    .filter(t=>!t.closest('details:not([open])')&&t.offsetParent!==null);
+  let current=null;
+  for(const t of titles){
+    if(t.getBoundingClientRect().top<=contentTop+ind.offsetHeight+4)current=t;
+  }
+  if(current){
+    ind.textContent=current.textContent.trim().split('\n')[0].trim();
+    ind.style.display='block';
+  }else{
+    ind.style.display='none';
+  }
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelector('.content').addEventListener('scroll',updateSectionIndicator);
+  document.addEventListener('toggle',updateSectionIndicator,true);
+  updateSectionIndicator();
+});
 // ⌘O's target. The filter has no single search box — it has condition rows —
 // so "the search input" is the first row's value, or its field when the row is
 // still blank. No rows at all means there is nothing to type into yet.
@@ -3063,6 +3103,9 @@ function renderScanResult(html){
   const el=document.getElementById('scan-unimported-results');
   el.style.display=html?'block':'none';
   el.innerHTML=html;
+  // #103: results render above the import config, so bring them to the
+  // user instead of letting them shove the controls the user was about to use.
+  if(html)el.scrollIntoView({block:'nearest'});
 }
 function scanUnimported(){
   const dir=document.getElementById('scan-path').value.trim();
@@ -3082,13 +3125,22 @@ function renderUnimported(data){
     return;
   }
   const count='<div class="lib-count">'+data.total_files+' unimported file'+(data.total_files===1?'':'s')+' in '+data.folders.length+' folder'+(data.folders.length===1?'':'s')+'</div>';
-  renderScanResult(count+data.folders.map(f=>
-    '<div class="lib-row"><div class="lib-row-title">'+escapeHtml(f.path)+'</div>'+
+  // #105: the leaf folder name (e.g. "Artist - Album") is what identifies the
+  // row — showing the full absolute path truncated it away with no way to
+  // recover it. Leaf goes in the title, full path in .lib-row-meta + title attr.
+  renderScanResult(count+data.folders.map(f=>{
+    const parts=f.path.split('/').filter(Boolean);
+    const leaf=parts.length?parts[parts.length-1]:f.path;
+    const parent=parts.slice(0,-1).join('/');
+    return '<div class="lib-row" title="'+escapeHtml(f.path)+'"><div style="min-width:0;flex:1;">'+
+      '<div class="lib-row-title">'+escapeHtml(leaf)+'</div>'+
+      (parent?'<div class="lib-row-meta" style="white-space:normal;">'+escapeHtml(parent)+'</div>':'')+
+    '</div>'+
     '<div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">'+
       '<span class="lib-row-meta">'+f.count+' file'+(f.count===1?'':'s')+'</span>'+
       '<button class="btn btn-sm btn-primary" onclick="useForImport(this.dataset.path)" data-path="'+escapeHtml(f.path)+'">Import →</button>'+
-    '</div></div>'
-  ).join(''));
+    '</div></div>';
+  }).join(''));
 }
 function useForImport(path){
   clearCuratedImport();
