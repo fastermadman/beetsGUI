@@ -151,6 +151,7 @@
   .drop-zone { border:1.5px dashed var(--border2); border-radius:var(--radius-lg); padding:1.25rem; text-align:center; color:var(--text3); cursor:default; transition:background 0.15s,border-color 0.15s; margin-bottom:0.75rem; font-size:12px; }
   .drop-zone.drag-over { background:var(--bg3); border-color:var(--accent2); color:var(--text2); }
   .drop-zone .drop-icon { font-size:20px; margin-bottom:0.25rem; display:block; }
+  .hint { font-size:10px; color:var(--text3); line-height:1.5; margin-bottom:0.5rem; }
   .drop-zone .drop-hint { font-size:10px; color:var(--text3); margin-top:0.3rem; }
   label .drop-hint { text-transform:none; letter-spacing:normal; font-weight:400; }
   /* Section-wide drop targets (#77 follow-up) — no permanent box, just a
@@ -186,7 +187,7 @@
   .tip-icon { color:var(--text3); cursor:help; font-style:normal; font-size:11px; margin-left:0.3rem; }
   .tip-icon:focus + .tip-box { display:block; }
   @media (hover:hover) and (pointer:fine) { .tip-icon:hover + .tip-box { display:block; } }
-  .tip-box { display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:100; background:var(--bg4); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text2); font-size:11px; line-height:1.5; max-width:280px; padding:0.5rem 0.65rem; white-space:normal; pointer-events:none; }
+  .tip-box { display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:100; background:var(--bg4); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text2); font-size:11px; line-height:1.5; max-width:min(280px, calc(100vw - 2rem)); padding:0.5rem 0.65rem; white-space:normal; pointer-events:none; }
   .pre-out { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--accent); font-family:var(--font-mono); font-size:11px; line-height:1.7; max-height:380px; overflow:auto; padding:1rem; white-space:pre; margin-bottom:0.6rem; }
   .lib-results { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); max-height:420px; overflow:auto; margin-bottom:0.6rem; }
   .lib-row { display:flex; align-items:baseline; justify-content:space-between; gap:0.75rem; padding:0.55rem 0.85rem; border-bottom:1px solid var(--border); font-size:12px; }
@@ -761,7 +762,8 @@
         </div>
       </div>
       <div class="section">
-        <div class="section-title">Playlists → Lexicon / Traktor<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Run this before importing with move — it exports your folders as .m3u first, so Lexicon and Traktor can relocate them afterwards.</span></span></div>
+        <div class="section-title">Playlists → Lexicon / Traktor</div>
+        <div class="hint">Run this <b>before</b> importing with move, so Lexicon and Traktor can relocate the files afterwards.</div>
         <div class="field"><label>Path to playlist folders</label>
           <div class="field-row">
             <div class="field" style="margin-bottom:0"><input type="text" id="pl-path" placeholder="/Volumes/Harddisk/OldPlaylists"></div>
@@ -770,8 +772,9 @@
         </div>
         <div class="btn-row">
           <button class="btn btn-primary" onclick="exportPlaylists()"><span>Export folders → .m3u</span></button>
-          <button class="btn" onclick="exportM3u('~/Desktop/beets_alle_tracks.txt')"><span>Save tracklist (for Traktor relocation)</span></button><span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Traktor relocates its own collection — see "Relocating a Traktor collection" in the README for the steps to run inside Traktor afterwards.</span></span>
+          <button class="btn" onclick="exportM3u('~/Desktop/beets_alle_tracks.txt')"><span>Save tracklist (for Traktor relocation)</span></button>
         </div>
+        <div class="hint">Traktor relocates its own collection — see "Relocating a Traktor collection" in the README for the steps to run there afterwards.</div>
       </div>
       <div class="section">
         <div class="section-title">USB Mirror<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Mirrors the library to a USB drive as MP3/AAC using beets' own convert plugin. Run again — already-converted tracks are skipped, so only new ones get copied.</span></span></div>
@@ -811,8 +814,9 @@
           </label>
         </div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="startUsbSync()">Check what would sync</button><span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Needs the convert plugin and ffmpeg — enable convert in Preferences → Plugins. Playlist scoping reads the .m3u directly, so no playlist plugin is needed.</span></span>
+          <button class="btn btn-primary" onclick="startUsbSync()">Check what would sync</button>
         </div>
+        <div class="hint">Needs the <span class="mono">convert</span> plugin and ffmpeg — enable convert in Preferences → Plugins.</div>
       </div>
     </div>
 
@@ -971,13 +975,9 @@
           <button class="btn btn-primary" onclick="copyConfig()"><span>Copy config.yaml</span></button>
           <button class="btn" onclick="buildConfig()"><span>Generate</span></button>
         </div>
-        <!-- Kept for now (#120): this app has no endpoint that writes
-             config.yaml, so copy-then-paste is currently the only way to apply
-             what Preferences generates. Note the reason is NOT that writing it
-             is unsafe — POST /config was deleted in #11 as dead code (audit
-             P2), rated Low on security (S5), and the RCE deleted in that same
-             pass was /run, a different endpoint. See #128 for the design that
-             removes this note by making Save work. -->
+        <!-- Kept for now (#120): nothing here writes config.yaml yet. Not
+             for safety reasons — POST /config went in #11 as dead code (P2),
+             rated Low (S5); the RCE was /run. #128 makes Save work. -->
         <div class="alert alert-yellow" style="font-size:10px;">Last step: paste it in with <span class="mono">beet config -e</span>, which opens config.yaml in your editor.</div>
       </div>
       <hr class="divider">
@@ -1002,7 +1002,7 @@
             </div>
           </div>
           <div id="discogs-oauth-wrap" style="display:none;">
-            <div class="drop-hint">Nothing to enter<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">OAuth runs by itself the first time you run an import with the discogs plugin active: beets opens a browser and saves the token to ~/.config/beets/.</span></span></div>
+            <div class="hint">Nothing to enter — OAuth runs by itself on your first import, and beets saves the token to <span class="mono">~/.config/beets/</span>.</div>
           </div>
           <div class="alert alert-red" style="font-size:10px; margin-top:0.5rem;">⚠ Discogs token gives full access to your account — keep it private.</div>
         </div>
@@ -1024,7 +1024,7 @@
           <span class="auth-card-chevron">▼</span>
         </div>
         <div class="auth-card-body">
-          <div class="drop-hint" style="margin-bottom:0.6rem;">Needs the beatport4 plugin<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Needs pipx inject beets beets-beatport4. The plugin must be listed as beatport4 in config.yaml, not beatport.</span></span></div>
+          <div class="hint" style="margin-bottom:0.6rem;">Needs <span class="mono">pipx inject beets beets-beatport4</span>, listed as <b>beatport4</b> in config, not beatport.</div>
           <div class="check-group" style="margin-bottom:0.75rem;">
             <label class="radio-item"><input type="radio" name="bp4-method" value="userpass" checked onchange="toggleBp4Method()"><span>Username</span> + <span>Password</span> <span class="badge badge-rec">recommended</span></label>
             <label class="radio-item"><input type="radio" name="bp4-method" value="token" onchange="toggleBp4Method()"><span>Token file (advanced)</span></label>
