@@ -971,11 +971,13 @@
           <button class="btn btn-primary" onclick="copyConfig()"><span>Copy config.yaml</span></button>
           <button class="btn" onclick="buildConfig()"><span>Generate</span></button>
         </div>
-        <!-- Kept deliberately (#120): this app cannot write config.yaml itself.
-             POST /config was the RCE deleted in #11 (config content could inject
-             plugins:/pluginpath:), so copy-then-paste is the threat-modelled
-             escape hatch, not a leftover terminal-ism from before #36. Do not
-             "clean this up" without reopening that threat model. -->
+        <!-- Kept for now (#120): this app has no endpoint that writes
+             config.yaml, so copy-then-paste is currently the only way to apply
+             what Preferences generates. Note the reason is NOT that writing it
+             is unsafe — POST /config was deleted in #11 as dead code (audit
+             P2), rated Low on security (S5), and the RCE deleted in that same
+             pass was /run, a different endpoint. See #128 for the design that
+             removes this note by making Save work. -->
         <div class="alert alert-yellow" style="font-size:10px;">Last step: paste it in with <span class="mono">beet config -e</span>, which opens config.yaml in your editor.</div>
       </div>
       <hr class="divider">
