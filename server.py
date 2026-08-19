@@ -1472,7 +1472,13 @@ def job_events(job_id):
                 try:
                     event = q.get(timeout=15)
                 except queue.Empty:
-                    yield ": keepalive\n\n"
+                    # A real event, not a bare SSE comment (#97) — the
+                    # client's EventSource.onmessage never sees a
+                    # comment-only line, so it had nothing to reset a
+                    # "still alive" timer on and couldn't tell a slow
+                    # decision from a connection that died without a
+                    # TCP reset (onerror alone doesn't catch that case).
+                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
                     continue
                 if event['type'] == 'decision':
                     if event['decision_id'] in sent:

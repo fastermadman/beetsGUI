@@ -447,6 +447,7 @@
 
       <div id="import-run" style="display:none;">
         <div class="section-title">Import running</div>
+        <div class="alert alert-red" id="import-connection-lost" style="display:none;">Connection to the import lost — the server may have restarted. Reload the page to check its status.</div>
         <div class="lib-count" id="import-progress-text"></div>
         <div id="import-decision" style="display:none;"></div>
         <div class="btn-row">
@@ -1395,14 +1396,39 @@ function dequeueJob(id){
   fetch('/jobs/'+id+'/dequeue',{method:'POST'}).then(pollJobQueue).catch(()=>{});
 }
 
+// #97: a dead server/job left this EventSource silently pointed at
+// nothing — the UI looked exactly like it does while genuinely waiting on
+// a slow decision. The stall timer is the one that actually catches a
+// killed process: a closed port is ECONNREFUSED, which the EventSource
+// spec treats as a network error, not a fatal one, so the browser just
+// keeps silently retrying forever (readyState stays CONNECTING, never
+// CLOSED) — onerror never fires the way you'd expect. onerror's CLOSED
+// check only helps the narrower case where a fresh process answers but
+// the job id is gone (server fully restarted -> 404 -> no more retries).
+// The server emits a real 'heartbeat' event every 15s specifically so the
+// stall timer has something to reset on even when nothing else is
+// happening — 45s is 3 missed heartbeats, well past the ~10-14s of
+// legitimate silence #90's AcoustID matching measured per track.
+const IMPORT_STALL_MS=45000;
+let importLastEventAt=0,importStallTimer=null;
+function importLostConnection(lost){
+  const el=document.getElementById('import-connection-lost');
+  if(el)el.style.display=lost?'block':'none';
+}
 function attachImport(jobId){
   importState.jobId=jobId;importState.running=true;importState.decided=0;
   importState.log=[];importState.decision=null;
-  setImportUiRunning(true);renderImportProgress();
+  setImportUiRunning(true);renderImportProgress();importLostConnection(false);
   if(importState.es)importState.es.close();
+  if(importStallTimer)clearInterval(importStallTimer);
+  importLastEventAt=Date.now();
   const es=new EventSource('/jobs/'+jobId+'/events');
   importState.es=es;
-  es.onmessage=e=>handleImportEvent(JSON.parse(e.data));
+  es.onmessage=e=>{importLastEventAt=Date.now();handleImportEvent(JSON.parse(e.data));};
+  es.onerror=()=>{if(es.readyState===EventSource.CLOSED)importLostConnection(true);};
+  importStallTimer=setInterval(()=>{
+    if(importState.running&&Date.now()-importLastEventAt>IMPORT_STALL_MS)importLostConnection(true);
+  },5000);
   pollJobQueue();
 }
 
@@ -1417,6 +1443,7 @@ function handleImportEvent(ev){
     importLog(ev.aborted?'Import aborted.':'Import finished — '+ev.decided+' decision'+(ev.decided===1?'':'s')+'.');
     renderImportProgress();renderDecision();setImportUiRunning(false);
     if(importState.es){importState.es.close();importState.es=null;}
+    if(importStallTimer){clearInterval(importStallTimer);importStallTimer=null;}
   }
 }
 

@@ -338,5 +338,61 @@ def main():
           'same-origin POST passes the CSRF guard - ok')
 
 
+def test_connection_lost():
+    """#97: reproduces the reported incident directly — kill the server
+    while a real import is mid-stream and confirm the browser shows a
+    lost-connection indicator instead of silently doing nothing forever.
+    Its own server/browser lifecycle, run after main()'s: main() has a
+    real HTTP call after browser.close() that needs its server alive,
+    so the server that dies here can't be the one main() also uses.
+    """
+    if not shutil.which('ffmpeg'):
+        raise SystemExit('ffmpeg needed to generate test audio — skipping')
+
+    tmp, beetsdir = _setup()
+    proc = start_server(beetsdir)
+    try:
+        src = tmp / 'incoming' / 'pending'
+        make_album(src, 'Pending Artist', 'Pending Album', ['One'])
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            page.goto(BASE, wait_until='networkidle')
+
+            job_id = page.evaluate('''async () => {
+                const r = await fetch('/import/start', {method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({path: ''' + json.dumps(str(src)) + ''', mode: 'interactive'})
+                });
+                const data = await r.json();
+                return data.id;
+            }''')
+            assert job_id, 'import did not start'
+
+            page.evaluate('attachImport(' + json.dumps(job_id) + ')')
+            page.wait_for_function('importState.decision !== null', timeout=15000)
+
+            proc.kill()
+            proc.wait(timeout=10)
+
+            # A killed process (no replacement listening on the port) is
+            # ECONNREFUSED, which WHATWG's EventSource spec treats as a
+            # network error, not a fatal one — the browser just keeps
+            # silently retrying (readyState stays CONNECTING, never
+            # CLOSED), so onerror's fast path never fires here. The stall
+            # timer (IMPORT_STALL_MS, 45s) is the one actually catching
+            # this case, hence the generous timeout.
+            page.wait_for_selector('#import-connection-lost', state='visible', timeout=60000)
+
+            browser.close()
+    finally:
+        stop_server(proc)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    print('connection-lost indicator: appears after the server dies mid-import - ok')
+
+
 if __name__ == '__main__':
     main()
+    test_connection_lost()
