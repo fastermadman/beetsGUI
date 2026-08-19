@@ -210,8 +210,13 @@ def main():
             page.get_by_role('button', name='Scan for unimported music').click()
             page.wait_for_timeout(500)
             scan_results = page.locator('#scan-unimported-results')
-            assert scan_results.get_by_text(str(unimported_dir)).first.is_visible(), \
-                'scan result did not render inside #scan-section'
+            # #105: the row shows the leaf folder name (the identifying part),
+            # not the full absolute path, which truncated away with no way to
+            # recover it. Full path still lives in the row's title attribute.
+            assert scan_results.get_by_text(unimported_dir.name).first.is_visible(), \
+                'scan result did not render the leaf folder name inside #scan-section'
+            assert scan_results.locator('.lib-row').first.get_attribute('title') == str(unimported_dir), \
+                'scan result row is missing the full path as a title attribute'
             assert page.locator('#job-queue-panel').is_hidden(), \
                 'scan result leaked into the docked activity panel instead of staying in #scan-section'
 
