@@ -25,6 +25,13 @@
     --text:#e8e6e1; --text2:#a09e99; --text3:#6a6866;
     --border:#2e2e2e; --border2:#3a3a3a;
     --accent:#c8a96e; --accent2:#8b6f3e;
+    /* #104: dedicated pair for text-on-accent (primary button, .rec-badge) —
+       var(--text)-on-var(--accent2) measured 3.79:1 here (and 3.71:1 in
+       light) because --text is tuned to read against --bg, not accent2.
+       One dark-enough background + one light-enough foreground, fixed
+       across both themes, fixes both without touching --accent2's other
+       (border/shadow, non-text) uses. */
+    --accent-deep:#4d3a0d; --on-accent:#f7f2e6;
     --red:#c05c5c; --red-bg:#2a1515;
     --yellow:#c8a040; --yellow-bg:#252010;
     --green:#5c9e6e; --green-bg:#152a1e;
@@ -38,6 +45,11 @@
       --text:#1a1918; --text2:#5a5856; --text3:#8a8886;
       --border:#d0cec6; --border2:#c4c2ba;
       --red-bg:#fce8e8; --yellow-bg:#fdf5e0; --green-bg:#e8f4ec;
+      /* #104: dark theme's --accent (c8a96e) was reused as-is here — 2.04:1
+         against this light --bg, so the *active* tab read less legibly than
+         the inactive ones. Darkened for both text-on-light-bg use and the
+         hover-swap (var(--bg) text on var(--accent) bg) — same pair, same fix. */
+      --accent:#7a5c1e; --accent2:#5d4614;
     }
   }
   /* Explicit Light/Dark from the Appearance setting (#71) — outranks the OS
@@ -49,6 +61,7 @@
     --text:#1a1918; --text2:#5a5856; --text3:#8a8886;
     --border:#d0cec6; --border2:#c4c2ba;
     --red-bg:#fce8e8; --yellow-bg:#fdf5e0; --green-bg:#e8f4ec;
+    --accent:#7a5c1e; --accent2:#5d4614;
   }
   html[data-theme="dark"] {
     --bg:#0f0f0f; --bg2:#1a1a1a; --bg3:#252525; --bg4:#2e2e2e;
@@ -123,7 +136,7 @@
   @keyframes dropPulse { 0%,100% { opacity:0.45; } 50% { opacity:1; } }
   .btn { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); cursor:pointer; font-family:inherit; font-weight:500; font-size:11px; letter-spacing:0.06em; padding:0.4rem 0.75rem; text-transform:uppercase; transition:background 0.1s,border-color 0.1s; white-space:nowrap; }
   .btn:hover { background:var(--bg4); border-color:var(--accent2); }
-  .btn-primary { background:var(--accent2); border-color:var(--accent); color:var(--text); }
+  .btn-primary { background:var(--accent-deep); border-color:var(--accent); color:var(--on-accent); }
   .btn-primary:hover { background:var(--accent); color:var(--bg); }
   .btn-danger { background:var(--red-bg); border-color:var(--red); color:var(--red); }
   .btn-danger:hover { background:var(--red); color:#fff; }
@@ -249,7 +262,7 @@
   .dup-compare { display:flex; gap:0.75rem; margin-bottom:0.75rem; flex-wrap:wrap; }
   .dup-side { flex:1; min-width:200px; }
   .dup-side .candidate-card { cursor:default; }
-  .rec-badge { background:var(--accent2); border-radius:3px; color:var(--text); font-size:9px; letter-spacing:0.06em; padding:0.05rem 0.35rem; text-transform:uppercase; }
+  .rec-badge { background:var(--accent-deep); border-radius:3px; color:var(--on-accent); font-size:9px; letter-spacing:0.06em; padding:0.05rem 0.35rem; text-transform:uppercase; }
   .import-log-wrap summary { color:var(--text3); cursor:pointer; font-size:10px; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.4rem; }
   .auth-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:0.75rem; overflow:hidden; }
   .auth-card-hd { display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; cursor:pointer; user-select:none; border-bottom:1px solid transparent; transition:background 0.1s; }
@@ -447,14 +460,18 @@
 
       <div id="import-run" style="display:none;">
         <div class="section-title">Import running</div>
-        <div class="alert alert-red" id="import-connection-lost" style="display:none;">Connection to the import lost — the server may have restarted. Reload the page to check its status.</div>
-        <div class="lib-count" id="import-progress-text"></div>
-        <div id="import-decision" style="display:none;"></div>
+        <div class="alert alert-red" id="import-connection-lost" style="display:none;" aria-live="assertive" aria-atomic="true">Connection to the import lost — the server may have restarted. Reload the page to check its status.</div>
+        <div class="lib-count" id="import-progress-text" aria-live="polite" aria-atomic="true"></div>
+        <div id="import-decision" style="display:none;" aria-live="polite" aria-atomic="true"></div>
         <div class="btn-row">
           <button class="btn btn-danger" onclick="abortImport()">Abort</button>
         </div>
         <details class="import-log-wrap">
           <summary>Raw log</summary>
+          <!-- #106: deliberately no aria-live here — it accumulates the
+               whole import's history, and most screen readers re-announce a
+               live region's entire text on every change, not just what's
+               new. #import-progress-text carries the live summary instead. -->
           <pre class="pre-out" id="import-log-lines"></pre>
         </details>
       </div>
@@ -1014,11 +1031,11 @@
   <!-- Docked at the bottom, outside .content, like the player bar below it —
        so it never pushes the tabs or the scroll area down when it opens (#65). -->
   <div class="job-queue-panel" id="job-queue-panel" style="display:none">
-    <div id="job-panel-running" style="display:none"></div>
+    <div id="job-panel-running" style="display:none" aria-live="polite" aria-atomic="true"></div>
     <div id="job-panel-queue" style="display:none"></div>
     <div id="job-panel-result-wrap" style="display:none">
       <button class="job-panel-dismiss" onclick="dismissResult()" title="Dismiss">×</button>
-      <div id="job-panel-result"></div>
+      <div id="job-panel-result" aria-live="polite" aria-atomic="true"></div>
     </div>
   </div>
 
