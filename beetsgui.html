@@ -482,9 +482,8 @@
         <div class="section">
           <div class="section-title">
             <span>Exclude folders</span>
-            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Exclusions are set in config.yaml under import: ignore: — not in the command itself. Enable them in Settings.</span></span>
+            <span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Exclusions are set in config.yaml under import: ignore: — edit them in Preferences. Shown here read-only.</span></span>
           </div>
-          <div class="alert alert-yellow" style="margin-bottom:0.5rem; font-size:10px;">Exclusions are set in config.yaml (Preferences), not directly in the command.</div>
           <div class="check-row">
             <label class="check-item"><input type="checkbox" disabled checked> Samples</label>
             <label class="check-item"><input type="checkbox" disabled checked> Stems</label>
@@ -762,8 +761,7 @@
         </div>
       </div>
       <div class="section">
-        <div class="section-title">Playlists → Lexicon / Traktor</div>
-        <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.5rem;">Run this <b>before</b> importing with move — exports your folders as .m3u files so Lexicon and Traktor can relocate them.</div>
+        <div class="section-title">Playlists → Lexicon / Traktor<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Run this before importing with move — it exports your folders as .m3u first, so Lexicon and Traktor can relocate them afterwards.</span></span></div>
         <div class="field"><label>Path to playlist folders</label>
           <div class="field-row">
             <div class="field" style="margin-bottom:0"><input type="text" id="pl-path" placeholder="/Volumes/Harddisk/OldPlaylists"></div>
@@ -772,11 +770,8 @@
         </div>
         <div class="btn-row">
           <button class="btn btn-primary" onclick="exportPlaylists()"><span>Export folders → .m3u</span></button>
-          <button class="btn" onclick="exportM3u('~/Desktop/beets_alle_tracks.txt')"><span>Save tracklist (for Traktor relocation)</span></button>
+          <button class="btn" onclick="exportM3u('~/Desktop/beets_alle_tracks.txt')"><span>Save tracklist (for Traktor relocation)</span></button><span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Traktor relocates its own collection — see "Relocating a Traktor collection" in the README for the steps to run inside Traktor afterwards.</span></span>
         </div>
-        <hr class="divider">
-        <div class="section-title" style="margin-bottom:0.4rem;">Traktor: Relocate files after move</div>
-        <div class="alert alert-yellow" style="font-size:10px;">1. In Traktor: Right-click <b>Track Collection</b> → <b>Check Consistency</b><br>2. Select ALL missing tracks (<b>Cmd+A</b>)<br>3. Click <b>Relocate</b> → navigate to your Beets library folder<br>4. ⚠ Select multiple files at a time — avoids Traktor 4.2 freeze<br>5. Cues and grids follow automatically</div>
       </div>
       <div class="section">
         <div class="section-title">USB Mirror<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Mirrors the library to a USB drive as MP3/AAC using beets' own convert plugin. Run again — already-converted tracks are skipped, so only new ones get copied.</span></span></div>
@@ -816,9 +811,8 @@
           </label>
         </div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="startUsbSync()">Check what would sync</button>
+          <button class="btn btn-primary" onclick="startUsbSync()">Check what would sync</button><span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Needs the convert plugin and ffmpeg — enable convert in Preferences → Plugins. Playlist scoping reads the .m3u directly, so no playlist plugin is needed.</span></span>
         </div>
-        <div class="alert alert-yellow" style="font-size:10px;margin-top:0.5rem;">Requires the <span class="mono">convert</span> plugin and <span class="mono">ffmpeg</span> — enable convert in Preferences → Plugins. Playlist scoping reads the .m3u directly (no <span class="mono">playlist</span> plugin needed).</div>
       </div>
     </div>
 
@@ -950,10 +944,7 @@
         </div>
       </div>
       <div class="section">
-        <div class="section-title">Import — exclude folders</div>
-        <div class="alert alert-green" style="font-size:10px; margin-bottom:0.5rem;">
-          <b>valid_extensions</b> is recommended as a whitelist — blocks all non-audio (.jpg, .als, .nml, wavedata) without listing them explicitly. Always enabled in the generated config.
-        </div>
+        <div class="section-title">Import — exclude folders<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">valid_extensions is always enabled in the generated config: a whitelist blocks every non-audio file (.jpg, .als, .nml, wavedata) without having to list them.</span></span></div>
         <div class="check-row">
           <label class="check-item"><input type="checkbox" class="excl" value="Samples" checked onchange="buildConfig()"> Samples</label>
           <label class="check-item"><input type="checkbox" class="excl" value="Sample" checked onchange="buildConfig()"> Sample</label>
@@ -980,7 +971,12 @@
           <button class="btn btn-primary" onclick="copyConfig()"><span>Copy config.yaml</span></button>
           <button class="btn" onclick="buildConfig()"><span>Generate</span></button>
         </div>
-        <div class="alert alert-yellow" style="font-size:10px;">Paste in terminal: <span class="mono">beet config -e</span> — opens the config file in your editor.</div>
+        <!-- Kept deliberately (#120): this app cannot write config.yaml itself.
+             POST /config was the RCE deleted in #11 (config content could inject
+             plugins:/pluginpath:), so copy-then-paste is the threat-modelled
+             escape hatch, not a leftover terminal-ism from before #36. Do not
+             "clean this up" without reopening that threat model. -->
+        <div class="alert alert-yellow" style="font-size:10px;">Last step: paste it in with <span class="mono">beet config -e</span>, which opens config.yaml in your editor.</div>
       </div>
       <hr class="divider">
       <div class="section-title" style="margin-bottom:0.75rem;">Services</div>
@@ -996,16 +992,15 @@
           </div>
           <div id="discogs-token-wrap">
             <div class="field">
-              <label>Token</label>
+              <label>Token<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">On the Discogs developer page, click "Generate new token" and copy it here.</span></span></label>
               <div class="field-row">
                 <div class="field" style="margin-bottom:0"><input type="text" id="discogs-token" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" oninput="buildConfig()"></div>
                 <button class="btn btn-sm" onclick="window.open('https://www.discogs.com/settings/developers','_blank')">Get token ↗</button>
               </div>
             </div>
-            <div class="alert alert-yellow" style="font-size:10px;">1. Log in to Discogs → Settings → Developer<br>2. Click "Generate new token" → copy token</div>
           </div>
           <div id="discogs-oauth-wrap" style="display:none;">
-            <div class="alert alert-yellow" style="font-size:10px;">OAuth happens automatically when you run <span class="mono">beet import</span> for the first time with the discogs plugin active. Beets opens a browser and saves the token to <span class="mono">~/.config/beets/</span>.</div>
+            <div class="drop-hint">Nothing to enter<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">OAuth runs by itself the first time you run an import with the discogs plugin active: beets opens a browser and saves the token to ~/.config/beets/.</span></span></div>
           </div>
           <div class="alert alert-red" style="font-size:10px; margin-top:0.5rem;">⚠ Discogs token gives full access to your account — keep it private.</div>
         </div>
@@ -1027,7 +1022,7 @@
           <span class="auth-card-chevron">▼</span>
         </div>
         <div class="auth-card-body">
-          <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.6rem;">Requires: <span class="mono">pipx inject beets beets-beatport4</span><br>Plugin must be named <b>beatport4</b> in config (not beatport).</div>
+          <div class="drop-hint" style="margin-bottom:0.6rem;">Needs the beatport4 plugin<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">Needs pipx inject beets beets-beatport4. The plugin must be listed as beatport4 in config.yaml, not beatport.</span></span></div>
           <div class="check-group" style="margin-bottom:0.75rem;">
             <label class="radio-item"><input type="radio" name="bp4-method" value="userpass" checked onchange="toggleBp4Method()"><span>Username</span> + <span>Password</span> <span class="badge badge-rec">recommended</span></label>
             <label class="radio-item"><input type="radio" name="bp4-method" value="token" onchange="toggleBp4Method()"><span>Token file (advanced)</span></label>
@@ -1058,8 +1053,8 @@
         <div id="dedup-save-result"></div>
       </div>
       <hr class="divider">
-      <div class="section-title" style="margin-bottom:0.5rem;">Note: beet version</div>
-      <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;"><b>beet version</b> (not --plugins) shows active plugins.<br>Plugins only activate when listed under <span class="mono">plugins:</span> in config.yaml.<br>⚠ Never run <span class="mono">beet config -e</span> while the GUI is editing.</div>
+      <div class="section-title" style="margin-bottom:0.5rem;">Check active plugins<span class="tip-wrap"><i class="tip-icon" tabindex="0">ℹ</i><span class="tip-box">beet version (not --plugins) lists the active plugins. A plugin only activates once it is listed under plugins: in config.yaml.</span></span></div>
+      <div class="alert alert-yellow" style="font-size:10px; margin-bottom:0.75rem;">⚠ Never run <span class="mono">beet config -e</span> while the GUI is editing — the two writes will conflict.</div>
       <div class="btn-row">
         <button class="btn btn-primary" onclick="buildConfig(); document.getElementById('config-out').scrollIntoView({behavior:'smooth'})"><span>Generate</span></button>
         <button class="btn" onclick="showVersion('prefs-version-results')">beet version</button>
