@@ -297,6 +297,7 @@
   .candidate-artist { color:var(--text2); font-size:12px; margin-top:0.15rem; }
   .candidate-meta { color:var(--text3); font-size:10px; margin-top:0.25rem; }
   .diff { color:var(--accent); font-weight:700; }
+  .diff-rm { color:var(--red); text-decoration:line-through; opacity:0.7; }
   .candidate-decider { color:var(--accent); font-weight:700; }
   .track-diff { margin-top:0.4rem; font-size:10px; color:var(--text3); }
   .track-diff summary { cursor:pointer; }
@@ -969,16 +970,20 @@
         </div>
       </div>
       <div class="section">
-        <div class="section-title">Generated config.yaml</div>
-        <pre class="pre-out" id="config-out"># Fill in the fields above</pre>
+        <div class="section-title">Save</div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="copyConfig()"><span>Copy config.yaml</span></button>
-          <button class="btn" onclick="buildConfig()"><span>Generate</span></button>
+          <button class="btn btn-primary" onclick="reviewConfigSave()"><span>Review &amp; Save…</span></button>
         </div>
-        <!-- Kept for now (#120): nothing here writes config.yaml yet. Not
-             for safety reasons — POST /config went in #11 as dead code (P2),
-             rated Low (S5); the RCE was /run. #128 makes Save work. -->
-        <div class="alert alert-yellow" style="font-size:10px;">Last step: paste it in with <span class="mono">beet config -e</span>, which opens config.yaml in your editor.</div>
+        <div id="config-save-result"></div>
+        <details style="margin-top:0.75rem;">
+          <summary>Advanced: copy config.yaml manually</summary>
+          <pre class="pre-out" id="config-out" style="margin-top:0.5rem;"># Fill in the fields above</pre>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="copyConfig()"><span>Copy config.yaml</span></button>
+            <button class="btn" onclick="buildConfig()"><span>Generate</span></button>
+          </div>
+          <div class="alert alert-yellow" style="font-size:10px;">Paste it in with <span class="mono">beet config -e</span>, which opens config.yaml in your editor.</div>
+        </details>
       </div>
       <hr class="divider">
       <div class="section-title" style="margin-bottom:0.75rem;">Services</div>
@@ -3331,6 +3336,103 @@ function copyConfig(){
     setTimeout(()=>{if(span)span.textContent='Copy config.yaml';},1800);
   });
 }
+
+// #128: the request shape /config/save's configwriter.render() expects.
+// Field values only — the server renders the YAML, so nothing here is a
+// key the serializer could be tricked into emitting; see configwriter.py's
+// module docstring for why that's the whole security argument.
+function gatherConfigFields(){
+  const discogsMethod=document.querySelector('input[name="discogs-method"]:checked').value;
+  return {
+    directory: document.getElementById('cfg-dir').value.trim()||'~/Music/Library',
+    library: document.getElementById('cfg-lib').value.trim()||'~/Music/library.db',
+    import_strategy: document.querySelector('input[name="cfg-import"]:checked').value,
+    paths: {
+      artist: document.getElementById('path-artist').value,
+      album: document.getElementById('path-album').value,
+      track: document.getElementById('path-track').value,
+    },
+    plugins: getActivePlugins(),
+    exclusions: getActiveExclusions(),
+    credentials: {
+      mb_user: document.getElementById('mb-user').value.trim(),
+      mb_pass: document.getElementById('mb-pass').value,
+      discogs_token: discogsMethod==='token'?document.getElementById('discogs-token').value.trim():'',
+      bp4_user: document.getElementById('bp4-user').value.trim(),
+      bp4_pass: document.getElementById('bp4-pass').value,
+    },
+    bp4: {
+      art: document.getElementById('bp4-art').checked,
+      priority: parseFloat(document.getElementById('bp4-priority').value)||0.3,
+    },
+  };
+}
+
+// Line-based LCS diff (dynamic-programming table, fine at config.yaml's
+// size — dozens of lines, not thousands). Not a general-purpose diff
+// (word-level, move detection): the smallest thing that renders "this
+// line is new / this line is gone" correctly for a file this small.
+// ponytail: no npm diff library — this is a build-step-free single HTML
+// file (see CLAUDE.md), and this problem doesn't need one.
+function diffLines(oldText,newText){
+  const a=(oldText||'').split('\n'),b=(newText||'').split('\n');
+  const n=a.length,m=b.length;
+  const dp=Array.from({length:n+1},()=>new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)
+    dp[i][j]=a[i]===b[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+  let i=0,j=0,out=[];
+  while(i<n&&j<m){
+    if(a[i]===b[j]){out.push('  '+escapeHtml(b[j]));i++;j++;}
+    else if(dp[i+1][j]>=dp[i][j+1]){out.push('<span class="diff-rm">- '+escapeHtml(a[i])+'</span>');i++;}
+    else{out.push('<span class="diff">+ '+escapeHtml(b[j])+'</span>');j++;}
+  }
+  while(i<n){out.push('<span class="diff-rm">- '+escapeHtml(a[i])+'</span>');i++;}
+  while(j<m){out.push('<span class="diff">+ '+escapeHtml(b[j])+'</span>');j++;}
+  return out.join('\n');
+}
+
+// One screen, diff inline, single Save — not a modal two-step (#128's
+// adversarial-pass comment: the two-step shape in #36 is for destructive
+// library operations; borrowing its ceremony here adds clicks without
+// adding safety, since a save here is reviewed inline before it commits).
+let pendingConfigSave=null;
+function reviewConfigSave(){
+  const out=document.getElementById('config-save-result');
+  out.innerHTML='<div class="lib-empty">Checking…</div>';
+  postJSON('/config/save',{...gatherConfigFields(),dry_run:true}).then(data=>{
+    if(!data.ok){
+      out.innerHTML='<div class="alert alert-red">'+escapeHtml(data.error||'Could not build config.')+'</div>';
+      return;
+    }
+    pendingConfigSave=data;
+    out.innerHTML=renderConfigReview(data);
+  }).catch(()=>{out.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+function renderConfigReview(data){
+  const warnings=[];
+  if(data.comments_dropped)warnings.push(data.comments_dropped+' comment line'+(data.comments_dropped===1?'':'s')+
+    ' in the current file '+(data.comments_dropped===1?"isn't":"aren't")+' preserved by this save.');
+  if(data.dropped_plugins.length)warnings.push('Disabling removes from plugins: — '+data.dropped_plugins.join(', ')+'.');
+  if(data.preserved_risky.length)warnings.push('Carried forward unchanged from your file: '+data.preserved_risky.join(', ')+
+    ' — beetsGUI never writes these keys itself.');
+  return '<div class="section-title" style="margin-top:0.75rem;">Review — writes '+escapeHtml(data.path)+'</div>'+
+    '<pre class="pre-out">'+diffLines(data.previous,data.config)+'</pre>'+
+    (warnings.length?'<div class="alert alert-yellow" style="font-size:11px;">'+warnings.map(escapeHtml).join('<br>')+'</div>':'')+
+    '<div class="btn-row"><button class="btn btn-primary" onclick="confirmConfigSave()"><span>Confirm — write config.yaml</span></button>'+
+    '<button class="btn" onclick="document.getElementById(\'config-save-result\').innerHTML=\'\'"><span>Cancel</span></button></div>';
+}
+function confirmConfigSave(){
+  if(!pendingConfigSave)return;
+  const out=document.getElementById('config-save-result');
+  out.innerHTML='<div class="lib-empty">Saving…</div>';
+  postJSON('/config/save',{...gatherConfigFields(),dry_run:false}).then(data=>{
+    pendingConfigSave=null;
+    if(!data.ok){out.innerHTML='<div class="alert alert-red">'+escapeHtml(data.error||'Could not save.')+'</div>';return;}
+    out.innerHTML='<div class="alert alert-green">Saved'+(data.backup?' — previous config backed up to '+escapeHtml(data.backup):'')+
+      '. Restart beetsGUI (Ctrl+C, then run it again) to apply.</div>';
+  }).catch(()=>{out.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
+}
+
 // #41: the chevron's direction is CSS's job alone (.auth-card.open rotates
 // it 180deg) — this used to also swap the glyph itself between ▼/▲, which
 // fought the rotation and made both states render identically. One
