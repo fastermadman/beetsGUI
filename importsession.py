@@ -31,7 +31,7 @@ try:
 except ImportError:
     DuplicateAction = None                        # beets < 2.13
 from beets.importer import Action, ImportAbortError, ImportSession
-from beets.util import displayable_path
+from beets.util import displayable_path, get_most_common_tags
 
 # Local-only fingerprint comparison (#90) — acoustid.compare_fingerprints()
 # never touches the network, unlike the AcoustID *lookup* the chroma
@@ -119,7 +119,11 @@ def serialize_task(task):
     """Build the decision payload for an album or singleton task."""
     is_album = task.is_album
     if is_album:
-        current = {'artist': task.cur_artist, 'album': task.cur_album}
+        # beets 2.14 dropped ImportTask.cur_artist/cur_album (#130) —
+        # beets.util.get_most_common_tags is what beets' own TerminalImportSession
+        # now derives them from internally.
+        likelies = get_most_common_tags(task.items)
+        current = {'artist': likelies['artist'], 'album': likelies['album']}
     else:
         current = {'artist': task.item.artist, 'title': task.item.title}
     return {

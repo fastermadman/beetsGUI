@@ -25,13 +25,39 @@ from beets.dbcore.query import OrQuery, PathQuery
 from beets.ui import UserError
 from beets.ui.commands.remove import remove_items as _remove_items
 from beets.ui.commands.update import update_items as _update_items
-from beets.ui.commands.utils import do_query
 from beets.ui.commands.write import write_items as _write_items
-from beets.util import displayable_path, functemplate
+from beets.util import displayable_path
 from beets.util.deprecation import maybe_replace_legacy_field
 from beets.util.units import human_bytes, human_seconds
 
 from importsession import get_library
+
+# beets 2.14 removed beets.ui.commands.utils.do_query outright (no replacement —
+# #130). Logic copied verbatim from beets 2.13.1's beets/ui/commands/utils.py.
+def do_query(lib, query, album, also_items=True):
+    """For commands that operate on matched items, performs a query
+    and returns a list of matching items and a list of matching
+    albums. (The latter is only nonempty when album is True.) Raises
+    a UserError if no items match. also_items controls whether, when
+    fetching albums, the associated items should be fetched also.
+    """
+    if album:
+        albums = list(lib.albums(query))
+        items = []
+        if also_items:
+            for al in albums:
+                items += al.items()
+
+    else:
+        albums = []
+        items = list(lib.items(query))
+
+    if album and not albums:
+        raise UserError("No matching albums found.")
+    if not album and not items:
+        raise UserError("No matching items found.")
+
+    return items, albums
 
 # update_items/write_items only print their diff (via beets.ui.print_) —
 # capture stdout instead of reimplementing their (correct, already-tested)
@@ -155,10 +181,9 @@ def preview_modify(field, value, query):
     field = _resolve_field(field)
     lib = get_library()
     items = list(lib.items(split_query(query)))
-    template = functemplate.template(value)
     changes = []
     for item in items:
-        new = library.Item._parse(field, item.evaluate_template(template))
+        new = library.Item._parse(field, item.evaluate_template(value))
         old = item.get(field)
         if old != new:
             changes.append({'id': item.id, 'label': str(item),
@@ -171,10 +196,9 @@ def apply_modify(field, value, query):
     field = _resolve_field(field)
     lib = get_library()
     items = list(lib.items(split_query(query)))
-    template = functemplate.template(value)
     changed = []
     for item in items:
-        new = library.Item._parse(field, item.evaluate_template(template))
+        new = library.Item._parse(field, item.evaluate_template(value))
         if item.get(field) != new:
             item[field] = new
             changed.append(item)
@@ -284,8 +308,7 @@ def render_format(fmt, query):
     value goes through. This is what the Library tab's format presets (was:
     a `beet ls -f` string to copy-paste) now render server-side instead."""
     lib = get_library()
-    template = functemplate.template(fmt)
-    return [item.evaluate_template(template)
+    return [item.evaluate_template(fmt)
             for item in lib.items(split_query(query))]
 
 
