@@ -14,7 +14,7 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
 - **Library** — search and browse your collection by album, track or artist; tracks show as a spreadsheet-style table with a column picker (any real ID3 field — BPM, key, genre, label, ...) and click-to-sort headers; play tracks in the app with a queue and a seekable transport, manage duplicates, cover art and metadata, convert WAV/AIFF/FLAC to ALAC, remove tracks
 - **Fix wrong tags** — dry-run AcoustID/MusicBrainz re-tag review for tracks whose tags are wrong (e.g. a record label sitting in the artist field): proposes candidates without writing anything until you accept one, per track or album
 - **Export** — playlists and tracklists for Lexicon/Traktor, USB mirror
-- **Preferences** (⚙ in the header, or ⌘,) — library/import/plugin config with a live `config.yaml` preview, Discogs/MusicBrainz/Beatport4 credentials, and the duplicate-detection fingerprint threshold
+- **Preferences** (⚙ in the header, or ⌘,) — library/import/plugin config with a diff-and-confirm Save that writes `config.yaml` directly (restart to apply), Discogs/MusicBrainz/Beatport4 credentials, and the duplicate-detection fingerprint threshold
 - Dark + light mode (follows macOS system preference)
 
 ## Requirements
