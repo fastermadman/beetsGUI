@@ -329,6 +329,37 @@ def main():
             ''')
             assert result == 200, f'same-origin POST from the real page got {result}'
 
+            # Preferences is a <dialog> no other test opens, so its whole
+            # subtree — every auth card, the generated-config block, the
+            # plugin and exclusion checkboxes — was previously unrendered by
+            # the suite. A tooltip attached to the wrong element or a typo'd
+            # id in there passed all 12 suites (#123).
+            page.evaluate("() => document.getElementById('prefs-dialog').showModal()")
+            page.wait_for_timeout(200)
+            cards = page.evaluate('''() => {
+                const out = {};
+                document.querySelectorAll('.auth-card').forEach(c => {
+                    const hd = c.querySelector('.auth-card-hd');
+                    const body = c.querySelector('.auth-card-body');
+                    const before = body.style.display;
+                    hd.click();
+                    out[c.id] = {toggled: body.style.display !== before,
+                                 tips: c.querySelectorAll('.tip-box').length};
+                });
+                return out;
+            }''')
+            assert cards, 'no auth cards rendered in Preferences'
+            for card_id, state in cards.items():
+                assert state['toggled'], f'{card_id} did not toggle on header click'
+            # Every tooltip must sit outside the header's onclick, or tapping
+            # the icon collapses the card instead of showing the tip.
+            hd_tips = page.evaluate(
+                "() => document.querySelectorAll('#prefs-dialog .auth-card-hd .tip-box').length")
+            assert hd_tips == 0, f'{hd_tips} tooltip(s) inside a card header onclick'
+            assert page.evaluate(
+                "() => document.getElementById('config-out').textContent.includes('directory:')"), \
+                'Generate did not produce a config'
+
             browser.close()
 
         with urllib.request.urlopen(f'{BASE}/jobs/current', timeout=10) as r:
@@ -340,7 +371,7 @@ def main():
 
     print('browser smoke test: all tabs render, apostrophe search works, '
           'track table columns/sort work, export writes real fields, '
-          'same-origin POST passes the CSRF guard - ok')
+          'same-origin POST passes the CSRF guard, Preferences cards toggle - ok')
 
 
 def test_connection_lost():

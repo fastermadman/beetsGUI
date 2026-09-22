@@ -186,6 +186,18 @@ pipx inject beets playwright
   converted to ALAC on import is Safari-only for preview. Unplayable files say
   so in the player bar rather than failing silently.
 
+### Relocating a Traktor collection
+
+Importing with **move** changes where the files live, so Traktor's collection
+points at the old paths. Export the playlists *before* the import (Export tab →
+"Export folders → .m3u"), then in Traktor afterwards:
+
+1. Right-click **Track Collection** → **Check Consistency**
+2. Select all missing tracks (**Cmd+A**)
+3. Click **Relocate** and navigate to your beets library folder
+4. Select multiple files at a time — relocating one at a time freezes Traktor 4.2
+5. Cues and grids follow automatically
+
 ## Beets plugins supported in Settings UI
 
 Metadata sources: `musicbrainz` `chroma` `beatport4` `discogs` `deezer` `spotify` `tidal`
