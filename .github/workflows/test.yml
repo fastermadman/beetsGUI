@@ -24,11 +24,11 @@ jobs:
 
       - name: Install dependencies
         # Pinned to the version this app is actually developed/run against
-        # (decided in #47: 2.13.1, the latest stable at the time) — a red
-        # run here should mean "this PR broke something," not "beets
-        # shipped a new release." See .github/workflows/beets-canary.yml
-        # for the latter.
-        run: pip install beets==2.13.1 flask playwright pyacoustid
+        # (originally #47: 2.13.1; bumped to 2.14.1 in #130 after do_query
+        # was removed upstream) — a red run here should mean "this PR broke
+        # something," not "beets shipped a new release." See
+        # .github/workflows/beets-canary.yml for the latter.
+        run: pip install beets==2.14.1 flask playwright pyacoustid
 
       - name: Install Playwright's Chromium
         # --with-deps pulls the system libraries Chromium needs on a bare
