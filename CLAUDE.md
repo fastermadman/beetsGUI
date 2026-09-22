@@ -12,13 +12,13 @@ step, no npm). Never assume a build/bundle step exists — there isn't one.
 
 ## Local dev environment must match CI's pins (#47, #85)
 
-CI (`.github/workflows/test.yml`) pins `beets==2.13.1` and Python `3.12`
+CI (`.github/workflows/test.yml`) pins `beets==2.14.1` and Python `3.12`
 deliberately — "a red run here should mean this PR broke something, not
 beets shipped a new release." Check both before trusting any local test
 result:
 
 ```
-pipx list                              # look for "beets 2.13.1, installed using Python 3.12.x"
+pipx list                              # look for "beets 2.14.1, installed using Python 3.12.x"
 ```
 
 If either is off, rebuild rather than patch around it — the venv holds
@@ -26,7 +26,7 @@ nothing but installed packages, so this is safe and cheap:
 
 ```
 pipx uninstall beets
-pipx install --python python3.12 beets==2.13.1
+pipx install --python python3.12 beets==2.14.1
 pipx inject beets flask playwright
 ~/.local/pipx/venvs/beets/bin/python -m playwright install chromium
 ```

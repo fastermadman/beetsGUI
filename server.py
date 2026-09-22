@@ -18,6 +18,8 @@ import threading
 import time
 from pathlib import Path
 
+import yaml
+
 try:
     from flask import (Flask, Response, request, send_file, send_from_directory,
                        jsonify)
@@ -28,6 +30,7 @@ except ImportError:
 
 try:
     import artwork
+    import configwriter
     import duplicates
     import fingerprint
     import importsession
@@ -1165,6 +1168,68 @@ def status():
         'directory':   get_library_directory(),
         'library_db':  get_library_db_path(),
     })
+
+
+@app.route('/config/save', methods=['POST'])
+def config_save():
+    """Write Preferences to config.yaml (#128). Body is the field values in
+    configwriter.render()'s shape, plus {"dry_run": true} to get the
+    rendered text and the warnings back without touching the file — which
+    is what the Save dialog's diff is built from.
+
+    The server never accepts YAML here: it accepts values and renders the
+    file itself, so no request field can become a key. See configwriter's
+    module docstring for why that is the whole security argument, and for
+    what it does and does not claim.
+    """
+    body = request.get_json(silent=True) or {}
+    path = get_config_path()
+    old_text = ''
+    if os.path.exists(path):
+        old_text = Path(path).read_text(encoding='utf-8', errors='replace')
+    try:
+        old = yaml.safe_load(old_text) or {}
+    except yaml.YAMLError as e:
+        return jsonify({'ok': False,
+                        'error': f'existing config is not valid YAML: {e}'}), 400
+    if not isinstance(old, dict):
+        return jsonify({'ok': False,
+                        'error': f'{path} is not a YAML mapping'}), 400
+
+    try:
+        rendered = configwriter.render(body)
+        merged = configwriter.merge(old, rendered)
+        text = configwriter.dumps(merged)
+    except configwriter.ConfigError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+    result = {
+        'ok': True,
+        'path': path,
+        'config': text,
+        'previous': old_text,
+        'comments_dropped': configwriter.count_comments(old_text),
+        'preserved_risky': configwriter.preserved_risky(merged, rendered),
+        'dropped_plugins': configwriter.dropped_plugins(old, rendered),
+    }
+    if body.get('dry_run'):
+        return jsonify({**result, 'dry_run': True})
+
+    try:
+        backup = configwriter.write_config(path, text)
+    except OSError as e:
+        return jsonify({'ok': False, 'error': f'could not write {path}: {e}'}), 500
+
+    # The saved `directory:`/`library:` make the cached successful
+    # resolutions stale, which is the same silent-misdirection failure #12
+    # fixed from the other end — there a *failed* resolution stuck forever,
+    # here a formerly-correct one would. Nothing else is hot-reloaded:
+    # beets' own config/Library globals are process-global and
+    # re-initializing them mid-process is riskier than asking for a
+    # restart, so the reply says so instead.
+    _resolve_config_path.cache_clear()
+    _resolve_config_key.cache_clear()
+    return jsonify({**result, 'backup': backup, 'restart_required': True})
 
 
 # ── Import: the beets importer driven in-process ──────────────────────────────
