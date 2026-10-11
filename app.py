@@ -23,6 +23,7 @@ the Safari Web App keep working exactly as before.
 import json
 import os
 import socket
+import socketserver
 import subprocess
 import sys
 import threading
@@ -121,16 +122,25 @@ def choose_port(preferred: int) -> tuple:
 class ServerThread:
     """server.app on a werkzeug server in a daemon thread, stoppable.
 
-    Flask's app.run() blocks and has no stop; make_server() is the same
-    server it uses underneath, with a shutdown() the window's close path
-    can call. threaded=True for the same reason server.py passes it: the
+    Flask's app.run() blocks and has no stop; ThreadedWSGIServer is the
+    same server it uses underneath, with a shutdown() the window's close
+    path can call. Threaded for the same reason server.py passes it: the
     import SSE stream holds a request open for the whole import.
     """
 
     def __init__(self, app, port: int):
-        from werkzeug.serving import make_server
+        from werkzeug.serving import ThreadedWSGIServer
+
+        class Server(ThreadedWSGIServer):
+            def server_bind(self):
+                # HTTPServer.server_bind() reverse-resolves 127.0.0.1 via
+                # socket.getfqdn() only to set server_name, which werkzeug
+                # never reads. Launched from Finder that lookup goes through
+                # mDNS and times out: ~30s before the window's page loads.
+                socketserver.TCPServer.server_bind(self)
+
         self.port = port
-        self._server = make_server('127.0.0.1', port, app, threaded=True)
+        self._server = Server('127.0.0.1', port, app)
         self._thread = threading.Thread(target=self._server.serve_forever,
                                         name='beetsgui-server', daemon=True)
 
@@ -158,7 +168,7 @@ def start_backend(preferred: int = None):
     os.environ['BEETSGUI_PORT'] = str(port)
     sys.path.insert(0, str(Path(__file__).parent.resolve()))
     import server
-    # make_server() has already bound and is listening, so the window's
+    # ServerThread() has already bound and is listening, so the window's
     # first request just waits in the backlog — no readiness poll needed.
     srv = ServerThread(server.app, port)
     srv.start()
@@ -337,8 +347,10 @@ def main():
         # Off the main thread: on macOS, closing handlers run on the main
         # thread and create_confirmation_dialog() waits for it — calling it
         # from the handler itself would deadlock.
+        # The message carries everything: pywebview's Cocoa dialog drops the title.
         if window.create_confirmation_dialog(
-                f'A {kind} job is still running',
+                'Quit beetsGUI?',
+                f'The {kind} job is still running. '
                 'Quitting now stops it partway through. Quit anyway?'):
             quitting['confirmed'] = True
             window.destroy()
