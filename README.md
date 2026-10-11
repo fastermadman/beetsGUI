@@ -2,9 +2,9 @@
 
 ![beetsGUI logo](assets/icon.png)
 
-A local web GUI for [beets](https://beets.io) — runs as a standalone macOS app via Safari Web App.
+A GUI for [beets](https://beets.io) — a real Mac app with its own window, Dock icon and menu bar.
 
-No Electron. No Docker. Just a small Flask server and a single HTML file.
+No Electron. No Docker. Just a small Flask server, a single HTML file, and a native WebKit window around them.
 
 ![beetsGUI screenshot](assets/screenshot.png)
 
@@ -19,11 +19,12 @@ No Electron. No Docker. Just a small Flask server and a single HTML file.
 
 ## Requirements
 
-- macOS (Ventura or later recommended for Safari Web App)
+- macOS 11 or later
 - [beets](https://beets.io) — `pipx install beets`
-- Flask — already included in beets' pipx environment:
+- Flask, pywebview and py2app in beets' pipx environment —
+  `scripts/build-app.sh` injects them for you; by hand it's:
   ```bash
-  pipx inject beets flask
+  pipx inject beets flask pywebview py2app
   ```
 - ffmpeg (optional, for lossless → ALAC conversion):
   ```bash
@@ -47,7 +48,44 @@ git clone https://github.com/YOUR_USERNAME/beetsgui.git
 cd beetsgui
 ```
 
-### 2. Start the server
+### 2. Build the app
+
+```bash
+./scripts/build-app.sh
+```
+
+This puts **beetsGUI.app** in `/Applications`. Open it like any other app:
+it starts its own server when you open it and stops it when you quit
+(⌘Q), so there's nothing to keep running in the background. If an import
+or another job is still running when you quit, it asks first.
+
+What you get over a browser tab:
+
+- **Browse…** opens Finder's folder picker as a sheet on the app's window
+  (in a browser it's a separate dialog that can land behind Safari).
+- **Drag a folder from Finder** onto Inbox or Formats and the full path is
+  filled in — a browser only ever sees the folder's name.
+- **Notifications** when an import is waiting for your decision or a job
+  finishes while you're in another app.
+- Remembers its window size and position; playback, theme and column
+  choices work exactly as in Safari (same WebKit engine).
+
+The app runs on your existing beets install (the pipx venv), so your
+plugins and `config.yaml` are the ones it uses. The build is an *alias*
+build: it runs the code in this checkout, so `git pull` updates the app
+without rebuilding. Logs go to `~/Library/Logs/beetsGUI.log`.
+
+To run the window without building the app (e.g. while developing):
+
+```bash
+pipx inject beets pywebview
+~/.local/pipx/venvs/beets/bin/python app.py
+```
+
+### Alternative: browser / Safari Web App
+
+The server still runs on its own, for a browser, `curl`, or the older
+Safari Web App setup:
 
 ```bash
 # If Flask is in beets' pipx environment:
@@ -57,24 +95,17 @@ cd beetsgui
 python3 server.py
 ```
 
-Open http://localhost:1612 in Safari.
+Open http://localhost:1612 in Safari. To make it a Safari Web App:
+**File → Add to Dock → name it "beetsGUI"** — the server opens it
+automatically on next launch.
 
-### 3. Create a Safari Web App (macOS standalone)
+The Safari Web App has no code of its own to start the server, so
+something else has to have it up before you click it:
 
-With http://localhost:1612 open in Safari:
-**File → Add to Dock → name it "beetsGUI"**
-
-The server will now open the standalone app automatically on next launch.
-
-### 4. Keep the server running
-
-The Safari Web App has no code of its own to start the server — it's just a
-bookmark-like shortcut to `http://localhost:1612/`. Something else has to
-have the server up before you click it.
-
-**Option A — LaunchAgent (recommended):** starts the server at login and
-keeps it running, restarting it if it ever crashes. No separate app to
-click, ever.
+**LaunchAgent:** starts the server at login and keeps it running,
+restarting it if it ever crashes. (beetsGUI.app attaches to this server
+when it's running, so the two can coexist — but with the app you no
+longer need it.)
 
 ```bash
 ./scripts/install-launchagent.sh
@@ -86,19 +117,6 @@ Logs land at `~/Library/Logs/beetsgui-server.log`. To undo:
 launchctl unload ~/Library/LaunchAgents/com.beetsgui.server.plist
 rm ~/Library/LaunchAgents/com.beetsgui.server.plist
 ```
-
-**Option B — Automator launcher:** if you'd rather start the server
-manually each time (e.g. it only makes sense running while an external
-drive holding your library is mounted), open **Automator → New →
-Application → Run Shell Script**:
-
-```bash
-/path/to/python server.py
-# Example with pipx beets:
-# ~/.local/pipx/venvs/beets/bin/python /path/to/beetsgui/server.py
-```
-
-Save as `beetsGUI Launcher.app`, drag to Dock. One click starts everything.
 
 ## Import
 

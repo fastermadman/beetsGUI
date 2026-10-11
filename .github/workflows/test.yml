@@ -28,7 +28,7 @@ jobs:
         # was removed upstream) — a red run here should mean "this PR broke
         # something," not "beets shipped a new release." See
         # .github/workflows/beets-canary.yml for the latter.
-        run: pip install beets==2.14.1 flask playwright pyacoustid
+        run: pip install beets==2.14.1 flask playwright pyacoustid pywebview
 
       - name: Install Playwright's Chromium
         # --with-deps pulls the system libraries Chromium needs on a bare
@@ -85,6 +85,9 @@ jobs:
 
       - name: Run test_usb_mirror.py
         run: python test_usb_mirror.py
+
+      - name: Run test_desktop.py
+        run: python test_desktop.py
 
       - name: Run test_smoke.py
         run: python test_smoke.py

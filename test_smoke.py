@@ -359,6 +359,39 @@ def main():
             assert page.evaluate(
                 "() => document.getElementById('config-out').textContent.includes('directory:')"), \
                 'Generate did not produce a config'
+            page.evaluate("() => document.getElementById('prefs-dialog').close()")
+
+            # Desktop app (app.py): with the pywebview bridge present,
+            # Browse… must use its picker sheet, not /pick's osascript
+            # dialog, and a native Finder drop must fill the field and run
+            # the same input handlers typing would (the iCloud warning).
+            picks = []
+            page.on('request', lambda r: picks.append(r.url) if r.url.endswith('/pick') else None)
+            desktop = page.evaluate('''async () => {
+                const calls = [];
+                window.pywebview = {api: {
+                    pick_path: kind => { calls.push(kind);
+                        return Promise.resolve({ok: true, path: '/Users/x/Music'}); },
+                    notify: () => Promise.resolve(true),
+                }};
+                document.querySelector('#scan-section button[onclick*="browsePath"]').click();
+                await new Promise(r => setTimeout(r, 50));
+                desktopDropPath('import-path', '/Users/x/Library/Mobile Documents/album');
+                const out = {calls,
+                    picked: document.getElementById('scan-path').value,
+                    dropped: document.getElementById('import-path').value,
+                    icloud: document.getElementById('import-warnings').textContent.includes('iCloud')};
+                delete window.pywebview;
+                document.getElementById('import-path').value = '';
+                checkiCloud('');
+                return out;
+            }''')
+            assert desktop['calls'] == ['folder'], desktop
+            assert desktop['picked'] == '/Users/x/Music', desktop
+            assert desktop['dropped'].endswith('Mobile Documents/album'), desktop
+            assert desktop['icloud'], 'a dropped iCloud path must warn like a typed one'
+            assert not picks, f'desktop Browse… still hit /pick: {picks}'
+            assert not errors, f'console errors in the desktop bridge path: {errors}'
 
             browser.close()
 
@@ -371,7 +404,8 @@ def main():
 
     print('browser smoke test: all tabs render, apostrophe search works, '
           'track table columns/sort work, export writes real fields, '
-          'same-origin POST passes the CSRF guard, Preferences cards toggle - ok')
+          'same-origin POST passes the CSRF guard, Preferences cards toggle, '
+          'desktop picker/drop bridge works - ok')
 
 
 def test_connection_lost():
