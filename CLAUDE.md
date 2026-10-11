@@ -6,9 +6,16 @@ for the full reasoning, not this file.
 
 ## What this is
 
-Local web app for [beets](https://beets.io) as a Safari Web App on macOS.
+Local web app for [beets](https://beets.io), shipped as a Mac app.
 `server.py` (Flask, port 1612) + `beetsgui.html` (single file, no build
-step, no npm). Never assume a build/bundle step exists — there isn't one.
+step, no npm). Never assume a build/bundle step exists for the HTML —
+there isn't one. `app.py` is the desktop shell: a pywebview (WKWebView,
+not Chromium — ALAC playback depends on that) window that runs
+`server.py` in-process, or attaches to one already on the port.
+`scripts/build-app.sh` wraps it as `beetsGUI.app` via a py2app alias build
+(see `setup_app.py`). `python server.py` + a browser still works and
+must keep working; page JS gates desktop-only behaviour on
+`isDesktopApp()`.
 
 ## Local dev environment must match CI's pins (#47, #85)
 
@@ -155,7 +162,7 @@ mocked reproduction; it doesn't depend on real migration timing.
 
 ## Testing
 
-12 suites, all `test_*.py` at repo root, each runnable standalone:
+Every suite is a `test_*.py` at repo root, each runnable standalone:
 `~/.local/pipx/venvs/beets/bin/python test_<name>.py`. Most need `ffmpeg`
 on PATH; check your beets/Python version matches CI's pin first (see
 above). `test_smoke.py` drives a real headless Chromium via Playwright —
@@ -164,9 +171,9 @@ than the HTTP API, and it has already caught a bug (a format preset
 referencing a field that doesn't exist) that every API-level test missed.
 If you touch UI behavior, extend this one, not just the API-level tests.
 
-All 12 run in CI (`.github/workflows/test.yml`, since #85/#86) — cheapest/
+All of them run in CI (`.github/workflows/test.yml`, since #85/#86) — cheapest/
 most self-contained first, `test_smoke.py` last (real browser + real
-import + real server, by far the slowest). If you add a 13th `test_*.py`,
+import + real server, by far the slowest). If you add a new `test_*.py`,
 add its step to that workflow too, or it silently won't gate merges.
 
 No `fd` or `xld` dependency — both were removed from what the app actually
