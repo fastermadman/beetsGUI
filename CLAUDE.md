@@ -10,6 +10,15 @@ Local web app for [beets](https://beets.io) as a Safari Web App on macOS.
 `server.py` (Flask, port 1612) + `beetsgui.html` (single file, no build
 step, no npm). Never assume a build/bundle step exists — there isn't one.
 
+## Design docs are the source of truth (`docs/design/`)
+
+Approved designs live in git, not in chat threads or artifacts: start at
+`docs/design/README.md`. The data model (`segue.db` / `sg_*` / change log, #159+)
+and the app shell (router, view contract, legacy bridge, #140) are decided there;
+don't re-derive them from the issue text, and don't diverge from them silently —
+change the doc in the same PR. `scripts/check_repo.py` (CI job `guards`) checks
+that every `test_*.py` has a CI step and that the design headers/links are valid.
+
 ## Local dev environment must match CI's pins (#47, #85)
 
 CI (`.github/workflows/test.yml`) pins `beets==2.14.1` and Python `3.12`

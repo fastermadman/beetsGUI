@@ -6,6 +6,15 @@ on:
     branches: [master]
 
 jobs:
+  # Instant (stdlib only): every test_*.py is wired into this workflow and the
+  # design docs under docs/design/ have valid headers and links.
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repo guards
+        run: python3 scripts/check_repo.py
+
   test:
     runs-on: ubuntu-latest
     steps:
