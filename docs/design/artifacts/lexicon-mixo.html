@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="da"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lexicon og MIXO: hvad Segue skal låne</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1d1c1a;--mut:#6b6862;--line:#dedad2;--acc:#8a6d2f;--code:#efece5}
+@media (prefers-color-scheme:dark){:root{--bg:#111110;--fg:#e8e6e1;--mut:#a09e99;--line:#2c2b28;--acc:#c8a96e;--code:#1c1b19}}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.6 -apple-system,"Helvetica Neue",Arial,sans-serif}
+main{max-width:780px;margin:0 auto;padding:40px 20px 80px}
+h1{font-size:2rem;line-height:1.2;margin:.2em 0 .4em}h2{margin-top:2.2em;border-bottom:1px solid var(--line);padding-bottom:.2em}h3{margin-top:1.8em}
+a{color:var(--acc)}code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+table{border-collapse:collapse;width:100%;font-size:.92em;margin:1em 0;display:block;overflow-x:auto}th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+.note{background:var(--code);border-left:3px solid var(--acc);padding:10px 14px;font-size:.9rem;color:var(--mut);margin-bottom:2em}
+nav.back{font-size:.9rem;margin-bottom:1em}
+</style></head><body><main>
+<nav class="back"><a href="index.html">← Artifacts</a> · <a href="../README.md">Design docs</a></nav>
+<div class="note">Eksport af claude.ai-dokumentet «Lexicon og MIXO: hvad Segue skal låne» (2026-10-13). Dansk forslag; ingen issues oprettet ud fra det endnu. Historisk reference — ikke et godkendt design.</div>
+<h1>Lexicon og MIXO: hvad Segue skal låne</h1>
+<p>2026-10-13 · forslag, ingen issues oprettet endnu</p>
+<h2>Kort svar</h2>
+<p><strong>Lexicon er den der er værd at studere.</strong> Den er bygget som bibliotekspleje for DJs, og flere af dens bedste funktioner rammer præcis Segues Add music, Health, History og set-bygning. <strong>MIXO er mest en sky-bro</strong> (sync mellem DJ-programmer, mobilapp, backup til Dropbox/Drive). Den har få ideer Segue mangler, og dens kerne (skyen) passer ikke til en lokal, beets-baseret app.</p>
+<p>Den største lektie: begge apps <em>gætter og retter automatisk</em>, men spørger aldrig. Segues Listen through, New in og "How you mix" er netop dét de mangler. Lån deres værktøjer, men behold Segues menneske-i-løkken som forskellen.</p>
+<h2>Hvad jeg så på din Mac</h2>
+<ul>
+<li>Lexicon kører med ca. 1.800 numre og playlister som SetSampler og Moyn25. Indstillingerne viser <em>Auto analyze new tracks</em> og <em>Daily backup on quit</em> slået til, og <strong>Key format = Open Key</strong>.</li>
+<li>MIXO (version 1.89, nyeste er 2.20) stod på login-skærmen, så jeg kunne ikke se indenfor.</li>
+<li>Din skærm stod i et fuldskærms-Space, så jeg kunne kun tage billeder, ikke klikke rundt. Resten bygger på deres sider, manualer og release notes.</li>
+</ul>
+<p><strong>Konkret fund:</strong> du bruger Open Key. Segue bør vise toneart som Open Key, Camelot eller musikalsk notation efter eget valg, ikke kun én af dem.</p>
+<p><strong>Set inde i din Lexicon (gratis-planen), uden at ændre noget:</strong></p>
+<ul>
+<li><strong>Cue Point Generator</strong> (højreklik, Track tools): en skabelon med rækker du kan slå til og fra og trække rundt: Start, Drop, Breakdown, Second Drop, Second Breakdown, End/Fade-out og et Emergency Loop på 16. Hver række har type (cue eller loop), navn og farve, plus "Add custom cue". Valg: overskriv eksisterende, start-cue ved første slag, mindste breakdown 64 slag, drop ved start aldrig. Der er ingen række der hedder mix ind eller mix ud. Den tænker i struktur, ikke i mixpunkter, og det er netop hullet Segue kan fylde. Selve kørslen kræver betalt plan.</li>
+<li><strong>Smart Fix</strong>: en lodret liste af kort, ét per scan (Fix casing, Replace with space, Fix encoded characters, Extract artist from title, Extract remixer, Remove garbage, Remove promotional text, Remove number prefix, ...). Hvert kort forklarer i én sætning hvad det finder. God skabelon for Health.</li>
+<li><strong>Statistik</strong>: "Healthy Tracks 22 %" som en måler (tjekker 3 felter), Last backup, Most tracks by, Most played by, Newest (30 d), Genre distribution. Bekræfter Segues helbredsscore. <strong>Bemærk: Last backup står på "Never"</strong>, selvom Daily backup on quit er slået til.</li>
+<li><strong>Custom Tags</strong>: standardkategorierne er Genre, Mood, Timing (Warmup, Pre-Party, Peak Hour, Closer, Afterhours, Handoff, Filler ...) og Mix (Acapella-In/Out, Intro, Extended, Short Edit, Instrumental, Transition ...). Valgte tags kan gemmes direkte som smartliste.</li>
+<li><strong>History</strong>: kolonnerne er Date, Session, Location, Rating, Tracks, Duration. Den er tom hos dig.</li>
+<li><strong>Track Matcher</strong>: "Paste or use text file" og CSV står først, før Spotify, Beatport og de andre. Det støtter at Segue starter med tekst/CSV.</li>
+<li><strong>Charts</strong>: har "Show tracks I own" og "Only new tracks" som filtre.</li>
+</ul>
+<h2>Prioriteret liste</h2>
+<p>Markering: <strong>Lån</strong> = tag ideen næsten som den er. <strong>Tilpas</strong> = god idé, men lav den på Segues måde. <strong>Spring over</strong> = passer ikke.</p>
+<h3>Fase 1 og 2 (Add music, Library, Health)</h3>
+<p><strong>1. Incoming + Watch Folder (Lexicon) — Lån.</strong> Lexicon overvåger en mappe, importerer automatisk og samler nye numre på en <em>Incoming</em>-side, hvor de kører en fast liste af automatiske handlinger (analyse, skriv tags, find tags, flyt og omdøb til målmappe). Passer til #39 (watch folder), #141/#142 (Add music, Needs you) og #154 (New in). Tag listen af per-mappe automatiske handlinger som indstilling. <strong>Segue bedre:</strong> Lexicon spørger aldrig; Segue spørger "Play it?" for promo-mapper.</p>
+<p><strong>2. Smart Fixes, Genre Cleanup, Artist Cleanup (Lexicon) — Tilpas.</strong> Scan, vis forslag, du bekræfter. Ignorerede forslag huskes (og kan nulstilles). Konkrete rettelser der er værd at kopiere: store/små bogstaver, nummer-præfiks i titel, URL'er og "Purchased from Beatport"-tekst, BPM i titlen, udtræk remixer, tilføj parentes om mix-navn, mærkelige tegn, saml lignende genrer under ét navn. Hører til Health som "Ret de sikre". <strong>Segue bedre:</strong> alt kan fortrydes via ændringshistorikken, og MusicBrainz via beets er en stærkere kilde end Lexicons Beatport/Spotify-opslag.</p>
+<p><strong>3. Archive i stedet for slet (Lexicon) — Lån.</strong> Arkiverede numre skjules fra biblioteket men bevarer cues og data og bliver i de playlister de allerede er i. En hjælper vælger "arkiveret i mere end N dage, uden cues, ikke i nogen playliste" før endelig oprydning. Det matcher jeres beslutning om at "Not for me" skjuler og aldrig sletter (#154), og giver Health en tryg vej til faktisk sletning.</p>
+<p><strong>4. Dubletter: behold den bedste kopi uden at ødelægge playlister (Lexicon + MIXO) — Lån.</strong> Find via lyd eller tags, vælg vinderen, playlister peger bagefter på vinderen. Hører til Health (og #125). <strong>Segue bedre:</strong> vælg vinder ud fra kvalitet (lossless, bitrate), og flyt <code>sg_*</code>-felter, afspilninger og samlinger over på vinderen.</p>
+<p><strong>5. Tag-kategorier: OR inden for en kategori, AND på tværs (Lexicon) — Lån.</strong> Lexicon anbefaler selv otte dimensioner: Energy, Vibe/Mood, Vocals, Set Moment, Genre/Subgenre, Situation, Setlist Status, Tier. Det er næsten præcis Segues syv akser (#152/#153), så det bekræfter at akserne er rigtige. Overvej at lade <strong>Situation</strong> (klub, bar, bryllup, festival) indgå i Floor. Match-reglen (OR inden for, AND på tværs) bør være standarden i smart collections (#146). Lån også deres hurtige tag-popup (tryk T, piletaster, Enter) til manuel tagging uden for Listen through.</p>
+<p><strong>6. Smartlist Generator (Lexicon) — Tilpas.</strong> Laver smartlister i bulk, én per værdi af et felt (årti, genre, BPM-interval, label) eller kombinationer, uden dubletter ved genkørsel. Ideen er god, men hundredvis af lister er rod. I Segue bør det være <strong>facetter</strong> i Library (#144/#146): "Gennemse efter årti × genre", hvor du gemmer dem du kan lide som samling. Kan også fodre Mixes (#155).</p>
+<p><strong>7. Statistik med interaktive filtre (Lexicon) — Tilpas.</strong> Mest spillede kunstnere, nyligt tilføjet, genrefordeling, klik for at filtrere. Hører hjemme i Health-oversigten og senere History.</p>
+<p><strong>8. Daglig backup ved lukning (Lexicon, du har den slået til) — Lån.</strong> Segue bør tage en backup af <code>library.db</code> før hver skrivende handling og én gang dagligt, og vise den i Health. Det er også fundamentet under undo.</p>
+<h3>Analyse og set-bygning (Atlas, Orbit, Sets)</h3>
+<p><strong>9. Energy, Danceability, Happiness som felter + egen energianalyse (begge) — Lån, med en lektie.</strong> Både Lexicon og MIXO (juli 2026) har tilføjet energianalyse. Lexicon skiftede i 1.11 til en model <strong>uden BPM</strong> for at få stabile vurderinger. Lektie til #137: energi må ikke bare følge tempo, ellers bliver hurtige numre altid "energiske".</p>
+<p><strong>10. Track Timeline (Lexicon 1.10) — Tilpas.</strong> En graf over en playliste med BPM, toneart og energi, der opdateres live når du ændrer rækkefølgen. Segues set-bane med energikurve gør allerede dette. <strong>Segue bedre:</strong> du tegner målkurven først (skabeloner), og Segue viser hvor sættet afviger og foreslår numre der lukker hullet. Lexicon viser kun hvad der er.</p>
+<p><strong>11. Mixable Tracks / Related Track Finder (Lexicon + MIXO) — Tilpas.</strong> Begge finder "mixbare" numre ud fra BPM og toneart, filtrerer på tags og gemmer resultatet som playliste. Det er hele deres logik. Orbit går meget længere (lyd-lighed, historik, retning: Lift/Hold/Breathe). Lån to småting: <strong>filtrer på tags direkte i ringen</strong>, og <strong>gem ringen som playliste</strong> med ét klik.</p>
+<p><strong>12. Automatiske cues på fraser (Lexicon, MIXO) — Lån, og ryk den frem.</strong></p>
+<p><em>Sådan gør Lexicon (via rekordcloud):</em> en ML-model finder drop og breakdown, mix-ud findes kun ud fra bassen (lander før et stille outro), cues snapper til beatgrid og 16-slags grænser, og en skabelon kan lægge cues relativt, fx 64 slag før droppet, med navn, farve og hot/memory. Svaghed de selv skriver: den antager 4-takters fraser fra start, så et nummer med 1-3 ekstra takter får alle cues forskudt. MIXO (2.18) sætter kun en hot cue på første slag.</p>
+<p><em>Forslag til Segue:</em> tre cues per nummer som standard, alle på fase-grænser (hele 4-takters grupper: 4, 8, 12, 16, 24, 32 takter):</p>
+<ul>
+<li><strong>Start</strong>: første downbeat eller der hvor musikken reelt begynder.</li>
+<li><strong>Mix ind</strong>: slutningen af intro, hvor det næste nummer skal være helt inde.</li>
+<li><strong>Mix ud</strong>: starten af outro, hvor bassen falder væk.</li>
+</ul>
+<p><em>Hvor Segue kan gøre det bedre:</em></p>
+<ul>
+<li>Find fasens startpunkt per nummer ud fra første strukturskift i stedet for at antage det. Så undgår vi Lexicons forskydning på numre med skæve intro-længder.</li>
+<li>Vis længden som noget du kan bruge: "Mix ind: 32 takter intro".</li>
+<li>Dine egne Traktor-cues vinder altid (You &gt; Analysis). Har et nummer allerede cues, foreslår Segue kun.</li>
+<li>Listen through kan spørge "Er det her dit mix ind?" og lære af svarene.</li>
+<li>Inde i Segue bruges de med det samme: "Hør mix ind", overgangseksempel og set-ETA. Eksport til Traktor/Rekordbox kommer under Take it with you.</li>
+</ul>
+<p><em>Fase:</em> det er samme analyse som intro/outro (#156) og ETA (#157), så jeg foreslår at udvide #156 med cues i stedet for et nyt issue.</p>
+<p><em>Lexicons generator i detaljer (set i din app):</em></p>
+<ul>
+<li>Indstillinger: overskriv eksisterende cues; start-cue ved "first beat", "existing cue" eller "zero (0:00)"; mindste breakdown i slag (64); drop ved start "Never" eller "High energy only"; keep cue position; custom cue anchors; auto-cue ved afspilning.</li>
+<li>Skabelon: rækker du slår til og fra og trækker i rækkefølge. Hver har type (Cue eller Active Loop), navn og farve. Gemmes under et navn ("Default template").</li>
+<li>Custom cue: <strong>[antal slag] [before/after] [anker]</strong>, hvor ankrene er start, drop, breakdown, second drop, second breakdown og end/fade-out. Fx "64 beats before drop".</li>
+</ul>
+<p><em>Skabeloner i Segue, så du kan vælge som i Lexicon:</em></p>
+<ul>
+<li><strong>Mixpunkter (Segue-standard, 8 cues):</strong> 4 i starten og 4 i slutningen, alle på fase-grænser. Start: Start, +8, +16 takter og Mix ind. Slut: Mix ud, +8, +16 takter og sidste slag. Afstanden kan være 4, 8 eller 16 takter. Otte cues passer præcis til de 8 hot cues i Traktor og Rekordbox. <em>Ret mig hvis dine 4+4 sidder anderledes.</em></li>
+<li><strong>Struktur (som Lexicon):</strong> Start, Drop, Breakdown, Drop 2, Breakdown 2, Fade-out og eventuelt et nød-loop.</li>
+<li><strong>Blandet:</strong> Start, Mix ind, Drop, Breakdown, Mix ud og Slut.</li>
+<li><strong>Din egen:</strong> samme række-editor som Lexicon, men talt i <strong>takter</strong> i stedet for slag, og med <strong>Mix ind</strong> og <strong>Mix ud</strong> som ankre ud over deres. Gem flere skabeloner under eget navn.</li>
+</ul>
+<p><em>Det Segue kan gøre bedre end Lexicon:</em></p>
+<ul>
+<li>Vis skabelonen på et nummers waveform, før den bliver brugt.</li>
+<li>Vælg skabelon per samling, fx Mixpunkter til Promos og Struktur til en anden samling.</li>
+<li>Numre der allerede har cues, får kun forslag. Intet bliver overskrevet uden et klart valg, og alt kan fortrydes.</li>
+</ul>
+<h3>History (Traktor-modulet)</h3>
+<p><strong>13. Play history med sætlog, rating, sted og afspil-fra-historik (Lexicon 1.10/1.11) — Lån.</strong> Import af historik fra DJ-programmer og CDJ-USB, redigerbare sætlogs, rating af aftenen, sted-tag, gem en session som playliste, afspil direkte fra historikken. Passer til History og #158. Tilføj sted, rating og noter per session, og brug "spillet for nylig" som lås i Orbit. <strong>Segue bedre:</strong> lær dine overgange ("How you mix") og lav en tidslinje/Wrapped. Lexicon gemmer bare loggen.</p>
+<h3>Take it with you (eksport, senere)</h3>
+<p><strong>14. Konvertering og sync til DJ-programmer (begge, deres kerneprodukt) — Tilpas smalt.</strong> Feltmapping, toneart-konvertering, "sidst synkroniseret"-tidsstempel per program, "rør ikke mine beatgrids", to-vejs Pioneer USB med tjek for CDJ-kompatible formater og automatisk omkodning. I har besluttet Rekordbox først via ét adapterlag. Lån tidsstemplet, "rør ikke"-valget og CDJ-kompatibilitetstjekket (beets convert kan omkode). Byg ikke en fuld konkurrent. <strong>Værd at undersøge:</strong> Lexicon har et lokalt API og plugins. Hvis det kan skrive tags/playlister, kan Segue tale med Lexicon i stedet for at bygge fem konvertere. Jeg har ikke tjekket hvad API'et tillader.</p>
+<p><strong>15. Playlist/Track Matcher (begge) — Tilpas, nice-to-have.</strong> Indsæt et Spotify/Tidal/Beatport-link og se hvad du ejer og hvad du mangler. MIXO tager også CSV og tekst. Svarer til den "indkøbsliste" I har parkeret. Start med tekst/CSV (ingen login), streaming-links bagefter.</p>
+<p><strong>16. Mobil lytning og offline-playlister (MIXO) — Tilpas, meget senere.</strong> MIXOs bedste idé er at lytte nye numre igennem på telefonen. For Segue kunne Listen through på telefonen være stærk, men det er langt ude (Mac først). Indtil da: eksportér en lytte-playliste til telefonen under Take it with you.</p>
+<h3>Spring over</h3>
+<ul>
+<li><strong>Skylagring og sky-sync</strong> (MIXOs kerne): Segue er lokal, og dit bibliotek ligger på egne drev.</li>
+<li><strong>Charts, record pools, butikslinks, "Discover"</strong>: handel, ikke biblioteksforståelse.</li>
+<li><strong>Direct2CDJ</strong>: Lexicon skriver selv at den ikke må bruges live. For risikabelt.</li>
+<li><strong>AI-assistent (Cuey)</strong>: Segue har allerede Ask (⌘K) med egen nøgle, og appen skal virke uden AI.</li>
+<li><strong>Abonnementsniveauer</strong>: ikke relevant, I sælger ikke.</li>
+</ul>
+<h2>Hvor Segue kan blive bedre end begge</h2>
+<ol>
+<li><strong>Den spørger og lærer.</strong> Lexicon og MIXO gætter tags og cues og håber det passer. Segue spørger én ting ad gangen og husker hvem der sagde hvad (You &gt; History &gt; Analysis).</li>
+<li><strong>Den forstår lyd, ikke kun metadata.</strong> Deres "mixbar" er BPM + toneart. Orbit bruger lyd-lighed, energi, historik og retning.</li>
+<li><strong>Den lærer af din historik.</strong> De gemmer hvad du spillede. Segue lærer hvordan du mixer og bruger det i forslag og ETA.</li>
+<li><strong>Alt kan fortrydes.</strong> Begge har permanente sletninger i oprydningen. Segue skal have undo på alt, også Health.</li>
+<li><strong>Korrekte data fra MusicBrainz via beets</strong> i stedet for skrabede butiksdata.</li>
+</ol>
+<h2>Næste skridt (dit valg)</h2>
+<p>Hvis du siger til, laver jeg issues for de punkter du vil have, i jeres issue-format med model/effort-labels. Mit bud på de første: 1, 3, 4, 5 og 8, fordi de styrker fase 1 og Health uden ny analyse.</p>
+<h2>Kilder</h2>
+<ul>
+<li><a href="https://www.lexicondj.com/features">Lexicon features</a> · <a href="https://www.lexicondj.com/blog/lexicon-1-11-highlights">1.11 highlights</a> · <a href="https://www.lexicondj.com/manual/smartlist-generator">Smartlist Generator</a> · <a href="https://www.lexicondj.com/blog/the-8-tags-every-serious-dj-should-be-using-energy-vibe-setlist-status-and-more">8 tags every DJ should use</a> · <a href="https://djlifemag.com/2026/05/lexicon-delivers-its-biggest-update-yet/">DJ Life om 1.10</a> · <a href="https://wearecrossfader.co.uk/blog/lexicon-music-management-for-djs/">Crossfader: Lexicon walkthrough</a></li>
+<li><a href="https://www.mixo.dj/features">MIXO features</a> · <a href="https://www.mixo.dj/guides/features">MIXO feature-tabel</a> · <a href="https://www.mixo.dj/versions/page/1">MIXO versioner</a> · <a href="https://wearecrossfader.co.uk/blog/mixo-dj-library-management-for-djs/">Crossfader: MIXO</a></li>
+</ul>
+<p>Læst: Lexicons featureside, release notes for 1.11 og (via DJ Life) 1.10, Smartlist-manualen og <a href="https://rekord.cloud/wiki/cuepoint-generator">rekordclouds cue-generator-wiki</a>. MIXOs featuresider og alle tre versionssider (1.88 til 2.20). Ikke læst: Lexicons egen 1.10-side (fejlede) og den sidste del af Lexicon-manualen.</p>
+
+</main></body></html>
