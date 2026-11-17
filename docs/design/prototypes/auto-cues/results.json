@@ -1,0 +1,347 @@
+[
+ {
+  "file": "Titoffee_Hibotep_-_Unlock_The_Key_Dvniel_Remix_-_MST.flac",
+  "duration": 485.5,
+  "bpm": 105.0,
+  "first_beat": 0.57,
+  "phrase_offset_bars": 0,
+  "intro_bars": 32,
+  "outro_bars": 9,
+  "cues": {
+   "mixpoints": [
+    {
+     "name": "Start",
+     "bar": 0,
+     "time": 0.57
+    },
+    {
+     "name": "-16",
+     "bar": 16,
+     "time": 37.142
+    },
+    {
+     "name": "-8",
+     "bar": 24,
+     "time": 55.428
+    },
+    {
+     "name": "Mix in",
+     "bar": 32,
+     "time": 73.714
+    },
+    {
+     "name": "Mix out",
+     "bar": 200,
+     "time": 457.719
+    },
+    {
+     "name": "End",
+     "bar": 209,
+     "time": 478.291
+    }
+   ],
+   "structure": [
+    {
+     "name": "Start",
+     "bar": 0,
+     "time": 0.57
+    },
+    {
+     "name": "Breakdown",
+     "bar": 104,
+     "time": 238.287
+    },
+    {
+     "name": "Drop",
+     "bar": 144,
+     "time": 329.717
+    },
+    {
+     "name": "Fade-out",
+     "bar": 200,
+     "time": 457.719
+    }
+   ]
+  }
+ },
+ {
+  "file": "1. Beard2Beard, Seventh Soul - Mira (Original Mix).aif",
+  "duration": 376.6,
+  "bpm": 123.0,
+  "first_beat": 0.04,
+  "phrase_offset_bars": 0,
+  "intro_bars": 16,
+  "outro_bars": 12,
+  "cues": {
+   "mixpoints": [
+    {
+     "name": "Start",
+     "bar": 0,
+     "time": 0.04
+    },
+    {
+     "name": "-8",
+     "bar": 8,
+     "time": 15.65
+    },
+    {
+     "name": "Mix in",
+     "bar": 16,
+     "time": 31.261
+    },
+    {
+     "name": "Mix out",
+     "bar": 180,
+     "time": 351.272
+    },
+    {
+     "name": "+8",
+     "bar": 188,
+     "time": 366.883
+    },
+    {
+     "name": "End",
+     "bar": 192,
+     "time": 374.688
+    }
+   ],
+   "structure": [
+    {
+     "name": "Start",
+     "bar": 0,
+     "time": 0.04
+    },
+    {
+     "name": "Breakdown",
+     "bar": 96,
+     "time": 187.364
+    },
+    {
+     "name": "Drop",
+     "bar": 124,
+     "time": 242.0
+    },
+    {
+     "name": "Fade-out",
+     "bar": 180,
+     "time": 351.272
+    }
+   ]
+  }
+ },
+ {
+  "file": "01. Genii - I Cant Go Back To Yesterday (Original Mix) [ INSIDE ].aif",
+  "duration": 252.9,
+  "bpm": 121.0,
+  "first_beat": 0.29,
+  "phrase_offset_bars": 0,
+  "intro_bars": 16,
+  "outro_bars": 8,
+  "cues": {
+   "mixpoints": [
+    {
+     "name": "Start",
+     "bar": 0,
+     "time": 0.29
+    },
+    {
+     "name": "-8",
+     "bar": 8,
+     "time": 16.158
+    },
+    {
+     "name": "Mix in",
+     "bar": 16,
+     "time": 32.027
+    },
+    {
+     "name": "Mix out",
+     "bar": 116,
+     "time": 230.381
+    },
+    {
+     "name": "End",
+     "bar": 124,
+     "time": 246.25
+    }
+   ],
+   "structure": [
+    {
+     "name": "Start",
+     "bar": 0,
+     "time": 0.29
+    },
+    {
+     "name": "Breakdown",
+     "bar": 72,
+     "time": 143.105
+    },
+    {
+     "name": "Drop",
+     "bar": 80,
+     "time": 158.974
+    },
+    {
+     "name": "Fade-out",
+     "bar": 116,
+     "time": 230.381
+    }
+   ]
+  }
+ },
+ {
+  "file": "1. Maziri - Furaha (Original Mix).aif",
+  "duration": 364.5,
+  "bpm": 119.0,
+  "first_beat": 0.34,
+  "phrase_offset_bars": 0,
+  "intro_bars": 40,
+  "outro_bars": 17,
+  "cues": {
+   "mixpoints": [
+    {
+     "name": "Start",
+     "bar": 0,
+     "time": 0.34
+    },
+    {
+     "name": "-16",
+     "bar": 24,
+     "time": 48.743
+    },
+    {
+     "name": "-8",
+     "bar": 32,
+     "time": 64.878
+    },
+    {
+     "name": "Mix in",
+     "bar": 40,
+     "time": 81.012
+    },
+    {
+     "name": "Mix out",
+     "bar": 160,
+     "time": 323.028
+    },
+    {
+     "name": "+8",
+     "bar": 168,
+     "time": 339.163
+    },
+    {
+     "name": "End",
+     "bar": 177,
+     "time": 357.314
+    }
+   ],
+   "structure": [
+    {
+     "name": "Start",
+     "bar": 0,
+     "time": 0.34
+    },
+    {
+     "name": "Breakdown",
+     "bar": 76,
+     "time": 153.617
+    },
+    {
+     "name": "Drop",
+     "bar": 104,
+     "time": 210.088
+    },
+    {
+     "name": "Fade-out",
+     "bar": 160,
+     "time": 323.028
+    }
+   ]
+  }
+ },
+ {
+  "file": "Stephan Zovsky - Shut Up (Original Mix)  [Sueslide Records].aif",
+  "duration": 391.4,
+  "bpm": 130.0,
+  "first_beat": 0.29,
+  "phrase_offset_bars": 0,
+  "intro_bars": 32,
+  "outro_bars": 24,
+  "cues": {
+   "mixpoints": [
+    {
+     "name": "Start",
+     "bar": 0,
+     "time": 0.29
+    },
+    {
+     "name": "-16",
+     "bar": 16,
+     "time": 29.828
+    },
+    {
+     "name": "-8",
+     "bar": 24,
+     "time": 44.597
+    },
+    {
+     "name": "Mix in",
+     "bar": 32,
+     "time": 59.365
+    },
+    {
+     "name": "Mix out",
+     "bar": 184,
+     "time": 339.974
+    },
+    {
+     "name": "+8",
+     "bar": 192,
+     "time": 354.743
+    },
+    {
+     "name": "+16",
+     "bar": 200,
+     "time": 369.512
+    },
+    {
+     "name": "End",
+     "bar": 208,
+     "time": 384.28
+    }
+   ],
+   "structure": [
+    {
+     "name": "Start",
+     "bar": 0,
+     "time": 0.29
+    },
+    {
+     "name": "Breakdown",
+     "bar": 64,
+     "time": 118.441
+    },
+    {
+     "name": "Drop",
+     "bar": 80,
+     "time": 147.979
+    },
+    {
+     "name": "Breakdown 2",
+     "bar": 124,
+     "time": 229.207
+    },
+    {
+     "name": "Drop 2",
+     "bar": 144,
+     "time": 266.13
+    },
+    {
+     "name": "Fade-out",
+     "bar": 184,
+     "time": 339.974
+    }
+   ]
+  }
+ }
+]
