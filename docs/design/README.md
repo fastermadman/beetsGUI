@@ -16,9 +16,9 @@ These are the **source of truth** for decisions that were expensive to make and 
 
 Language: the user writes Danish, so older design notes are Danish; the **app UI, code, issues and PRs are English**.
 
-## Not in git (still only artifacts, listed so they are not forgotten)
+## Reference exports (static HTML, not approved designs)
 
-Product vision and the mockup boards live as claude.ai artifacts, linked from [#150](https://github.com/fastermadman/beetsGUI/issues/150). They are visual; if a decision in them starts to drive code, copy the decision into a document here. The enrichment proposal (#151) and the auto-cues write-up exist as issue text and project memory.
+Product vision, the Lexicon/MIXO comparison and the 19 UI mockup boards were claude.ai artifacts; they now live in git as standalone HTML under [artifacts/](artifacts/README.md) (open [artifacts/index.html](artifacts/index.html) in a browser). They are historical references: if a decision in them starts to drive code, copy the decision into a document here. The enrichment proposal (#151) and the auto-cues write-up exist as issue text and project memory.
 
 ## When code lands
 
