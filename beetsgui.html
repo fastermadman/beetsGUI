@@ -1300,6 +1300,9 @@ function setupDrop(zoneId,targetId,onDrop){
     if(item&&item.kind==='file'){
       const file=item.getAsFile(),path=file.path||'';
       if(path){document.getElementById(targetId).value=path;}
+      // The desktop app fills the full path itself (desktopDropPath) —
+      // don't flash a "path is relative" warning it's about to make untrue.
+      else if(isDesktopApp()){if(onDrop)onDrop('');return;}
       else{
         document.getElementById(targetId).value=file.name;
         const w=document.createElement('div');w.className='alert alert-yellow';w.style.fontSize='10px';w.style.marginTop='0.3rem';w.textContent='Path is relative. Copy the full path manually from Finder (⌘I on the folder).';
@@ -1309,7 +1312,7 @@ function setupDrop(zoneId,targetId,onDrop){
     }
   });
 }
-setupDrop('import-section','import-path',p=>checkiCloud(p));
+setupDrop('import-section','import-path',p=>{if(p)checkiCloud(p);});
 setupDrop('scan-section','scan-path');
 setupDrop('find-drop2','conv-src');
 document.body.addEventListener('dragover',e=>e.preventDefault());
@@ -1317,13 +1320,33 @@ document.body.addEventListener('drop',e=>e.preventDefault());
 
 function toggleLog(){document.getElementById('log-path-wrap').style.display=document.getElementById('import-log').checked?'block':'none';}
 function setPath(fieldId,value){document.getElementById(fieldId).value=value;}
+// In the desktop app (app.py) the picker is a sheet on the app's own
+// window via the pywebview bridge; in a browser it's /pick's osascript
+// dialog, which can open behind Safari. Same {ok,path} shape either way.
+function isDesktopApp(){return !!(window.pywebview&&window.pywebview.api);}
 function browsePath(fieldId,kind){
-  postJSON('/pick',{kind}).then(data=>{
-    if(!data.ok||!data.path)return;
+  const pick=isDesktopApp()&&window.pywebview.api.pick_path
+    ?window.pywebview.api.pick_path(kind):postJSON('/pick',{kind});
+  pick.then(data=>{
+    if(!data||!data.ok||!data.path)return;
     const el=document.getElementById(fieldId);
     el.value=data.path;
     el.dispatchEvent(new Event('input'));
   });
+}
+// Called by app.py's native drop handler with the real path of a folder
+// dropped from Finder — page JS only ever sees the file's name.
+function desktopDropPath(fieldId,path){
+  const el=document.getElementById(fieldId);if(!el)return;
+  el.value=path;
+  el.dispatchEvent(new Event('input'));
+}
+// A macOS notification, only when the app isn't the window you're looking
+// at — an import that wants a decision is otherwise invisible behind
+// whatever you switched to while it worked.
+function desktopNotify(title,body){
+  if(!isDesktopApp()||!window.pywebview.api.notify||document.hasFocus())return;
+  window.pywebview.api.notify(title,body).catch(()=>{});
 }
 function checkiCloud(path){
   const warn=document.getElementById('import-warnings');
@@ -1527,9 +1550,11 @@ function handleImportEvent(ev){
   else if(ev.type==='decision'){
     if(importState.decision&&importState.decision.decision_id===ev.decision_id)return;
     importState.decision=ev;importState.selected=0;importState.expanded=false;renderDecision();
+    desktopNotify('beetsGUI','An import is waiting for your decision.');
   } else if(ev.type==='done'){
     importState.decided=ev.decided;importState.decision=null;importState.running=false;
     importLog(ev.aborted?'Import aborted.':'Import finished — '+ev.decided+' decision'+(ev.decided===1?'':'s')+'.');
+    desktopNotify('beetsGUI',ev.aborted?'Import aborted.':'Import finished.');
     renderImportProgress();renderDecision();setImportUiRunning(false);
     if(importState.es){importState.es.close();importState.es=null;}
     if(importStallTimer){clearInterval(importStallTimer);importStallTimer=null;}
@@ -1864,6 +1889,7 @@ function handleJobEvent(ev){
     // running region is done being "running" and becomes "what happened".
     const errored=running.querySelector('.alert-red');
     renderResult(errored?errored.outerHTML:'<div class="alert alert-green">'+escapeHtml(jobSummary(ev))+'</div>');
+    desktopNotify('beetsGUI',errored?'A job stopped with an error.':jobSummary(ev));
     running.style.display='none';running.innerHTML='';
     if(jobRunner.onDone)jobRunner.onDone(ev,document.getElementById('job-panel-result'));
   }
@@ -3429,7 +3455,7 @@ function confirmConfigSave(){
     pendingConfigSave=null;
     if(!data.ok){out.innerHTML='<div class="alert alert-red">'+escapeHtml(data.error||'Could not save.')+'</div>';return;}
     out.innerHTML='<div class="alert alert-green">Saved'+(data.backup?' — previous config backed up to '+escapeHtml(data.backup):'')+
-      '. Restart beetsGUI (Ctrl+C, then run it again) to apply.</div>';
+      (isDesktopApp()?'. Quit and reopen beetsGUI to apply.</div>':'. Restart beetsGUI (Ctrl+C, then run it again) to apply.</div>');
   }).catch(()=>{out.innerHTML='<div class="lib-empty">Could not reach the server.</div>';});
 }
 
