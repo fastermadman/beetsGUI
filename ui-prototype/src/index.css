@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+/* Design tokens live here and only here. Fonts: Jost and DM Mono (as in the mockups). */
+@theme {
+  --font-sans: "Jost", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+  --color-ink: #14151a;
+  --color-panel: #1d1f27;
+  --color-line: #2c2f3a;
+  --color-text: #e8e9ee;
+  --color-muted: #8b8fa0;
+  --color-accent: #7c9cff;
+}
+
+body {
+  @apply bg-ink text-text font-sans antialiased;
+}

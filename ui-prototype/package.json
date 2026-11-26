@@ -1,0 +1,26 @@
+{
+  "name": "segue-ui-prototype",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Throwaway React + Tailwind prototype of the Segue UI, made to be opened in Onlook. Not part of the shipped app.",
+  "engines": { "node": "^20.19.0 || >=22.12.0" },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/react": "^19.3.3",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.0",
+    "vite": "^8.4.0"
+  }
+}
