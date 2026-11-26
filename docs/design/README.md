@@ -10,6 +10,7 @@ These are the **source of truth** for decisions that were expensive to make and 
 |---|---|---|---|
 | [track-facts-data-model.md](track-facts-data-model.md) | da | approved 2026-11-17 | `segue.db` / `sg_*` / `sg_set` / change log / cues / history; #151, #152, #159, #160, #161, #156, #158 |
 | [app-shell-140.md](app-shell-140.md) | en | approved 2026-11-17 | App shell, router, view contract, legacy bridge, native drop; #140 (PRs 1-4), later views |
+| [ui-stack.md](ui-stack.md) | en | draft 2026-11-26 | UI libraries (Preact, Vite, TanStack, canvas) and where Rust does and does not fit; #150 |
 | [play-history-traktor.md](play-history-traktor.md) | da | reference (adopted by the data model) | `playhistory.db` from Traktor sessions; #161, #158 |
 | [prototypes/auto-cues/](prototypes/auto-cues/README.md) | da | prototype, unapproved | Phrase-snapped mix in/out cues; to be scored in #137/#156 |
 | [archive/fable-brief-2026-11-17.md](archive/fable-brief-2026-11-17.md) | en | snapshot, may be stale | Status brief written for a design session |
