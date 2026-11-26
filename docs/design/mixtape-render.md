@@ -108,7 +108,7 @@ Values are normalised 0-1 and mapped to real parameter ranges in the engine, so 
 | EQ | 3-band `low`, `mid`, `high` with kill at 0 (DJ-style isolator, not a mastering EQ) |
 | Filter | one DJ filter per deck: 0.5 = open, below = low-pass sweep, above = high-pass sweep (single knob, like a hardware mixer) |
 | Sends | `reverb`, `delay` / echo (time in beats, feedback fixed per preset), each a post-fader send into a shared effect bus |
-| Speed and pitch | `speed` (playback-rate ratio vs. native, per deck) and `pitch` (semitones/cents, per deck, only active with keylock on). The tempo policy generates the default `speed` lane; the user can edit it |
+| Speed and pitch | `speed` (playback-rate ratio vs. native, per deck) and `pitch` (semitones/cents, per deck, independent of speed, needs the engine so unavailable when `keylock` is `off`). The tempo policy generates the default `speed` lane; the user can edit it |
 | Transition-wide | optional master-bus sweep or a "riser" built-in; limited to built-ins |
 
 **Templates** copy lanes into the transition (editable afterwards; `template` is only provenance, so changing a template later never rewrites a user's transitions):
@@ -134,24 +134,39 @@ Automation is **evaluated per audio block** (for example 256 samples) with a sho
 
 ## Keylock and pitch
 
-**User requirement (2026-11-26):** the user prefers to bring tracks to 0 % pitch and switch keylock off, because keylock colours the sound even at 0 %. So the default must be: *no processing at all* when nothing needs stretching, and tempo matching by plain varispeed when it does.
+**User requirements (2026-11-26):** (1) With no tempo or pitch change, nothing may touch the sound (the user hears keylock colouring the audio even at 0 %). (2) Keylock should switch **automatically**: off at 0 %, on for anything else, with manual override. (3) Switching must **never click or pop** (Traktor does when toggling keylock). (4) The key must be changeable **with keylock on, independent of tempo**.
 
-**Three modes per deck and transition** (`pitch_mode`):
+**Two words.** *Keylock* changes the speed without changing the pitch, using a stretch engine. *Varispeed* is the opposite: speed changes by plain resampling, so **tempo also changes the pitch, like a turntable** (+3 % speed is about half a semitone higher). Varispeed adds no engine colouring; keylock does, which is why the user wants it off whenever it is not needed.
 
-| Mode | What happens | Default |
+**Modes per deck and transition** (`keylock`):
+
+| Setting | Behaviour | Default |
 |---|---|---|
-| `bypass` | Speed ratio is exactly 1.0 and no pitch offset: audio goes through **bit-exact**, no stretch engine instantiated, no resampler. Chosen automatically whenever it applies | Automatic |
-| `varispeed` | Speed changes by resampling, pitch follows (like a turntable or a CDJ with keylock off). The engine is a high-quality resampler, not a stretcher. `pitch` lane is disabled; the UI shows the resulting key shift, `12 * log2(ratio)` semitones (about 0.5 semitone at 3 %), and the resulting Camelot key | **Yes, for any speed change** |
-| `keylock` | A stretch engine changes speed without changing pitch; the `pitch` lane can add a deliberate offset (for example to match keys). Opt-in per deck or per set | Off |
+| `auto` | The engine is **off** (bit-exact bypass) while `speed` is exactly 1.0 and `pitch` is 0, and **on** (keylock) whenever either differs. Switches back and forth along the timeline as the lanes dictate | **Yes** |
+| `off` | Never use the stretch engine: speed changes are varispeed and the `pitch` lane is disabled (the UI says why). The resulting key shift is shown (`12 * log2(ratio)` semitones) with the new Camelot key | Manual, per deck or per set |
+| `on` | Use the engine for any speed change, but **bypass is still exact at 1.0 and 0 pitch** (forcing the engine on at identity would add colour for nothing) | Manual |
 
-Rules that follow:
+The setting lives in Settings (default for new transitions) and on each transition/deck (override). "Auto" is the answer to "off at 0 %, on otherwise" without the user thinking about it.
 
-- **Bypass is a guarantee, not an optimisation:** a deck whose `speed` lane is constant 1.0 for the whole clip and whose `pitch` is 0 is never touched by an engine. The null test in "Goal metrics" checks it bit-for-bit. This addresses "keylock changes the sound even at 0 %": with this design, keylock off and 0 % pitch means the file's samples are used as they are.
-- **Time-varying speed** (ramps from the `speed` lane) is realised as a variable-rate resample in `varispeed` and as a time-map stretch in `keylock`. Whether the chosen library supports this continuously is **unverified** (see candidates); the fallback is small constant steps with crossfaded joins, which is audible and must be rejected in the spike if so.
-- Key shift is shown to the user before they accept a varispeed transition, and fed to the mix score (#169): a +0.5 semitone shift of B may turn a harmonic match into a clash, or fix one.
-- The setting lives per set (default mode for new transitions) and per transition (override).
+**Key change with keylock on.** The `pitch` lane (semitones and cents, per deck) is independent of `speed`, so tempo can be matched and the key moved separately. Besides drawing the lane, the UI offers a "match key" action: it computes the smallest shift (within a limit, default +-3 semitones, a setting) that makes B's key compatible with A's on the Camelot wheel (keys from #166 and the `sg_key` fact) and writes a constant `pitch` value. A non-zero `pitch` activates the engine even at speed 1.0, per `auto`. Large shifts degrade vocals and formants; whether the chosen engine has a formant-preservation option is **unverified** (Rubber Band is believed to).
 
-**Engine choice for `keylock`** (a setting, "Stretch engine", default `auto`). All entries below are **from memory and unverified**; the spike must check licence text, version, API and sound. None is a prototype or a commitment.
+**Click-free switching** (offline render, so every switch point is known in advance):
+
+1. The engine is **pre-rolled** over a few windows' worth of audio before the switch, so its internal state is warm when it takes over; it is never started cold at the switch.
+2. **Latency compensation.** The engine's output delay is measured and removed (the dry path is delayed or the engine input advanced), so both paths are **sample-aligned** at the switch point. At identity speed the two signals are then nearly the same waveform.
+3. **Phase alignment** check: a short cross-correlation of the two paths around the switch refines the offset (up to a few ms), so the crossfade combines in-phase signals and cannot comb-filter.
+4. A **short crossfade** (default 20 ms, setting; amplitude-linear when the correlation is high, equal-power when it is low) blends bypass into engine, or back.
+5. The speed lane itself is continuous (it leaves 1.0 along a ramp), so the only discontinuity to hide is the path switch, never a jump in rate.
+6. **Hysteresis**: a lane hovering near 1.0 cannot make the engine chatter; a minimum dwell (default 250 ms) applies, and a tolerance of 1e-6 defines "exactly 1.0".
+7. The same logic applies to a manual toggle and to a recorded toggle in a lane, since both become time spans in the plan.
+
+**Other rules.**
+
+- **Bypass is a guarantee, not an optimisation:** outside switch crossfades, a deck at speed 1.0 and pitch 0 is bit-identical to its decoded source (tested).
+- **Time-varying speed** (lane ramps) is a variable-rate resample in `varispeed` and a time-map stretch in `keylock`. Whether the chosen library supports this continuously is **unverified**; the fallback is small constant steps with crossfaded joins, which the spike must reject if audible.
+- The key shift (varispeed) or the `pitch` offset (keylock) feeds the mix score (#169): a small shift may turn a harmonic match into a clash, or fix one.
+
+**Engine choice for `keylock`** (a setting, "Stretch engine", default chosen by the spike). All entries below are **from memory and unverified**; the spike must check licence text, version, API and sound. None is a prototype or a commitment.
 
 | Candidate | Licence (to check) | Notes (unverified) | AGPLv3 fit |
 |---|---|---|---|
@@ -162,12 +177,12 @@ Rules that follow:
 | **soxr / libsamplerate** | LGPL-2.1 (soxr), BSD-2 (libsamplerate) | Not stretchers: high-quality resamplers for `varispeed`. ffmpeg's `asetrate` plus `aresample` (soxr) can do varispeed with the ffmpeg already in the dependency list | Compatible |
 | Commercial engines (zplane Elastique, Superpowered, others) | Proprietary | Often cited as the quality reference for DJ software; not open source and **not usable under AGPLv3** without a licence the user would have to buy | No |
 
-Recommended start (to be confirmed by the spike): `auto` = bypass when applicable, else `varispeed`; keylock uses Rubber Band R3, with Signalsmith Stretch as a second selectable engine if it sounds better on the user's material and can be bound cheaply. No engine becomes the default for keylock on spec alone.
+Recommended start (to be confirmed by the spike): keylock uses Rubber Band R3, with Signalsmith Stretch as a second selectable engine if it sounds better on the user's material and can be bound cheaply. No engine becomes the default for keylock on spec alone.
 
 **How the spike decides** (listening on the user's own tracks, not metrics alone):
 
 1. Blind A/B at 0 %, +-2 %, +-4 %, +-6 % on a kick-heavy techno track, a hat-heavy house track and a vocal track: kick transient smear, hat "phasiness", bass wobble, stereo image.
-2. Bit-exact passthrough check at ratio 1.0 for bypass, and the *audible* difference of each engine at 1.0 (to confirm the user's observation, and so that `auto` never routes a 1.0 ratio through an engine).
+2. Click-free switch check on the same material (the switch test below) with each engine, then bit-exact passthrough check at ratio 1.0 for bypass, and the *audible* difference of each engine at 1.0 (to confirm the user's observation; `auto` never routes identity through an engine).
 3. Speed ramp quality (variable-rate), CPU per minute of audio on the user's Mac, latency/start-up behaviour of each engine in block rendering.
 4. Pitch offsets of +-1 and +-2 semitones for the `pitch` lane.
 
@@ -263,6 +278,8 @@ The repository is AGPL-3.0 (see #174). Pedalboard is GPLv3 and bundles JUCE; GPL
 - A 45 s transition preview with built-ins renders in under 10 s on the user's Mac (as #175 said), and a 60-minute, 20-track bounce without third-party plugins in under 10 minutes (to be measured in the spike, then fixed in the issue).
 - Lane evaluation is deterministic: the same plan gives identical breakpoint arrays (tested without audio); changing the grid moves anchors and lanes together.
 - Cache: editing one transition re-renders only clips that cover it; the `plan_hash` test fails if any audio-relevant input is left out.
+- **No click on a keylock switch** (bypass to engine and back, and with a pitch change at speed 1.0): fixtures are a 1 kHz sine, a click track and a real loop. High-pass the output and compare the energy in a 5 ms window around the switch with the neighbouring windows: it must not exceed them by more than 3 dB; the largest sample-to-sample step at the switch must not exceed the largest step elsewhere in the material by more than 3 dB; the click track's downbeats stay within 1 ms across the switch (latency compensation). Run it for each engine candidate in the spike, and as a regular test for the chosen one.
+- Hysteresis test: a speed lane oscillating by 1e-4 around 1.0 produces at most one switch per dwell period.
 - Bypass: a deck at speed 1.0 and pitch 0 is bit-identical to its decoded source after the mix path (tested on a fixture).
 - A deliberately bad plugin path and a plugin that raises mid-block both end the render with "Plugin failed", and the server stays up.
 - Tests use a throwaway `BEETSDIR` and app data folder, synthesised audio, and never `~/.config/beets` or `/Volumes`.
@@ -272,7 +289,7 @@ The repository is AGPL-3.0 (see #174). Pedalboard is GPLv3 and bundles JUCE; GPL
 1. **Latency for recording.** Is a 1-3 s edit-to-ear lag acceptable for drawn lanes (probably yes), and is a browser-based draft monitor worth building for recorded moves (decide after step 2 is felt in use)?
 2. **One tempo for the whole tape or drifting?** The design defaults to per-transition matching with native tempo in between. A "one BPM for the whole mix" option is cheap to add; does the user want it as a setting?
 3. **Where jobs live in the dock.** A non-exclusive worker listing in `/jobs/current` touches the #140 job facade. Decide there, not here.
-4. **Default engine for keylock** is not decided here; it follows the spike's listening test. Also open: whether `pitch_mode` should be a per-track preference stored as a `fact` (the user always varispeeds) rather than per set.
+4. **Default engine for keylock** is not decided here; it follows the spike's listening test. Also open: whether the `keylock` setting should be a per-track preference stored as a fact rather than per set, and the default crossfade length (20 ms is a guess).
 5. **Pedalboard `show_editor()` on the user's setup** (spike). It decides between a real plugin window and the generic panel only.
 6. **#175's label and status.** It is parked, not run, with `model:opus`/`effort:high`. Once this is approved it should be rewritten as the step-1 issue (and steps 0, 2-6 filed), which needs the user's yes first.
 
