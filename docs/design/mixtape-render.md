@@ -80,7 +80,7 @@ All in `segue.db`; names are proposals.
 - **Lock tolerance** (default 6 %, a setting): beyond it the plan marks the transition "tempo stretch large" and recommends `native` or half/double time. The mix score (#169) already carries a tempo term; the badge reads it.
 - **Half/double time** is a per-transition toggle so 70 BPM against 140 BPM can match without a 2x stretch.
 - **Variable-tempo tracks** use the full beat list from the `analysis` grid, not a constant BPM: the warp map is piecewise.
-- **Stretch engine and key lock.** Stretching keeps pitch (key lock) by default. The candidate is Pedalboard's own Rubber Band based `time_stretch` (Rubber Band is GPL, compatible with the planned AGPLv3). **To verify in the spike:** quality at 3-6 %, CPU cost, that a pitch shift option exists for the "harmonic nudge" some DJs use.
+- **Speed and pitch** follow the "Keylock and pitch" section below; the tempo policy only decides the *speed curve* (a lane, see "Automation lanes"), not how it is realised.
 - **Outside the overlap**, a track plays at its native tempo, except in `hold_a`'s return ramp. So a track B that is matched to A during the overlap and then returns to its native tempo makes the whole mix drift in tempo the way a human DJ's does, rather than being forced to one BPM for the whole tape. A global "everything at one BPM" mode is a possible later setting.
 
 ## Automation lanes
@@ -108,6 +108,7 @@ Values are normalised 0-1 and mapped to real parameter ranges in the engine, so 
 | EQ | 3-band `low`, `mid`, `high` with kill at 0 (DJ-style isolator, not a mastering EQ) |
 | Filter | one DJ filter per deck: 0.5 = open, below = low-pass sweep, above = high-pass sweep (single knob, like a hardware mixer) |
 | Sends | `reverb`, `delay` / echo (time in beats, feedback fixed per preset), each a post-fader send into a shared effect bus |
+| Speed and pitch | `speed` (playback-rate ratio vs. native, per deck) and `pitch` (semitones/cents, per deck, only active with keylock on). The tempo policy generates the default `speed` lane; the user can edit it |
 | Transition-wide | optional master-bus sweep or a "riser" built-in; limited to built-ins |
 
 **Templates** copy lanes into the transition (editable afterwards; `template` is only provenance, so changing a template later never rewrites a user's transitions):
@@ -130,6 +131,45 @@ Templates are parametrised by `overlap_bars` and a "swap point", and generated b
 2. **Record (touch/latch)**: a transition loop plays in a monitor (see next section), the user moves on-screen faders, and the app writes breakpoints with beat timestamps. A "simplify" pass thins the points. MIDI controller input is parked with #175's parking decision; recording goes through whatever input the UI offers, and the engine only sees breakpoints.
 
 Automation is **evaluated per audio block** (for example 256 samples) with a short smoothing ramp on level, EQ and filter parameters to avoid zipper noise. This is the point where tempo and automation meet: lanes are evaluated on the mix clock after the warp map, so a lane drawn at bar 8 stays at bar 8 whatever the stretch.
+
+## Keylock and pitch
+
+**User requirement (2026-11-26):** the user prefers to bring tracks to 0 % pitch and switch keylock off, because keylock colours the sound even at 0 %. So the default must be: *no processing at all* when nothing needs stretching, and tempo matching by plain varispeed when it does.
+
+**Three modes per deck and transition** (`pitch_mode`):
+
+| Mode | What happens | Default |
+|---|---|---|
+| `bypass` | Speed ratio is exactly 1.0 and no pitch offset: audio goes through **bit-exact**, no stretch engine instantiated, no resampler. Chosen automatically whenever it applies | Automatic |
+| `varispeed` | Speed changes by resampling, pitch follows (like a turntable or a CDJ with keylock off). The engine is a high-quality resampler, not a stretcher. `pitch` lane is disabled; the UI shows the resulting key shift, `12 * log2(ratio)` semitones (about 0.5 semitone at 3 %), and the resulting Camelot key | **Yes, for any speed change** |
+| `keylock` | A stretch engine changes speed without changing pitch; the `pitch` lane can add a deliberate offset (for example to match keys). Opt-in per deck or per set | Off |
+
+Rules that follow:
+
+- **Bypass is a guarantee, not an optimisation:** a deck whose `speed` lane is constant 1.0 for the whole clip and whose `pitch` is 0 is never touched by an engine. The null test in "Goal metrics" checks it bit-for-bit. This addresses "keylock changes the sound even at 0 %": with this design, keylock off and 0 % pitch means the file's samples are used as they are.
+- **Time-varying speed** (ramps from the `speed` lane) is realised as a variable-rate resample in `varispeed` and as a time-map stretch in `keylock`. Whether the chosen library supports this continuously is **unverified** (see candidates); the fallback is small constant steps with crossfaded joins, which is audible and must be rejected in the spike if so.
+- Key shift is shown to the user before they accept a varispeed transition, and fed to the mix score (#169): a +0.5 semitone shift of B may turn a harmonic match into a clash, or fix one.
+- The setting lives per set (default mode for new transitions) and per transition (override).
+
+**Engine choice for `keylock`** (a setting, "Stretch engine", default `auto`). All entries below are **from memory and unverified**; the spike must check licence text, version, API and sound. None is a prototype or a commitment.
+
+| Candidate | Licence (to check) | Notes (unverified) | AGPLv3 fit |
+|---|---|---|---|
+| **Rubber Band**, R3 ("finer") engine | GPL-2.0-or-later, commercial licence available from the authors | Widely used; R3 (since library v3) is the higher-quality, higher-CPU engine; R2 has options for crisp transients and is cheaper. Time-varying maps and pitch scale supported through the library API. This is also what Pedalboard's `time_stretch` is believed to wrap | Compatible (GPL-2.0-or-later, so GPLv3 terms apply, combined work AGPLv3) |
+| **Pedalboard `time_stretch` / `pitch_shift`** | GPLv3 (Pedalboard) | Convenient wrapper around Rubber Band; **unverified** whether it exposes engine choice (R2/R3), transient options, or a time-varying map. If not, call Rubber Band directly (Python binding or the CLI with a time map) | Compatible |
+| **Signalsmith Stretch** | MIT | Modern C++ header-only library, claims good quality for polyphonic music with low latency; behaviour on hard kick transients and its Python availability **unverified** (would need a thin binding or a small compiled helper) | Compatible (permissive) |
+| **SoundTouch** | LGPL-2.1 | Time-domain approach; fast, but generally regarded as lower quality on full mixes; candidate only as the "fast/draft" engine | Compatible |
+| **soxr / libsamplerate** | LGPL-2.1 (soxr), BSD-2 (libsamplerate) | Not stretchers: high-quality resamplers for `varispeed`. ffmpeg's `asetrate` plus `aresample` (soxr) can do varispeed with the ffmpeg already in the dependency list | Compatible |
+| Commercial engines (zplane Elastique, Superpowered, others) | Proprietary | Often cited as the quality reference for DJ software; not open source and **not usable under AGPLv3** without a licence the user would have to buy | No |
+
+Recommended start (to be confirmed by the spike): `auto` = bypass when applicable, else `varispeed`; keylock uses Rubber Band R3, with Signalsmith Stretch as a second selectable engine if it sounds better on the user's material and can be bound cheaply. No engine becomes the default for keylock on spec alone.
+
+**How the spike decides** (listening on the user's own tracks, not metrics alone):
+
+1. Blind A/B at 0 %, +-2 %, +-4 %, +-6 % on a kick-heavy techno track, a hat-heavy house track and a vocal track: kick transient smear, hat "phasiness", bass wobble, stereo image.
+2. Bit-exact passthrough check at ratio 1.0 for bypass, and the *audible* difference of each engine at 1.0 (to confirm the user's observation, and so that `auto` never routes a 1.0 ratio through an engine).
+3. Speed ramp quality (variable-rate), CPU per minute of audio on the user's Mac, latency/start-up behaviour of each engine in block rendering.
+4. Pitch offsets of +-1 and +-2 semitones for the `pitch` lane.
 
 ## Hearing it
 
@@ -201,7 +241,7 @@ All of these talk to the endpoints above with plain JSON; no component state lea
 
 | Step | Content | Depends on |
 |---|---|---|
-| **0 Spike** | Verify on the user's Mac: Pedalboard version and `time_stretch` quality, load a real VST3 and AU, `raw_state` round trip, `show_editor()` via a helper process, latency compensation, block-render speed, Apple-silicon plugin compatibility. Output: a short findings note, not product code | #174 decision recorded first (Pedalboard is GPLv3, Rubber Band GPL) |
+| **0 Spike** | Verify on the user's Mac: Pedalboard version, the keylock engine comparison in "Keylock and pitch" (bypass, varispeed, Rubber Band R3, Signalsmith), load a real VST3 and AU, `raw_state` round trip, `show_editor()` via a helper process, latency compensation, block-render speed, Apple-silicon plugin compatibility. Output: a short findings note, not product code | #174 decision recorded first (Pedalboard is GPLv3, Rubber Band GPL) |
 | 1 | Plan model + tables + two-track overlap render with built-ins, tempo policy, 45 s preview. **This replaces #175.** | #159, #160, #156 |
 | 2 | Automation lanes, templates, draw editor, block-streamed preview | 1 |
 | 3 | Master chain, plugin scan, bounce with loudness report and tracklist | 1, 2, spike |
@@ -223,6 +263,7 @@ The repository is AGPL-3.0 (see #174). Pedalboard is GPLv3 and bundles JUCE; GPL
 - A 45 s transition preview with built-ins renders in under 10 s on the user's Mac (as #175 said), and a 60-minute, 20-track bounce without third-party plugins in under 10 minutes (to be measured in the spike, then fixed in the issue).
 - Lane evaluation is deterministic: the same plan gives identical breakpoint arrays (tested without audio); changing the grid moves anchors and lanes together.
 - Cache: editing one transition re-renders only clips that cover it; the `plan_hash` test fails if any audio-relevant input is left out.
+- Bypass: a deck at speed 1.0 and pitch 0 is bit-identical to its decoded source after the mix path (tested on a fixture).
 - A deliberately bad plugin path and a plugin that raises mid-block both end the render with "Plugin failed", and the server stays up.
 - Tests use a throwaway `BEETSDIR` and app data folder, synthesised audio, and never `~/.config/beets` or `/Volumes`.
 
@@ -231,8 +272,9 @@ The repository is AGPL-3.0 (see #174). Pedalboard is GPLv3 and bundles JUCE; GPL
 1. **Latency for recording.** Is a 1-3 s edit-to-ear lag acceptable for drawn lanes (probably yes), and is a browser-based draft monitor worth building for recorded moves (decide after step 2 is felt in use)?
 2. **One tempo for the whole tape or drifting?** The design defaults to per-transition matching with native tempo in between. A "one BPM for the whole mix" option is cheap to add; does the user want it as a setting?
 3. **Where jobs live in the dock.** A non-exclusive worker listing in `/jobs/current` touches the #140 job facade. Decide there, not here.
-4. **Pedalboard `show_editor()` on the user's setup** (spike). It decides between a real plugin window and the generic panel only.
-5. **#175's label and status.** It is parked, not run, with `model:opus`/`effort:high`. Once this is approved it should be rewritten as the step-1 issue (and steps 0, 2-6 filed), which needs the user's yes first.
+4. **Default engine for keylock** is not decided here; it follows the spike's listening test. Also open: whether `pitch_mode` should be a per-track preference stored as a `fact` (the user always varispeeds) rather than per set.
+5. **Pedalboard `show_editor()` on the user's setup** (spike). It decides between a real plugin window and the generic panel only.
+6. **#175's label and status.** It is parked, not run, with `model:opus`/`effort:high`. Once this is approved it should be rewritten as the step-1 issue (and steps 0, 2-6 filed), which needs the user's yes first.
 
 ## Changes to the approved designs (when this is approved)
 
